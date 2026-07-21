@@ -8,9 +8,7 @@
     "build": "tsc -p tsconfig.build.json && vite build",
     "lint": "biome check --write --unsafe --no-errors-on-unmatched --files-ignore-unknown=true ./",
     "preview": "vite preview",
-    "generate-client": "openapi-ts",
-    "test": "bunx playwright test",
-    "test:ui": "bunx playwright test --ui"
+    "generate-client": "openapi-ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
@@ -51,7 +49,6 @@
   "devDependencies": {
     "@biomejs/biome": "^2.4.16",
     "@hey-api/openapi-ts": "0.73.0",
-    "@playwright/test": "1.61.1",
     "@tanstack/router-devtools": "^1.167.0",
     "@tanstack/router-plugin": "^1.168.18",
     "@types/node": "^25.9.2",
