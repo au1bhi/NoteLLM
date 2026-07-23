@@ -43,6 +43,7 @@
 ## 阶段 4：体验、评测与交付（进行中）
 
 - 已保存和展示对话历史，并覆盖空状态、错误状态和删除清理。
+- 已在工作区顶部提供始终可见的退出登录入口；退出时会清理本地访问令牌和当前用户缓存。
 - 已建立 34 个问题的固定合成评测集；`backend/scripts/evaluate_retrieval.py` 在独立临时数据上计算 Recall@5、自动引用来源匹配、关键词忠实度筛查和耗时，并在结束时清理临时用户、向量和文件。完整方法见 `docs/evaluation/README.md`，首份结果见 `docs/evaluation/latest-results.md`。
 - 已补充架构图（`ARCHITECTURE.md`）和约 6 分钟的答辩演示脚本（`DEFENSE_DEMO.md`）。
 - 已补充可重复导入的合成 Docker 演示资料（`docs/demo/` 与 `backend/scripts/seed_demo.py`）；脚本要求显式指定已有账户，默认不覆盖数据。
