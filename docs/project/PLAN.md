@@ -47,6 +47,7 @@
 - 已建立 34 个问题的固定合成评测集；`backend/scripts/evaluate_retrieval.py` 在独立临时数据上计算 Recall@5、自动引用来源匹配、关键词忠实度筛查和耗时，并在结束时清理临时用户、向量和文件。完整方法见 `docs/evaluation/README.md`，首份结果见 `docs/evaluation/latest-results.md`。
 - 已补充架构图（`ARCHITECTURE.md`）和约 6 分钟的答辩演示脚本（`DEFENSE_DEMO.md`）。
 - 已补充可重复导入的合成 Docker 演示资料（`docs/demo/` 与 `backend/scripts/seed_demo.py`）；脚本要求显式指定已有账户，默认不覆盖数据。
+- 已重写 GitHub 首页 `README.md`，说明产品能力、可信回答机制、架构、启动方式、演示、接口、评测结果与项目边界。
 - 补充实验结果的人工忠实度复核。
 
 完成条件：可复现演示和论文所需证据齐全。

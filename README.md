@@ -1,233 +1,213 @@
-# Full Stack FastAPI Template
+# NoteLLM
 
-<a href="https://github.com/fastapi/full-stack-fastapi-template/actions?query=workflow%3A%22Test+Docker+Compose%22" target="_blank"><img src="https://github.com/fastapi/full-stack-fastapi-template/workflows/Test%20Docker%20Compose/badge.svg" alt="Test Docker Compose"></a>
-<a href="https://github.com/fastapi/full-stack-fastapi-template/actions?query=workflow%3A%22Test+Backend%22" target="_blank"><img src="https://github.com/fastapi/full-stack-fastapi-template/workflows/Test%20Backend/badge.svg" alt="Test Backend"></a>
-<a href="https://coverage-badge.samuelcolvin.workers.dev/redirect/fastapi/full-stack-fastapi-template" target="_blank"><img src="https://coverage-badge.samuelcolvin.workers.dev/fastapi/full-stack-fastapi-template.svg" alt="Coverage"></a>
+> 面向个人学习与研究的、带可追溯引用的文档问答系统。
 
-## Technology Stack and Features
+NoteLLM 是一个参考 Google NotebookLM 核心体验实现的毕业设计原型：用户将课程讲义、研究资料或笔记放入笔记本，在限定资料范围内提问，系统通过检索增强生成（RAG）给出答案，并展示答案所依据的来源、PDF 页码（适用时）和原文摘录。
 
-- ⚡ [**FastAPI**](https://fastapi.tiangolo.com) for the Python backend API.
-  - 🧰 [SQLModel](https://sqlmodel.tiangolo.com) for the Python SQL database interactions (ORM).
-  - 🔍 [Pydantic](https://docs.pydantic.dev), used by FastAPI, for the data validation and settings management.
-  - 💾 [PostgreSQL](https://www.postgresql.org) as the SQL database.
-- 🚀 [React](https://react.dev) for the frontend.
-  - 💃 Using TypeScript, hooks, [Vite](https://vitejs.dev), and other parts of a modern frontend stack.
-  - 🎨 [Tailwind CSS](https://tailwindcss.com) and [shadcn/ui](https://ui.shadcn.com) for the frontend components.
-  - 🤖 An automatically generated frontend client.
-  - 🧪 [Playwright](https://playwright.dev) for End-to-End testing.
-  - 🦇 Dark mode support.
-- 🐋 [Docker Compose](https://www.docker.com) for development and production.
-- 🔒 Secure password hashing by default.
-- 🔑 JWT (JSON Web Token) authentication.
-- 📫 Email based password recovery.
-- 📬 [Mailcatcher](https://mailcatcher.me) for local email testing during development.
-- ✅ Tests with [Pytest](https://pytest.org).
-- 📞 [Traefik](https://traefik.io) as a reverse proxy / load balancer.
-- 🚢 Deployment instructions using Docker Compose, including how to set up a frontend Traefik proxy to handle automatic HTTPS certificates.
-- 🏭 CI (continuous integration) and CD (continuous deployment) based on GitHub Actions.
+它的重点不是成为通用聊天机器人，而是证明一条可演示、可验证、可评估的本地 RAG 闭环。
 
-### Dashboard Login
+## 产品能力
 
-[![Dashboard login screenshot](img/login.png)](https://github.com/fastapi/full-stack-fastapi-template)
+| 能力 | 说明 |
+| --- | --- |
+| 用户与数据隔离 | JWT 登录；笔记本、来源和会话均按 `owner_id` 隔离，跨用户访问返回 `404`。 |
+| 笔记本管理 | 创建、浏览、修改与删除个人笔记本；每个笔记本管理独立的资料与会话。 |
+| 文档摄取 | 支持 UTF-8 TXT、Markdown 与 PDF；校验文件类型和大小，保存处理状态与失败原因。 |
+| 文本解析与分块 | TXT/Markdown 读取文本；PDF 以 PyMuPDF 提取并保留页码。默认按 1,000 字符分块，150 字符重叠。 |
+| 向量检索 | 使用 PostgreSQL + pgvector；问题与分块向量以余弦距离在当前笔记本范围内检索 Top-5 证据。 |
+| 受控问答 | chat provider 只能依据本轮检索到的分块回答，并且只能引用本轮候选的 chunk ID。 |
+| 可验证引用 | 后端过滤未知引用 ID；界面展示来源名、页码（适用时）和稳定摘录。无有效证据时固定回复“资料不足”。 |
+| 流式会话 | 通过 Server-Sent Events（SSE）流式呈现答案、引用与完成事件；消息和引用会持久化，刷新后仍可恢复。 |
+| 安全删除 | 删除来源时同步删除上传文件、分块和向量；删除笔记本时级联清理其来源与会话。 |
+| 演示体验 | 工作区提供会话历史、来源处理状态、错误提示和始终可见的退出登录按钮。 |
 
-### Dashboard - Admin
+## 用户流程
 
-[![Admin dashboard screenshot](img/dashboard.png)](https://github.com/fastapi/full-stack-fastapi-template)
-
-### Dashboard - Items
-
-[![Items dashboard screenshot](img/dashboard-items.png)](https://github.com/fastapi/full-stack-fastapi-template)
-
-### Dashboard - Dark Mode
-
-[![Dark mode dashboard screenshot](img/dashboard-dark.png)](https://github.com/fastapi/full-stack-fastapi-template)
-
-### Interactive API Documentation
-
-[![API docs](img/docs.png)](https://github.com/fastapi/full-stack-fastapi-template)
-
-## How To Use It
-
-You can **just fork or clone** this repository and use it as is.
-
-✨ It just works. ✨
-
-### How to Use a Private Repository
-
-If you want to have a private repository, GitHub won't allow you to simply fork it as it doesn't allow changing the visibility of forks.
-
-But you can do the following:
-
-- Create a new GitHub repo, for example `my-full-stack`.
-- Clone this repository manually, set the name with the name of the project you want to use, for example `my-full-stack`:
-
-```bash
-git clone git@github.com:fastapi/full-stack-fastapi-template.git my-full-stack
+```mermaid
+flowchart LR
+    A[注册或登录] --> B[创建笔记本]
+    B --> C[上传 TXT / Markdown / PDF]
+    C --> D[提取文本、分块、向量化]
+    D --> E{来源是否 ready}
+    E -->|是| F[在笔记本内提问]
+    E -->|否| G[显示失败原因或重试]
+    F --> H[Top-5 pgvector 检索]
+    H --> I[流式生成受控答案]
+    I --> J[展示来源、页码与摘录]
+    J --> K[持久化并重开会话]
 ```
 
-- Enter into the new directory:
+## 工作原理
 
-```bash
-cd my-full-stack
+```mermaid
+flowchart TB
+    Browser[React / Vite 浏览器] -->|API + SSE| API[FastAPI]
+    API --> Auth[JWT 与所有权校验]
+    API --> Ingest[解析、分块、摄取]
+    API --> Retrieval[pgvector 检索]
+    API --> Answer[提示词与引用校验]
+    Ingest --> Files[本地上传 Volume]
+    Ingest --> Embedding[Embedding Provider]
+    Retrieval --> DB[(PostgreSQL + pgvector)]
+    Answer --> DB
+    Answer --> Chat[Chat Provider]
 ```
 
-- Set the new origin to your new repository, copy it from the GitHub interface, for example:
+### 可信回答约束
+
+1. 后端只检索当前用户当前笔记本中 `ready` 的来源分块。
+2. 上传文本被视为不可信输入，不能覆盖系统的问答规则。
+3. 模型只接收本轮检索证据，并以 JSON 返回答案和引用的 chunk ID。
+4. 后端只接受属于本轮候选集的引用；未知 ID 会被移除。
+5. 没有检索证据或没有有效引用时，系统不输出无依据的正常答案，而是明确说明资料不足。
+
+完整架构与安全边界见 [架构说明](docs/project/ARCHITECTURE.md)。
+
+## 技术栈
+
+- 前端：React 19、TypeScript、Vite、TanStack Router/Query、Tailwind CSS、shadcn/ui
+- 后端：FastAPI、SQLModel、Pydantic、Alembic、PyMuPDF
+- 数据库与检索：PostgreSQL 18、pgvector、余弦距离 Top-K
+- 模型：可独立配置的 OpenAI-compatible chat provider 与 embedding provider
+- 工程化：Docker Compose、Bun、uv、pytest、Ruff、mypy、ty
+
+当前示例配置使用 DeepSeek 作为聊天模型接口、智谱 Embedding-3 作为 1024 维 embedding 接口；两者都可通过环境变量替换。密钥永远只由后端读取。
+
+## 快速开始（本地开发）
+
+### 1. 准备配置
 
 ```bash
-git remote set-url origin git@github.com:octocat/my-full-stack.git
+cp .env.example .env
 ```
 
-- Add this repo as another "remote" to allow you to get updates later:
+编辑本机 `.env`，至少填写：
+
+- 数据库与安全配置：`SECRET_KEY`、`FIRST_SUPERUSER_PASSWORD`、`POSTGRES_PASSWORD`
+- 聊天模型：`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`
+- 嵌入模型：`EMBEDDING_BASE_URL`、`EMBEDDING_API_KEY`、`EMBEDDING_MODEL`
+
+`EMBEDDING_DIMENSIONS` 必须与嵌入模型及数据库迁移一致；当前默认值为 `1024`。不要提交 `.env`、模型密钥或真实上传资料。
+
+### 2. 启动数据库并迁移
 
 ```bash
-git remote add upstream git@github.com:fastapi/full-stack-fastapi-template.git
+docker compose up -d db
+cd backend
+POSTGRES_PORT=5433 uv run alembic upgrade head
 ```
 
-- Push the code to your new repository:
+项目使用 `pgvector/pgvector:pg18` 镜像。可检查向量扩展：
 
 ```bash
-git push -u origin master
+docker compose exec db psql -U postgres -d app -c \
+  "SELECT extname, extversion FROM pg_extension WHERE extname = 'vector';"
 ```
 
-### Update From the Original Template
+### 3. 启动后端与前端
 
-After cloning the repository, and after doing changes, you might want to get the latest changes from this original template.
-
-- Make sure you added the original repository as a remote, you can check it with:
+在两个终端分别运行：
 
 ```bash
-git remote -v
-
-origin    git@github.com:octocat/my-full-stack.git (fetch)
-origin    git@github.com:octocat/my-full-stack.git (push)
-upstream    git@github.com:fastapi/full-stack-fastapi-template.git (fetch)
-upstream    git@github.com:fastapi/full-stack-fastapi-template.git (push)
+cd backend
+POSTGRES_PORT=5433 uv run fastapi dev app/main.py
 ```
-
-- Pull the latest changes without merging:
 
 ```bash
-git pull --no-commit upstream master
+bun run --filter frontend dev
 ```
 
-This will download the latest changes from this template without committing them, that way you can check everything is right before committing.
+打开：
 
-- If there are conflicts, solve them in your editor.
+- 产品界面：<http://localhost:5173>
+- OpenAPI 文档：<http://localhost:8000/docs>
 
-- Once you are done, commit the changes:
+注册账户后，创建笔记本、上传资料，等来源状态显示为 `ready`，再新建会话提问。浏览器会保留登录会话；需要切换账户时可使用工作区右上角的“退出登录”。
+
+## 一键导入合成演示资料
+
+仓库提供不含个人信息的演示 Markdown。先在网页注册一个本地账户，再运行：
 
 ```bash
-git merge --continue
+cd backend
+POSTGRES_PORT=5433 uv run python scripts/seed_demo.py \
+  --email your-local-email@example.com
 ```
 
-### Configure
+脚本会为指定账户创建“NoteLLM 答辩演示”笔记本并完成向量化；默认不会覆盖已有演示数据。确认重建时再添加 `--replace`。更多演示步骤见 [本地验收指南](docs/project/DEMO.md) 与 [答辩演示脚本](docs/project/DEFENSE_DEMO.md)。
 
-You can then update configs in the `.env` files to customize your configurations.
+## API 与数据模型
 
-Before deploying it, make sure you change at least the values for:
+核心实体如下：
 
-- `SECRET_KEY`
-- `FIRST_SUPERUSER_PASSWORD`
-- `POSTGRES_PASSWORD`
+```text
+User 1 ── * Notebook 1 ── * Source 1 ── * Chunk
+                    │
+                    └── * Conversation 1 ── * Message 1 ── * Citation
+```
 
-You can (and should) pass these as environment variables from secrets.
+主要 API 路径：
 
-Read the [deployment.md](./deployment.md) docs for more details.
+| 类别 | 路径示例 | 用途 |
+| --- | --- | --- |
+| 认证 | `/api/v1/login/access-token` | 获取 JWT 访问令牌。 |
+| 笔记本 | `/api/v1/notebooks` | 笔记本 CRUD。 |
+| 来源 | `/api/v1/notebooks/{notebook_id}/sources` | 上传、列出、重试和删除来源。 |
+| 检索 | `/api/v1/notebooks/{notebook_id}/search` | 返回当前笔记本的 Top-K 证据分块。 |
+| 会话 | `/api/v1/notebooks/{notebook_id}/conversations` | 创建和读取会话。 |
+| 流式问答 | `/api/v1/conversations/{conversation_id}/messages/stream` | SSE 返回答案增量、引用和完成事件。 |
 
-### Generate Secret Keys
+以正在运行的 `/docs` 为准获取完整请求与响应模型；前端客户端由后端 OpenAPI Schema 生成，不手工修改 `frontend/src/client/`。
 
-Some environment variables in the `.env` file have a default value of `changethis`.
+## 质量与评测
 
-You have to change them with a secret key, to generate secret keys you can run the following command:
+### 自动化检查
 
 ```bash
-python -c "import secrets; print(secrets.token_urlsafe(32))"
+cd backend
+POSTGRES_PORT=5433 uv run pytest -q
+uv run ruff check app scripts
+uv run mypy app scripts
+uv run ty check app scripts
+cd ..
+bun run --filter frontend build
 ```
 
-Copy the content and use that as password / secret key. And run that again to generate another secure key.
+后端测试使用假 provider，不消耗模型额度或依赖网络；覆盖数据隔离、上传/分块失败、pgvector 排序、引用映射和 SSE 事件序列。
 
-## How To Use It - Alternative With Copier
+### 固定 RAG 评测
 
-This repository also supports generating a new project using [Copier](https://copier.readthedocs.io).
-
-It will copy all the files, ask you configuration questions, and update the `.env` files with your answers.
-
-### Install Copier
-
-You can install Copier with:
+评测集包含 7 份合成 Markdown 资料和 34 个固定问题，可通过以下命令复跑：
 
 ```bash
-pip install copier
+cd backend
+POSTGRES_PORT=5433 uv run python scripts/evaluate_retrieval.py \
+  --with-answers \
+  --report ../docs/evaluation/latest-results.md
 ```
 
-Or better, if you have [`pipx`](https://pipx.pypa.io/), you can run it with:
+脚本会创建临时用户、笔记本、来源与文件副本，结束时全部清理。最近一次已提交结果：
 
-```bash
-pipx install copier
-```
+| 指标 | 结果 |
+| --- | ---: |
+| Recall@5 | 100.0% |
+| 自动引用来源匹配 | 97.1% |
+| 关键词忠实度筛查 | 88.2% |
+| 检索平均 / P95 | 339 ms / 894 ms |
+| 回答平均 / P95 | 2904 ms / 5595 ms |
 
-**Note**: If you have `pipx`, installing copier is optional, you could run it directly.
+自动引用来源匹配只检查有效引用是否命中标注来源；关键词筛查不能替代人工忠实度判断。逐题答案、已验证引用来源和人工审核栏位见 [评测报告](docs/evaluation/latest-results.md)，方法说明见 [评测说明](docs/evaluation/README.md)。
 
-### Generate a Project With Copier
+## 项目范围
 
-Decide a name for your new project's directory, you will use it below. For example, `my-awesome-project`.
+NoteLLM 当前是毕业设计 MVP，刻意不包含多人实时协作、网页爬取、OCR、复杂表格/图片理解、音频概览、移动端、消息队列、多模型容灾或大规模生产运维。优先目标是一个可靠的“上传资料 → 检索 → 带引用回答 → 重开会话”的完整闭环。
 
-Go to the directory that will be the parent of your project, and run the command with your project's name:
+## 项目文档
 
-```bash
-copier copy https://github.com/fastapi/full-stack-fastapi-template my-awesome-project --trust
-```
-
-If you have `pipx` and you didn't install `copier`, you can run it directly:
-
-```bash
-pipx run copier copy https://github.com/fastapi/full-stack-fastapi-template my-awesome-project --trust
-```
-
-**Note** the `--trust` option is necessary to be able to execute a [post-creation script](https://github.com/fastapi/full-stack-fastapi-template/blob/master/.copier/update_dotenv.py) that updates your `.env` files.
-
-### Input Variables
-
-Copier will ask you for some data, you might want to have at hand before generating the project.
-
-But don't worry, you can just update any of that in the `.env` files afterwards.
-
-The input variables, with their default values (some auto generated) are:
-
-- `project_name`: (default: `"FastAPI Project"`) The name of the project, shown to API users (in .env).
-- `stack_name`: (default: `"fastapi-project"`) The name of the stack used for Docker Compose labels and project name (no spaces, no periods) (in .env).
-- `secret_key`: (default: `"changethis"`) The secret key for the project, used for security, stored in .env, you can generate one with the method above.
-- `first_superuser`: (default: `"admin@example.com"`) The email of the first superuser (in .env).
-- `first_superuser_password`: (default: `"changethis"`) The password of the first superuser (in .env).
-- `smtp_host`: (default: "") The SMTP server host to send emails, you can set it later in .env.
-- `smtp_user`: (default: "") The SMTP server user to send emails, you can set it later in .env.
-- `smtp_password`: (default: "") The SMTP server password to send emails, you can set it later in .env.
-- `emails_from_email`: (default: `"info@example.com"`) The email account to send emails from, you can set it later in .env.
-- `postgres_password`: (default: `"changethis"`) The password for the PostgreSQL database, stored in .env, you can generate one with the method above.
-- `sentry_dsn`: (default: "") The DSN for Sentry, if you are using it, you can set it later in .env.
-
-## Backend Development
-
-Backend docs: [backend/README.md](./backend/README.md).
-
-## Frontend Development
-
-Frontend docs: [frontend/README.md](./frontend/README.md).
-
-## Deployment
-
-Deployment docs: [deployment.md](./deployment.md).
-
-## Development
-
-General development docs: [development.md](./development.md).
-
-This includes using Docker Compose, custom local domains, `.env` configurations, etc.
-
-## Release Notes
-
-Check the file [release-notes.md](./release-notes.md).
-
-## License
-
-The Full Stack FastAPI Template is licensed under the terms of the MIT license.
+- [产品目标与验收标准](docs/project/GOAL.md)
+- [实施计划与当前进度](docs/project/PLAN.md)
+- [架构与安全边界](docs/project/ARCHITECTURE.md)
+- [API 与界面流程](docs/project/API_AND_UX.md)
+- [本地验收与演示](docs/project/DEMO.md)
+- [答辩演示脚本](docs/project/DEFENSE_DEMO.md)
+- [固定评测集与结果](docs/evaluation/README.md)
