@@ -9,6 +9,56 @@ export type Body_login_login_access_token = {
     client_secret?: (string | null);
 };
 
+export type Body_notebooks_upload_source = {
+    file: string;
+};
+
+export type CitationPublic = {
+    chunk_id: string;
+    ordinal: number;
+    quote: string;
+    source_display_name: string;
+    page_number: (number | null);
+};
+
+export type ConversationCreate = {
+    title?: (string | null);
+};
+
+export type ConversationDetailPublic = {
+    id: string;
+    notebook_id: string;
+    title: string;
+    created_at: string;
+    updated_at: string;
+    messages: Array<ConversationMessagePublic>;
+};
+
+export type ConversationMessageCreate = {
+    content: string;
+};
+
+export type ConversationMessagePublic = {
+    id: string;
+    role: string;
+    content: string;
+    created_at: string;
+    citations: Array<CitationPublic>;
+};
+
+export type ConversationPublic = {
+    id: string;
+    notebook_id: string;
+    title: string;
+    created_at: string;
+    updated_at: string;
+};
+
+export type ConversationsPublic = {
+    data: Array<ConversationPublic>;
+    count: number;
+};
+
 export type HTTPValidationError = {
     detail?: Array<ValidationError>;
 };
@@ -45,11 +95,72 @@ export type NewPassword = {
     new_password: string;
 };
 
+export type NotebookCreate = {
+    title: string;
+    description?: (string | null);
+};
+
+export type NotebookPublic = {
+    title: string;
+    description?: (string | null);
+    id: string;
+    owner_id: string;
+    created_at: string;
+    updated_at: string;
+};
+
+export type NotebooksPublic = {
+    data: Array<NotebookPublic>;
+    count: number;
+};
+
+export type NotebookUpdate = {
+    title?: (string | null);
+    description?: (string | null);
+};
+
 export type PrivateUserCreate = {
     email: string;
     password: string;
     full_name: string;
     is_verified?: boolean;
+};
+
+export type RetrievedChunkPublic = {
+    id: string;
+    source_id: string;
+    source_display_name: string;
+    content: string;
+    page_number: (number | null);
+    score: number;
+};
+
+export type RetrievedChunksPublic = {
+    data: Array<RetrievedChunkPublic>;
+};
+
+export type SearchRequest = {
+    query: string;
+    limit?: number;
+};
+
+export type SourcePublic = {
+    display_name: string;
+    media_type: string;
+    file_size_bytes: number;
+    id: string;
+    notebook_id: string;
+    status: string;
+    error_message: (string | null);
+    page_count: (number | null);
+    char_count: (number | null);
+    created_at: string;
+    processed_at: (string | null);
+};
+
+export type SourcesPublic = {
+    data: Array<SourcePublic>;
+    count: number;
 };
 
 export type Token = {
@@ -113,6 +224,19 @@ export type ValidationError = {
     };
 };
 
+export type ConversationsReadConversationData = {
+    conversationId: string;
+};
+
+export type ConversationsReadConversationResponse = (ConversationDetailPublic);
+
+export type ConversationsStreamMessageData = {
+    conversationId: string;
+    requestBody: ConversationMessageCreate;
+};
+
+export type ConversationsStreamMessageResponse = (unknown);
+
 export type ItemsReadItemsData = {
     limit?: number;
     skip?: number;
@@ -170,6 +294,93 @@ export type LoginRecoverPasswordHtmlContentData = {
 };
 
 export type LoginRecoverPasswordHtmlContentResponse = (string);
+
+export type NotebooksReadNotebooksData = {
+    limit?: number;
+    skip?: number;
+};
+
+export type NotebooksReadNotebooksResponse = (NotebooksPublic);
+
+export type NotebooksCreateNotebookData = {
+    requestBody: NotebookCreate;
+};
+
+export type NotebooksCreateNotebookResponse = (NotebookPublic);
+
+export type NotebooksReadNotebookData = {
+    notebookId: string;
+};
+
+export type NotebooksReadNotebookResponse = (NotebookPublic);
+
+export type NotebooksUpdateNotebookData = {
+    notebookId: string;
+    requestBody: NotebookUpdate;
+};
+
+export type NotebooksUpdateNotebookResponse = (NotebookPublic);
+
+export type NotebooksDeleteNotebookData = {
+    notebookId: string;
+};
+
+export type NotebooksDeleteNotebookResponse = ({
+    [key: string]: (string);
+});
+
+export type NotebooksReadSourcesData = {
+    limit?: number;
+    notebookId: string;
+    skip?: number;
+};
+
+export type NotebooksReadSourcesResponse = (SourcesPublic);
+
+export type NotebooksUploadSourceData = {
+    formData: Body_notebooks_upload_source;
+    notebookId: string;
+};
+
+export type NotebooksUploadSourceResponse = (SourcePublic);
+
+export type NotebooksReadConversationsData = {
+    limit?: number;
+    notebookId: string;
+    skip?: number;
+};
+
+export type NotebooksReadConversationsResponse = (ConversationsPublic);
+
+export type NotebooksCreateConversationData = {
+    notebookId: string;
+    requestBody: ConversationCreate;
+};
+
+export type NotebooksCreateConversationResponse = (ConversationPublic);
+
+export type NotebooksSearchNotebookData = {
+    notebookId: string;
+    requestBody: SearchRequest;
+};
+
+export type NotebooksSearchNotebookResponse = (RetrievedChunksPublic);
+
+export type NotebooksRemoveSourceData = {
+    notebookId: string;
+    sourceId: string;
+};
+
+export type NotebooksRemoveSourceResponse = ({
+    [key: string]: (string);
+});
+
+export type NotebooksRetrySourceData = {
+    notebookId: string;
+    sourceId: string;
+};
+
+export type NotebooksRetrySourceResponse = (SourcePublic);
 
 export type PrivateCreateUserData = {
     requestBody: PrivateUserCreate;

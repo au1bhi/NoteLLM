@@ -1,7 +1,8 @@
 services:
 
   db:
-    image: postgres:18
+    # Includes the pgvector extension required for notebook-scoped similarity search.
+    image: pgvector/pgvector:pg18
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
@@ -90,6 +91,8 @@ services:
         condition: service_completed_successfully
     env_file:
       - .env
+    volumes:
+      - app-upload-data:/app/backend/data/uploads
     environment:
       - DOMAIN=${DOMAIN}
       - FRONTEND_HOST=${FRONTEND_HOST?Variable not set}
@@ -167,6 +170,7 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.middlewares=https-redirect
 volumes:
   app-db-data:
+  app-upload-data:
 
 networks:
   traefik-public:

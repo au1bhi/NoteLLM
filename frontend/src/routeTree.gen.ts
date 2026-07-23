@@ -18,6 +18,8 @@ import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
 import { Route as LayoutSettingsRouteImport } from './routes/_layout/settings'
 import { Route as LayoutItemsRouteImport } from './routes/_layout/items'
 import { Route as LayoutAdminRouteImport } from './routes/_layout/admin'
+import { Route as LayoutNotebooksIndexRouteImport } from './routes/_layout/notebooks/index'
+import { Route as LayoutNotebooksNotebookIdRouteImport } from './routes/_layout/notebooks/$notebookId'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -63,6 +65,17 @@ const LayoutAdminRoute = LayoutAdminRouteImport.update({
   path: '/admin',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutNotebooksIndexRoute = LayoutNotebooksIndexRouteImport.update({
+  id: '/notebooks/',
+  path: '/notebooks/',
+  getParentRoute: () => LayoutRoute,
+} as any)
+const LayoutNotebooksNotebookIdRoute =
+  LayoutNotebooksNotebookIdRouteImport.update({
+    id: '/notebooks/$notebookId',
+    path: '/notebooks/$notebookId',
+    getParentRoute: () => LayoutRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof LayoutIndexRoute
@@ -73,6 +86,8 @@ export interface FileRoutesByFullPath {
   '/admin': typeof LayoutAdminRoute
   '/items': typeof LayoutItemsRoute
   '/settings': typeof LayoutSettingsRoute
+  '/notebooks/$notebookId': typeof LayoutNotebooksNotebookIdRoute
+  '/notebooks/': typeof LayoutNotebooksIndexRoute
 }
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
@@ -83,6 +98,8 @@ export interface FileRoutesByTo {
   '/items': typeof LayoutItemsRoute
   '/settings': typeof LayoutSettingsRoute
   '/': typeof LayoutIndexRoute
+  '/notebooks/$notebookId': typeof LayoutNotebooksNotebookIdRoute
+  '/notebooks': typeof LayoutNotebooksIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -95,6 +112,8 @@ export interface FileRoutesById {
   '/_layout/items': typeof LayoutItemsRoute
   '/_layout/settings': typeof LayoutSettingsRoute
   '/_layout/': typeof LayoutIndexRoute
+  '/_layout/notebooks/$notebookId': typeof LayoutNotebooksNotebookIdRoute
+  '/_layout/notebooks/': typeof LayoutNotebooksIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -107,6 +126,8 @@ export interface FileRouteTypes {
     | '/admin'
     | '/items'
     | '/settings'
+    | '/notebooks/$notebookId'
+    | '/notebooks/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
@@ -117,6 +138,8 @@ export interface FileRouteTypes {
     | '/items'
     | '/settings'
     | '/'
+    | '/notebooks/$notebookId'
+    | '/notebooks'
   id:
     | '__root__'
     | '/_layout'
@@ -128,6 +151,8 @@ export interface FileRouteTypes {
     | '/_layout/items'
     | '/_layout/settings'
     | '/_layout/'
+    | '/_layout/notebooks/$notebookId'
+    | '/_layout/notebooks/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -203,6 +228,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutAdminRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/notebooks/': {
+      id: '/_layout/notebooks/'
+      path: '/notebooks'
+      fullPath: '/notebooks/'
+      preLoaderRoute: typeof LayoutNotebooksIndexRouteImport
+      parentRoute: typeof LayoutRoute
+    }
+    '/_layout/notebooks/$notebookId': {
+      id: '/_layout/notebooks/$notebookId'
+      path: '/notebooks/$notebookId'
+      fullPath: '/notebooks/$notebookId'
+      preLoaderRoute: typeof LayoutNotebooksNotebookIdRouteImport
+      parentRoute: typeof LayoutRoute
+    }
   }
 }
 
@@ -211,6 +250,8 @@ interface LayoutRouteChildren {
   LayoutItemsRoute: typeof LayoutItemsRoute
   LayoutSettingsRoute: typeof LayoutSettingsRoute
   LayoutIndexRoute: typeof LayoutIndexRoute
+  LayoutNotebooksNotebookIdRoute: typeof LayoutNotebooksNotebookIdRoute
+  LayoutNotebooksIndexRoute: typeof LayoutNotebooksIndexRoute
 }
 
 const LayoutRouteChildren: LayoutRouteChildren = {
@@ -218,6 +259,8 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutItemsRoute: LayoutItemsRoute,
   LayoutSettingsRoute: LayoutSettingsRoute,
   LayoutIndexRoute: LayoutIndexRoute,
+  LayoutNotebooksNotebookIdRoute: LayoutNotebooksNotebookIdRoute,
+  LayoutNotebooksIndexRoute: LayoutNotebooksIndexRoute,
 }
 
 const LayoutRouteWithChildren =

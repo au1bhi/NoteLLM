@@ -3,7 +3,52 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+import type { ConversationsReadConversationData, ConversationsReadConversationResponse, ConversationsStreamMessageData, ConversationsStreamMessageResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, NotebooksReadNotebooksData, NotebooksReadNotebooksResponse, NotebooksCreateNotebookData, NotebooksCreateNotebookResponse, NotebooksReadNotebookData, NotebooksReadNotebookResponse, NotebooksUpdateNotebookData, NotebooksUpdateNotebookResponse, NotebooksDeleteNotebookData, NotebooksDeleteNotebookResponse, NotebooksReadSourcesData, NotebooksReadSourcesResponse, NotebooksUploadSourceData, NotebooksUploadSourceResponse, NotebooksReadConversationsData, NotebooksReadConversationsResponse, NotebooksCreateConversationData, NotebooksCreateConversationResponse, NotebooksSearchNotebookData, NotebooksSearchNotebookResponse, NotebooksRemoveSourceData, NotebooksRemoveSourceResponse, NotebooksRetrySourceData, NotebooksRetrySourceResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+
+export class ConversationsService {
+    /**
+     * Read Conversation
+     * @param data The data for the request.
+     * @param data.conversationId
+     * @returns ConversationDetailPublic Successful Response
+     * @throws ApiError
+     */
+    public static readConversation(data: ConversationsReadConversationData): CancelablePromise<ConversationsReadConversationResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/conversations/{conversation_id}',
+            path: {
+                conversation_id: data.conversationId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Stream Message
+     * @param data The data for the request.
+     * @param data.conversationId
+     * @param data.requestBody
+     * @returns unknown Successful Response
+     * @throws ApiError
+     */
+    public static streamMessage(data: ConversationsStreamMessageData): CancelablePromise<ConversationsStreamMessageResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/conversations/{conversation_id}/messages/stream',
+            path: {
+                conversation_id: data.conversationId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+}
 
 export class ItemsService {
     /**
@@ -205,6 +250,277 @@ export class LoginService {
             url: '/api/v1/password-recovery-html-content/{email}',
             path: {
                 email: data.email
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+}
+
+export class NotebooksService {
+    /**
+     * Read Notebooks
+     * @param data The data for the request.
+     * @param data.skip
+     * @param data.limit
+     * @returns NotebooksPublic Successful Response
+     * @throws ApiError
+     */
+    public static readNotebooks(data: NotebooksReadNotebooksData = {}): CancelablePromise<NotebooksReadNotebooksResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/notebooks/',
+            query: {
+                skip: data.skip,
+                limit: data.limit
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Create Notebook
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns NotebookPublic Successful Response
+     * @throws ApiError
+     */
+    public static createNotebook(data: NotebooksCreateNotebookData): CancelablePromise<NotebooksCreateNotebookResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/notebooks/',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Read Notebook
+     * @param data The data for the request.
+     * @param data.notebookId
+     * @returns NotebookPublic Successful Response
+     * @throws ApiError
+     */
+    public static readNotebook(data: NotebooksReadNotebookData): CancelablePromise<NotebooksReadNotebookResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/notebooks/{notebook_id}',
+            path: {
+                notebook_id: data.notebookId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Update Notebook
+     * @param data The data for the request.
+     * @param data.notebookId
+     * @param data.requestBody
+     * @returns NotebookPublic Successful Response
+     * @throws ApiError
+     */
+    public static updateNotebook(data: NotebooksUpdateNotebookData): CancelablePromise<NotebooksUpdateNotebookResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/notebooks/{notebook_id}',
+            path: {
+                notebook_id: data.notebookId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Delete Notebook
+     * @param data The data for the request.
+     * @param data.notebookId
+     * @returns string Successful Response
+     * @throws ApiError
+     */
+    public static deleteNotebook(data: NotebooksDeleteNotebookData): CancelablePromise<NotebooksDeleteNotebookResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/notebooks/{notebook_id}',
+            path: {
+                notebook_id: data.notebookId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Read Sources
+     * @param data The data for the request.
+     * @param data.notebookId
+     * @param data.skip
+     * @param data.limit
+     * @returns SourcesPublic Successful Response
+     * @throws ApiError
+     */
+    public static readSources(data: NotebooksReadSourcesData): CancelablePromise<NotebooksReadSourcesResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/notebooks/{notebook_id}/sources/',
+            path: {
+                notebook_id: data.notebookId
+            },
+            query: {
+                skip: data.skip,
+                limit: data.limit
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Upload Source
+     * @param data The data for the request.
+     * @param data.notebookId
+     * @param data.formData
+     * @returns SourcePublic Successful Response
+     * @throws ApiError
+     */
+    public static uploadSource(data: NotebooksUploadSourceData): CancelablePromise<NotebooksUploadSourceResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/notebooks/{notebook_id}/sources/',
+            path: {
+                notebook_id: data.notebookId
+            },
+            formData: data.formData,
+            mediaType: 'multipart/form-data',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Read Conversations
+     * @param data The data for the request.
+     * @param data.notebookId
+     * @param data.skip
+     * @param data.limit
+     * @returns ConversationsPublic Successful Response
+     * @throws ApiError
+     */
+    public static readConversations(data: NotebooksReadConversationsData): CancelablePromise<NotebooksReadConversationsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/notebooks/{notebook_id}/conversations/',
+            path: {
+                notebook_id: data.notebookId
+            },
+            query: {
+                skip: data.skip,
+                limit: data.limit
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Create Conversation
+     * @param data The data for the request.
+     * @param data.notebookId
+     * @param data.requestBody
+     * @returns ConversationPublic Successful Response
+     * @throws ApiError
+     */
+    public static createConversation(data: NotebooksCreateConversationData): CancelablePromise<NotebooksCreateConversationResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/notebooks/{notebook_id}/conversations/',
+            path: {
+                notebook_id: data.notebookId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Search Notebook
+     * @param data The data for the request.
+     * @param data.notebookId
+     * @param data.requestBody
+     * @returns RetrievedChunksPublic Successful Response
+     * @throws ApiError
+     */
+    public static searchNotebook(data: NotebooksSearchNotebookData): CancelablePromise<NotebooksSearchNotebookResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/notebooks/{notebook_id}/search',
+            path: {
+                notebook_id: data.notebookId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Remove Source
+     * @param data The data for the request.
+     * @param data.notebookId
+     * @param data.sourceId
+     * @returns string Successful Response
+     * @throws ApiError
+     */
+    public static removeSource(data: NotebooksRemoveSourceData): CancelablePromise<NotebooksRemoveSourceResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/notebooks/{notebook_id}/sources/{source_id}',
+            path: {
+                notebook_id: data.notebookId,
+                source_id: data.sourceId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Retry Source
+     * @param data The data for the request.
+     * @param data.notebookId
+     * @param data.sourceId
+     * @returns SourcePublic Successful Response
+     * @throws ApiError
+     */
+    public static retrySource(data: NotebooksRetrySourceData): CancelablePromise<NotebooksRetrySourceResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/notebooks/{notebook_id}/sources/{source_id}/retry',
+            path: {
+                notebook_id: data.notebookId,
+                source_id: data.sourceId
             },
             errors: {
                 422: 'Validation Error'

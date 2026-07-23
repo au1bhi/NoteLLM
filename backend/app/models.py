@@ -1,9 +1,12 @@
 import uuid
 from datetime import UTC, datetime
 
+from pgvector.sqlalchemy import Vector
 from pydantic import EmailStr
-from sqlalchemy import DateTime
+from sqlalchemy import Column, DateTime
 from sqlmodel import Field, Relationship, SQLModel
+
+from app.core.config import settings
 
 
 def get_datetime_utc() -> datetime:
@@ -57,6 +60,9 @@ class User(UserBase, table=True):
         sa_type=DateTime(timezone=True),  # type: ignore
     )
     items: list[Item] = Relationship(back_populates="owner", cascade_delete=True)
+    notebooks: list[Notebook] = Relationship(
+        back_populates="owner", cascade_delete=True
+    )
 
 
 # Properties to return via API, id is always required
@@ -110,6 +116,228 @@ class ItemPublic(ItemBase):
 class ItemsPublic(SQLModel):
     data: list[ItemPublic]
     count: int
+
+
+class NotebookBase(SQLModel):
+    title: str = Field(min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=1000)
+
+
+class NotebookCreate(NotebookBase):
+    pass
+
+
+class NotebookUpdate(SQLModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = Field(default=None, max_length=1000)
+
+
+class Notebook(NotebookBase, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    owner_id: uuid.UUID = Field(
+        foreign_key="user.id", nullable=False, ondelete="CASCADE", index=True
+    )
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+    updated_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+    owner: User | None = Relationship(back_populates="notebooks")
+    sources: list[Source] = Relationship(back_populates="notebook", cascade_delete=True)
+    conversations: list[Conversation] = Relationship(
+        back_populates="notebook", cascade_delete=True
+    )
+
+
+class NotebookPublic(NotebookBase):
+    id: uuid.UUID
+    owner_id: uuid.UUID
+    created_at: datetime
+    updated_at: datetime
+
+
+class NotebooksPublic(SQLModel):
+    data: list[NotebookPublic]
+    count: int
+
+
+class SourceBase(SQLModel):
+    display_name: str = Field(min_length=1, max_length=255)
+    media_type: str = Field(max_length=100)
+    file_size_bytes: int = Field(ge=0)
+
+
+class Source(SourceBase, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    notebook_id: uuid.UUID = Field(
+        foreign_key="notebook.id", nullable=False, ondelete="CASCADE", index=True
+    )
+    storage_path: str = Field(max_length=1024)
+    status: str = Field(default="pending", max_length=32)
+    error_message: str | None = Field(default=None, max_length=1000)
+    page_count: int | None = Field(default=None, ge=0)
+    char_count: int | None = Field(default=None, ge=0)
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+    processed_at: datetime | None = Field(
+        default=None,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+    notebook: Notebook | None = Relationship(back_populates="sources")
+    chunks: list[Chunk] = Relationship(back_populates="source", cascade_delete=True)
+
+
+class SourcePublic(SourceBase):
+    id: uuid.UUID
+    notebook_id: uuid.UUID
+    status: str
+    error_message: str | None
+    page_count: int | None
+    char_count: int | None
+    created_at: datetime
+    processed_at: datetime | None
+
+
+class SourcesPublic(SQLModel):
+    data: list[SourcePublic]
+    count: int
+
+
+class SearchRequest(SQLModel):
+    query: str = Field(min_length=1, max_length=4000)
+    limit: int = Field(default=5, ge=1, le=10)
+
+
+class RetrievedChunkPublic(SQLModel):
+    id: uuid.UUID
+    source_id: uuid.UUID
+    source_display_name: str
+    content: str
+    page_number: int | None
+    score: float
+
+
+class RetrievedChunksPublic(SQLModel):
+    data: list[RetrievedChunkPublic]
+
+
+class ConversationCreate(SQLModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class Conversation(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    notebook_id: uuid.UUID = Field(
+        foreign_key="notebook.id", nullable=False, ondelete="CASCADE", index=True
+    )
+    title: str = Field(max_length=255)
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+    updated_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+    notebook: Notebook | None = Relationship(back_populates="conversations")
+    messages: list[ConversationMessage] = Relationship(
+        back_populates="conversation", cascade_delete=True
+    )
+
+
+class ConversationPublic(SQLModel):
+    id: uuid.UUID
+    notebook_id: uuid.UUID
+    title: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class ConversationsPublic(SQLModel):
+    data: list[ConversationPublic]
+    count: int
+
+
+class ConversationMessageCreate(SQLModel):
+    content: str = Field(min_length=1, max_length=4000)
+
+
+class ConversationMessage(SQLModel, table=True):
+    __tablename__ = "conversation_message"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    conversation_id: uuid.UUID = Field(
+        foreign_key="conversation.id", nullable=False, ondelete="CASCADE", index=True
+    )
+    role: str = Field(max_length=16)
+    content: str
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+    conversation: Conversation | None = Relationship(back_populates="messages")
+    citations: list[Citation] = Relationship(
+        back_populates="message", cascade_delete=True
+    )
+
+
+class Citation(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    message_id: uuid.UUID = Field(
+        foreign_key="conversation_message.id", nullable=False, ondelete="CASCADE", index=True
+    )
+    chunk_id: uuid.UUID = Field(
+        foreign_key="chunk.id", nullable=False, ondelete="CASCADE", index=True
+    )
+    ordinal: int = Field(ge=0)
+    quote: str = Field(max_length=500)
+    message: ConversationMessage | None = Relationship(back_populates="citations")
+
+
+class CitationPublic(SQLModel):
+    chunk_id: uuid.UUID
+    ordinal: int
+    quote: str
+    source_display_name: str
+    page_number: int | None
+
+
+class ConversationMessagePublic(SQLModel):
+    id: uuid.UUID
+    role: str
+    content: str
+    created_at: datetime
+    citations: list[CitationPublic]
+
+
+class ConversationDetailPublic(ConversationPublic):
+    messages: list[ConversationMessagePublic]
+
+
+class Chunk(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    source_id: uuid.UUID = Field(
+        foreign_key="source.id", nullable=False, ondelete="CASCADE", index=True
+    )
+    ordinal: int = Field(ge=0)
+    content: str
+    page_number: int | None = Field(default=None, ge=1)
+    char_start: int = Field(ge=0)
+    char_end: int = Field(ge=0)
+    embedding: list[float] | None = Field(
+        default=None,
+        sa_column=Column(Vector(settings.EMBEDDING_DIMENSIONS), nullable=True),
+    )
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+    source: Source | None = Relationship(back_populates="chunks")
 
 
 # Generic message

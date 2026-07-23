@@ -1,5 +1,6 @@
 import secrets
 import warnings
+from pathlib import Path
 from typing import Annotated, Any, Literal, Self
 
 from pydantic import (
@@ -49,6 +50,13 @@ class Settings(BaseSettings):
 
     PROJECT_NAME: str
     SENTRY_DSN: HttpUrl | None = None
+    UPLOADS_DIR: Path = Path("data/uploads")
+    MAX_UPLOAD_SIZE_BYTES: int = 10 * 1024 * 1024
+    LLM_BASE_URL: HttpUrl | None = None
+    LLM_API_KEY: str | None = None
+    LLM_MODEL: str | None = None
+    EMBEDDING_MODEL: str | None = None
+    EMBEDDING_DIMENSIONS: int = 1536
     POSTGRES_SERVER: str
     POSTGRES_PORT: int = 5432
     POSTGRES_USER: str

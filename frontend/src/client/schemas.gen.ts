@@ -57,6 +57,212 @@ export const Body_login_login_access_tokenSchema = {
     title: 'Body_login-login_access_token'
 } as const;
 
+export const Body_notebooks_upload_sourceSchema = {
+    properties: {
+        file: {
+            type: 'string',
+            contentMediaType: 'application/octet-stream',
+            title: 'File'
+        }
+    },
+    type: 'object',
+    required: ['file'],
+    title: 'Body_notebooks-upload_source'
+} as const;
+
+export const CitationPublicSchema = {
+    properties: {
+        chunk_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Chunk Id'
+        },
+        ordinal: {
+            type: 'integer',
+            title: 'Ordinal'
+        },
+        quote: {
+            type: 'string',
+            title: 'Quote'
+        },
+        source_display_name: {
+            type: 'string',
+            title: 'Source Display Name'
+        },
+        page_number: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Page Number'
+        }
+    },
+    type: 'object',
+    required: ['chunk_id', 'ordinal', 'quote', 'source_display_name', 'page_number'],
+    title: 'CitationPublic'
+} as const;
+
+export const ConversationCreateSchema = {
+    properties: {
+        title: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 255,
+                    minLength: 1
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Title'
+        }
+    },
+    type: 'object',
+    title: 'ConversationCreate'
+} as const;
+
+export const ConversationDetailPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        notebook_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Notebook Id'
+        },
+        title: {
+            type: 'string',
+            title: 'Title'
+        },
+        created_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Created At'
+        },
+        updated_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Updated At'
+        },
+        messages: {
+            items: {
+                '$ref': '#/components/schemas/ConversationMessagePublic'
+            },
+            type: 'array',
+            title: 'Messages'
+        }
+    },
+    type: 'object',
+    required: ['id', 'notebook_id', 'title', 'created_at', 'updated_at', 'messages'],
+    title: 'ConversationDetailPublic'
+} as const;
+
+export const ConversationMessageCreateSchema = {
+    properties: {
+        content: {
+            type: 'string',
+            maxLength: 4000,
+            minLength: 1,
+            title: 'Content'
+        }
+    },
+    type: 'object',
+    required: ['content'],
+    title: 'ConversationMessageCreate'
+} as const;
+
+export const ConversationMessagePublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        role: {
+            type: 'string',
+            title: 'Role'
+        },
+        content: {
+            type: 'string',
+            title: 'Content'
+        },
+        created_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Created At'
+        },
+        citations: {
+            items: {
+                '$ref': '#/components/schemas/CitationPublic'
+            },
+            type: 'array',
+            title: 'Citations'
+        }
+    },
+    type: 'object',
+    required: ['id', 'role', 'content', 'created_at', 'citations'],
+    title: 'ConversationMessagePublic'
+} as const;
+
+export const ConversationPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        notebook_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Notebook Id'
+        },
+        title: {
+            type: 'string',
+            title: 'Title'
+        },
+        created_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Created At'
+        },
+        updated_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Updated At'
+        }
+    },
+    type: 'object',
+    required: ['id', 'notebook_id', 'title', 'created_at', 'updated_at'],
+    title: 'ConversationPublic'
+} as const;
+
+export const ConversationsPublicSchema = {
+    properties: {
+        data: {
+            items: {
+                '$ref': '#/components/schemas/ConversationPublic'
+            },
+            type: 'array',
+            title: 'Data'
+        },
+        count: {
+            type: 'integer',
+            title: 'Count'
+        }
+    },
+    type: 'object',
+    required: ['data', 'count'],
+    title: 'ConversationsPublic'
+} as const;
+
 export const HTTPValidationErrorSchema = {
     properties: {
         detail: {
@@ -226,6 +432,129 @@ export const NewPasswordSchema = {
     title: 'NewPassword'
 } as const;
 
+export const NotebookCreateSchema = {
+    properties: {
+        title: {
+            type: 'string',
+            maxLength: 255,
+            minLength: 1,
+            title: 'Title'
+        },
+        description: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 1000
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Description'
+        }
+    },
+    type: 'object',
+    required: ['title'],
+    title: 'NotebookCreate'
+} as const;
+
+export const NotebookPublicSchema = {
+    properties: {
+        title: {
+            type: 'string',
+            maxLength: 255,
+            minLength: 1,
+            title: 'Title'
+        },
+        description: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 1000
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Description'
+        },
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        owner_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Owner Id'
+        },
+        created_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Created At'
+        },
+        updated_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Updated At'
+        }
+    },
+    type: 'object',
+    required: ['title', 'id', 'owner_id', 'created_at', 'updated_at'],
+    title: 'NotebookPublic'
+} as const;
+
+export const NotebookUpdateSchema = {
+    properties: {
+        title: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 255,
+                    minLength: 1
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Title'
+        },
+        description: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 1000
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Description'
+        }
+    },
+    type: 'object',
+    title: 'NotebookUpdate'
+} as const;
+
+export const NotebooksPublicSchema = {
+    properties: {
+        data: {
+            items: {
+                '$ref': '#/components/schemas/NotebookPublic'
+            },
+            type: 'array',
+            title: 'Data'
+        },
+        count: {
+            type: 'integer',
+            title: 'Count'
+        }
+    },
+    type: 'object',
+    required: ['data', 'count'],
+    title: 'NotebooksPublic'
+} as const;
+
 export const PrivateUserCreateSchema = {
     properties: {
         email: {
@@ -249,6 +578,190 @@ export const PrivateUserCreateSchema = {
     type: 'object',
     required: ['email', 'password', 'full_name'],
     title: 'PrivateUserCreate'
+} as const;
+
+export const RetrievedChunkPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        source_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Source Id'
+        },
+        source_display_name: {
+            type: 'string',
+            title: 'Source Display Name'
+        },
+        content: {
+            type: 'string',
+            title: 'Content'
+        },
+        page_number: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Page Number'
+        },
+        score: {
+            type: 'number',
+            title: 'Score'
+        }
+    },
+    type: 'object',
+    required: ['id', 'source_id', 'source_display_name', 'content', 'page_number', 'score'],
+    title: 'RetrievedChunkPublic'
+} as const;
+
+export const RetrievedChunksPublicSchema = {
+    properties: {
+        data: {
+            items: {
+                '$ref': '#/components/schemas/RetrievedChunkPublic'
+            },
+            type: 'array',
+            title: 'Data'
+        }
+    },
+    type: 'object',
+    required: ['data'],
+    title: 'RetrievedChunksPublic'
+} as const;
+
+export const SearchRequestSchema = {
+    properties: {
+        query: {
+            type: 'string',
+            maxLength: 4000,
+            minLength: 1,
+            title: 'Query'
+        },
+        limit: {
+            type: 'integer',
+            maximum: 10,
+            minimum: 1,
+            title: 'Limit',
+            default: 5
+        }
+    },
+    type: 'object',
+    required: ['query'],
+    title: 'SearchRequest'
+} as const;
+
+export const SourcePublicSchema = {
+    properties: {
+        display_name: {
+            type: 'string',
+            maxLength: 255,
+            minLength: 1,
+            title: 'Display Name'
+        },
+        media_type: {
+            type: 'string',
+            maxLength: 100,
+            title: 'Media Type'
+        },
+        file_size_bytes: {
+            type: 'integer',
+            minimum: 0,
+            title: 'File Size Bytes'
+        },
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        notebook_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Notebook Id'
+        },
+        status: {
+            type: 'string',
+            title: 'Status'
+        },
+        error_message: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Error Message'
+        },
+        page_count: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Page Count'
+        },
+        char_count: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Char Count'
+        },
+        created_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Created At'
+        },
+        processed_at: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Processed At'
+        }
+    },
+    type: 'object',
+    required: ['display_name', 'media_type', 'file_size_bytes', 'id', 'notebook_id', 'status', 'error_message', 'page_count', 'char_count', 'created_at', 'processed_at'],
+    title: 'SourcePublic'
+} as const;
+
+export const SourcesPublicSchema = {
+    properties: {
+        data: {
+            items: {
+                '$ref': '#/components/schemas/SourcePublic'
+            },
+            type: 'array',
+            title: 'Data'
+        },
+        count: {
+            type: 'integer',
+            title: 'Count'
+        }
+    },
+    type: 'object',
+    required: ['data', 'count'],
+    title: 'SourcesPublic'
 } as const;
 
 export const TokenSchema = {
