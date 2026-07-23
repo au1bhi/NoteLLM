@@ -38,7 +38,7 @@
 
 完成条件：端到端 MVP 闭环可演示，引用能回到正确来源。
 
-当前验收证据：2026-07-23 已通过 provider/引用校验离线 pytest（4 项）、后端 Ruff、mypy、ty、OpenAPI 路由检查和 Vite 生产构建（Node 22.23.1）；正式 OpenAPI 客户端已重新生成。数据库级迁移与端到端验证待执行：当前正在运行的本地容器仍是旧 `postgres:18` 且未安装 `vector` 扩展，不能对其安全应用新迁移；Compose 已指定 `pgvector/pgvector:pg18`，应在按新镜像重建数据库后运行 Alembic。
+当前验收证据：2026-07-23 已在 `pgvector/pgvector:pg18`（vector 0.8.5）上迁移至 `c8d6e4a9f102`，并通过后端完整 pytest（74 项，含真实 pgvector cosine 排序与笔记本隔离测试）、Ruff、mypy、ty、OpenAPI 路由检查和 Vite 生产构建（Node 22.23.1）；正式 OpenAPI 客户端已重新生成。仍需使用已配置的真实 OpenAI-compatible provider 完成一次人工端到端问答验收。
 
 ## 阶段 4：体验、评测与交付（待开始）
 
@@ -50,4 +50,4 @@
 
 ## 当前下一步
 
-切换本地 PostgreSQL 到 pgvector 镜像并应用 Alembic，使用已配置的 OpenAI-compatible provider 做端到端摄取/问答验证。随后进入阶段 4，建立固定评测集和可复现的评估报告。默认不要加入阶段目标外的依赖或服务；如确有必要，先记录原因与替代方案。
+使用已配置的真实 OpenAI-compatible provider 做一次人工端到端摄取/问答验收。随后进入阶段 4，建立固定评测集和可复现的评估报告。默认不要加入阶段目标外的依赖或服务；如确有必要，先记录原因与替代方案。
