@@ -1,7 +1,9 @@
 from fastapi.testclient import TestClient
+from pytest import MonkeyPatch
 from sqlmodel import Session
 
 from app.core.config import settings
+from app.services.answers import GroundedAnswer
 from tests.utils.notebook import create_random_notebook
 from tests.utils.user import authentication_token_from_email, create_random_user
 
@@ -60,3 +62,33 @@ def test_user_cannot_read_another_users_conversation(
         headers=other_headers,
     )
     assert response.status_code == 404
+
+
+def test_message_stream_emits_delta_citations_and_done(
+    client: TestClient,
+    db: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    user = create_random_user(db)
+    notebook = create_random_notebook(db=db, owner_id=user.id)
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+    conversation = client.post(
+        f"{settings.API_V1_STR}/notebooks/{notebook.id}/conversations/",
+        headers=headers,
+        json={},
+    ).json()
+    monkeypatch.setattr(
+        "app.api.routes.conversations.persist_answer",
+        lambda **_: GroundedAnswer(content="Grounded answer", citations=[]),
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/conversations/{conversation['id']}/messages/stream",
+        headers=headers,
+        json={"content": "What do the notes say?"},
+    )
+
+    assert response.status_code == 200
+    assert "event: delta" in response.text
+    assert "event: citations" in response.text
+    assert "event: done" in response.text

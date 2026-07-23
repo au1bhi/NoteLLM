@@ -38,7 +38,7 @@
 
 完成条件：端到端 MVP 闭环可演示，引用能回到正确来源。
 
-当前验收证据：2026-07-23 已在 `pgvector/pgvector:pg18`（vector 0.8.5）上迁移至 `c8d6e4a9f102`，并通过后端完整 pytest（74 项，含真实 pgvector cosine 排序与笔记本隔离测试）、Ruff、mypy、ty、OpenAPI 路由检查和 Vite 生产构建（Node 22.23.1）；正式 OpenAPI 客户端已重新生成。仍需使用已配置的真实 OpenAI-compatible provider 完成一次人工端到端问答验收。
+当前验收证据：2026-07-23 已在 `pgvector/pgvector:pg18`（vector 0.8.5）上迁移至 `c8d6e4a9f102`，并通过后端完整 pytest（75 项，含真实 pgvector cosine 排序、笔记本隔离和 SSE 事件序列测试）、Ruff、mypy、ty、OpenAPI 路由检查和 Vite 生产构建（Node 22.23.1）；正式 OpenAPI 客户端已重新生成。仍需使用已配置的真实 OpenAI-compatible provider 完成一次人工端到端问答验收。
 
 ## 阶段 4：体验、评测与交付（待开始）
 
