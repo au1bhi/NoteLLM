@@ -16,17 +16,25 @@ class EmbeddingProvider(Protocol):
 
 class OpenAICompatibleEmbeddingProvider:
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
-        if not settings.LLM_BASE_URL or not settings.LLM_API_KEY or not settings.EMBEDDING_MODEL:
+        if (
+            not settings.EMBEDDING_BASE_URL
+            or not settings.EMBEDDING_API_KEY
+            or not settings.EMBEDDING_MODEL
+        ):
             raise EmbeddingError(
-                "Embedding is not configured. Set LLM_BASE_URL, LLM_API_KEY, and EMBEDDING_MODEL."
+                "Embedding is not configured. Set EMBEDDING_BASE_URL, EMBEDDING_API_KEY, and EMBEDDING_MODEL."
             )
 
-        endpoint = f"{str(settings.LLM_BASE_URL).rstrip('/')}/embeddings"
+        endpoint = f"{str(settings.EMBEDDING_BASE_URL).rstrip('/')}/embeddings"
         try:
             response = httpx.post(
                 endpoint,
-                headers={"Authorization": f"Bearer {settings.LLM_API_KEY}"},
-                json={"model": settings.EMBEDDING_MODEL, "input": list(texts)},
+                headers={"Authorization": f"Bearer {settings.EMBEDDING_API_KEY}"},
+                json={
+                    "model": settings.EMBEDDING_MODEL,
+                    "input": list(texts),
+                    "dimensions": settings.EMBEDDING_DIMENSIONS,
+                },
                 timeout=30.0,
             )
             response.raise_for_status()

@@ -115,7 +115,7 @@ def persist_answer(
             session.add(
                 Citation(
                     message_id=assistant_message.id,
-                    chunk_id=citation.chunk.id,
+                    chunk_id=citation.chunk_id,
                     ordinal=ordinal,
                     quote=citation.quote,
                 )
@@ -163,10 +163,10 @@ async def stream_message(
         data={
             "citations": [
                 {
-                    "chunk_id": str(citation.chunk.id),
+                    "chunk_id": str(citation.chunk_id),
                     "quote": citation.quote,
                     "source_display_name": citation.source_display_name,
-                    "page_number": citation.chunk.page_number,
+                    "page_number": citation.page_number,
                 }
                 for citation in answer.citations
             ]

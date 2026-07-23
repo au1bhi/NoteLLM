@@ -55,8 +55,10 @@ class Settings(BaseSettings):
     LLM_BASE_URL: HttpUrl | None = None
     LLM_API_KEY: str | None = None
     LLM_MODEL: str | None = None
+    EMBEDDING_BASE_URL: HttpUrl | None = None
+    EMBEDDING_API_KEY: str | None = None
     EMBEDDING_MODEL: str | None = None
-    EMBEDDING_DIMENSIONS: int = 1536
+    EMBEDDING_DIMENSIONS: int = 1024
     POSTGRES_SERVER: str
     POSTGRES_PORT: int = 5432
     POSTGRES_USER: str

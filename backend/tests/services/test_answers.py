@@ -64,4 +64,4 @@ def test_answer_persists_only_retrieved_citation(monkeypatch: MonkeyPatch) -> No
     )
 
     assert answer.content == "Verified evidence answers the question."
-    assert [citation.chunk.id for citation in answer.citations] == [chunk.id]
+    assert [citation.chunk_id for citation in answer.citations] == [chunk.id]

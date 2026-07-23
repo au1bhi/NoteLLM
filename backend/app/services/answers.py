@@ -3,7 +3,6 @@ from dataclasses import dataclass
 
 from sqlmodel import Session
 
-from app.models import Chunk
 from app.services.chat import ChatProvider
 from app.services.embeddings import EmbeddingProvider
 from app.services.retrieval import RetrievedChunk, retrieve_chunks
@@ -15,7 +14,8 @@ QUOTE_LENGTH = 500
 
 @dataclass(frozen=True)
 class AnswerCitation:
-    chunk: Chunk
+    chunk_id: uuid.UUID
+    page_number: int | None
     quote: str
     source_display_name: str
 
@@ -76,7 +76,8 @@ def answer_question(
     cited_ids = list(dict.fromkeys(model_answer.citation_chunk_ids))[:MAX_CITATIONS]
     citations = [
         AnswerCitation(
-            chunk=result.chunk,
+            chunk_id=result.chunk.id,
+            page_number=result.chunk.page_number,
             quote=result.chunk.content[:QUOTE_LENGTH],
             source_display_name=result.source_display_name,
         )

@@ -30,7 +30,7 @@
 
 验收证据：后端全套 pytest 于 2026-07-23 通过（67 项），其中包括笔记本与来源摄取接口测试。
 
-## 阶段 3：检索与问答（进行中）
+## 阶段 3：检索与问答（已完成）
 
 - 已接入 OpenAI-compatible 嵌入 provider：上传处理会批量写入 Chunk 向量；`POST /api/v1/notebooks/{notebook_id}/search` 以 pgvector cosine distance 返回当前笔记本的 ready 来源 Top-K Chunk，包含来源名、页码和相似度。provider 配置缺失或返回错误维度时，来源会安全地标记为失败而非生成不完整索引。
 - 已建立 Conversation、Message 和 Citation 持久化；`POST /api/v1/conversations/{conversation_id}/messages/stream` 通过 SSE 返回答案、引用和完成事件。模型仅能返回本次检索的 Chunk ID，服务端会丢弃未知 ID；无证据或无有效引用时固定返回资料不足。
@@ -38,9 +38,9 @@
 
 完成条件：端到端 MVP 闭环可演示，引用能回到正确来源。
 
-当前验收证据：2026-07-23 已在 `pgvector/pgvector:pg18`（vector 0.8.5）上迁移至 `c8d6e4a9f102`，并通过后端完整 pytest（75 项，含真实 pgvector cosine 排序、笔记本隔离和 SSE 事件序列测试）、Ruff、mypy、ty、OpenAPI 路由检查和 Vite 生产构建（Node 22.23.1）；正式 OpenAPI 客户端已重新生成。仍需使用已配置的真实 OpenAI-compatible provider 完成一次人工端到端问答验收。
+验收证据：2026-07-23 已在 `pgvector/pgvector:pg18`（vector 0.8.5）上迁移至 `d4e8a2c5f731`，并通过后端完整 pytest（75 项，含真实 pgvector cosine 排序、笔记本隔离和 SSE 事件序列测试）、Ruff、mypy、ty、OpenAPI 路由检查和 Vite 生产构建（Node 22.23.1）。使用智谱 Embedding-3（1024 维）和 DeepSeek V4 Flash 完成了临时 TXT 上传、分块、向量写入、检索、SSE 回答、引用持久化和清理的真实端到端验收。
 
-## 阶段 4：体验、评测与交付（待开始）
+## 阶段 4：体验、评测与交付（进行中）
 
 - 保存和展示对话历史，完善空状态、错误状态和删除清理。
 - 建立 30–50 个问题的固定评测集，记录 Recall@K、引用正确率、忠实度和耗时。
@@ -50,4 +50,4 @@
 
 ## 当前下一步
 
-使用已配置的真实 OpenAI-compatible provider 做一次人工端到端摄取/问答验收。随后进入阶段 4，建立固定评测集和可复现的评估报告。默认不要加入阶段目标外的依赖或服务；如确有必要，先记录原因与替代方案。
+建立固定评测集和可复现的评估报告；补充 Docker 演示数据、架构图、实验结果和答辩脚本。默认不要加入阶段目标外的依赖或服务；如确有必要，先记录原因与替代方案。

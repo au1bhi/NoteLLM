@@ -8,7 +8,7 @@
 cp .env.example .env
 ```
 
-必填的模型变量是 `LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL` 和 `EMBEDDING_MODEL`。`LLM_BASE_URL` 应是 API 版本根路径，例如 `https://provider.example/v1`。当前 pgvector 迁移使用 1536 维向量，因此 embedding 模型必须返回 1536 维，且 `EMBEDDING_DIMENSIONS` 保持 `1536`。
+必填的聊天变量是 `LLM_BASE_URL`、`LLM_API_KEY` 和 `LLM_MODEL`；embedding 变量是 `EMBEDDING_BASE_URL`、`EMBEDDING_API_KEY` 和 `EMBEDDING_MODEL`。聊天与 embedding provider 可以不同。DeepSeek 聊天使用 `https://api.deepseek.com`；智谱 Embedding-3 使用 `https://open.bigmodel.cn/api/paas/v4`。当前 pgvector 迁移使用 1024 维向量，因此 embedding 模型必须返回 1024 维，且 `EMBEDDING_DIMENSIONS` 保持 `1024`。
 
 密钥只存在于 `.env` 和后端容器环境中；浏览器请求不会携带 provider 密钥。
 

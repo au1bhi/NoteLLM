@@ -16,9 +16,9 @@
 
 The implementation must use a PostgreSQL image that includes pgvector and enable the extension through migration/startup SQL. The present `postgres:18` image does not itself prove pgvector availability; verify the chosen image before changing Compose.
 
-Future configuration names: `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `EMBEDDING_MODEL`, and `EMBEDDING_DIMENSIONS`. Model names remain deployment configuration, not source code defaults.
+Configuration names: `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `EMBEDDING_BASE_URL`, `EMBEDDING_API_KEY`, `EMBEDDING_MODEL`, and `EMBEDDING_DIMENSIONS`. Chat and embedding providers may be different; all keys remain backend-only deployment configuration.
 
-`LLM_BASE_URL` must point at the OpenAI-compatible API version root (for example, `https://provider.example/v1`). Upload processing requires `LLM_BASE_URL`, `LLM_API_KEY`, and `EMBEDDING_MODEL`; if they are absent or the provider returns a wrong-size vector, the source is retained with `failed` status and can be retried after configuration is corrected. `EMBEDDING_DIMENSIONS` must match the configured model and the database migration (initially 1536).
+`LLM_BASE_URL` must point at the OpenAI-compatible API version root (for example, `https://api.deepseek.com`). Upload processing requires `EMBEDDING_BASE_URL`, `EMBEDDING_API_KEY`, and `EMBEDDING_MODEL`; if they are absent or the provider returns a wrong-size vector, the source is retained with `failed` status and can be retried after configuration is corrected. `EMBEDDING_DIMENSIONS` must match the configured model and the database migration (currently 1024 for Zhipu Embedding-3).
 
 ## Data Model
 
