@@ -40,3 +40,13 @@ docker compose exec db psql -U postgres -d app -c \
 6. 使用另一账户尝试访问该笔记本或 conversation；API 必须返回 `404`。
 
 若 embedding 或 chat provider 未配置，来源或问答会返回安全的配置错误/资料不足信息，不会改由前端调用模型。
+
+## 4. 可选：创建合成演示资料
+
+注册并登录一个本地账户后，可从 `backend` 目录把仓库内的合成 Markdown 资料导入该账户：
+
+```bash
+POSTGRES_PORT=5433 uv run python scripts/seed_demo.py --email your-local-email@example.com
+```
+
+重复运行不会覆盖已有演示笔记本；确认需要重建时才增加 `--replace`。该脚本不创建账户、不包含密码或密钥，并且只导入 `docs/demo/notellm_demo_source.md`。导入后在浏览器打开“NoteLLM 答辩演示”笔记本即可提问。
