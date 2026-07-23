@@ -42,6 +42,8 @@ class EvaluationResult:
     answer: str | None
     answer_latency_ms: float | None
     citation_matches_expected_source: bool | None
+    citation_sources: tuple[str, ...]
+    expected_source: str
     identifier: str
     keyword_match: bool | None
     question: str
@@ -95,6 +97,10 @@ def current_commit() -> str:
         text=True,
     )
     return result.stdout.strip() if result.returncode == 0 else "unknown"
+
+
+def markdown_cell(value: str) -> str:
+    return value.replace("|", "\\|").replace("\n", "<br>")
 
 
 def render_report(results: list[EvaluationResult], *, answers_enabled: bool) -> str:
@@ -190,6 +196,25 @@ def render_report(results: list[EvaluationResult], *, answers_enabled: bool) -> 
             f"{result.retrieval_latency_ms:.0f} | {answer_latency} | {citation_match} | "
             f"{keyword_match} |"
         )
+    if answers_enabled:
+        lines.extend(
+            [
+                "",
+                "## 人工忠实度复核表",
+                "",
+                "下表只包含合成语料的输出。请逐题核对回答是否仅由引用来源支持，"
+                "并将“待人工复核”替换为“通过”或“未通过”，再简述异常原因。",
+                "",
+                "| ID | 问题 | 期望来源 | 模型回答 | 已验证引用来源 | 人工忠实度 |",
+                "| --- | --- | --- | --- | --- | --- |",
+            ]
+        )
+        for result in results:
+            lines.append(
+                f"| {result.identifier} | {markdown_cell(result.question)} | "
+                f"{result.expected_source} | {markdown_cell(result.answer or '')} | "
+                f"{', '.join(result.citation_sources)} | 待人工复核 |"
+            )
     return "\n".join(lines) + "\n"
 
 
@@ -266,6 +291,8 @@ def evaluate(
                 citation_matches_expected_source=(
                     question.expected_source in cited_sources if answer else None
                 ),
+                citation_sources=tuple(sorted(cited_sources)),
+                expected_source=question.expected_source,
                 identifier=question.identifier,
                 keyword_match=(
                     all(
