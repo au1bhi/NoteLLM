@@ -1,6 +1,7 @@
 .vscode/*
 !.vscode/extensions.json
 node_modules/
+.env
 /test-results/
 /playwright-report/
 /blob-report/
