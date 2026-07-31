@@ -37,6 +37,8 @@ Prefer one reliable end-to-end flow.
 
 Keep LLM and embedding providers behind interfaces. Keys, retrieval, prompts, and citation validation stay in the backend; the frontend only consumes results or streams.
 
+Users can bring their own API keys (BYOK): per-user provider settings live in `user_provider_settings` (chat + embedding base URL / key / model). Keys are Fernet-encrypted at rest in `app/core/security.py` (keyed off `SECRET_KEY`) and never returned to the client — the API (`GET/PUT/DELETE /users/me/provider-settings`, in `app/api/routes/users.py`) only returns a masked preview. Missing fields fall back to the server env defaults. Effective configs are resolved in `app/services/provider_settings.py`; providers (`app/services/chat.py`, `embeddings.py`) take a `ProviderConfig`. Always resolve user settings through the owning user before constructing a provider.
+
 ## Frontend Conventions & Gotchas
 
 - Biome's lint with `--unsafe` strips `useEffect` dependencies it considers unused. Intentional reactive deps (auto-scroll on new messages, textarea auto-resize) must be kept with `// biome-ignore lint/correctness/useExhaustiveDependencies: <reason>`.
