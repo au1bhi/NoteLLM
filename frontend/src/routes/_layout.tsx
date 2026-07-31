@@ -30,7 +30,7 @@ function Layout() {
       <AppSidebar />
       <SidebarInset className="relative">
         <div className="pointer-events-none absolute inset-x-0 top-0 z-50 h-0.5 bg-brand-gradient" />
-        <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur-xl">
+        <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur-xl">
           <SidebarTrigger className="-ml-1 text-muted-foreground" />
           <Button
             variant="ghost"

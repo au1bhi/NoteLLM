@@ -3,6 +3,7 @@ import { BookOpen } from "lucide-react"
 
 import type { Notebook } from "@/services/notebooks"
 import { timeAgo } from "@/utils"
+import { DeleteNotebook } from "./DeleteNotebook"
 import { EditNotebook } from "./EditNotebook"
 
 interface NotebookCardProps {
@@ -11,11 +12,17 @@ interface NotebookCardProps {
 
 export function NotebookCard({ notebook }: NotebookCardProps) {
   return (
-    <div className="group relative">
-      <EditNotebook
-        notebook={notebook}
-        triggerClassName="absolute right-3 top-3 z-10 size-8 rounded-lg text-muted-foreground opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100 max-sm:opacity-100"
-      />
+    <div className="group relative isolate">
+      <div className="absolute right-3 top-3 z-10 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 max-sm:opacity-100">
+        <EditNotebook
+          notebook={notebook}
+          triggerClassName="size-8 rounded-lg text-muted-foreground hover:text-foreground"
+        />
+        <DeleteNotebook
+          notebook={notebook}
+          triggerClassName="size-8 rounded-lg text-muted-foreground hover:text-destructive"
+        />
+      </div>
       <Link
         to="/notebooks/$notebookId"
         params={{ notebookId: notebook.id }}
