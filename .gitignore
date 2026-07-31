@@ -6,3 +6,6 @@ node_modules/
 /playwright-report/
 /blob-report/
 /playwright/.cache/
+
+# Local uploads (test artifacts)
+backend/data/uploads/
