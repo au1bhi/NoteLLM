@@ -221,6 +221,7 @@ function NotebookWorkspace() {
 
   const sourcesPanel = (
     <SourcesPanel
+      notebookId={notebookId}
       sources={sources.data?.data}
       isLoading={sources.isLoading}
       isError={Boolean(sources.error)}
@@ -323,6 +324,7 @@ function NotebookWorkspace() {
           </SheetHeader>
           <div className="mt-2">
             <SourcesPanel
+              notebookId={notebookId}
               sources={sources.data?.data}
               isLoading={sources.isLoading}
               isError={Boolean(sources.error)}

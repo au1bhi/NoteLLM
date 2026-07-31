@@ -31,6 +31,11 @@ export const notebooksApi = {
     NotebooksService.regenerateNotebookOverview({ notebookId }),
   retrySource: (notebookId: string, sourceId: string) =>
     NotebooksService.retrySource({ notebookId, sourceId }),
+  search: (notebookId: string, query: string) =>
+    NotebooksService.searchNotebook({
+      notebookId,
+      requestBody: { query },
+    }),
   update: (notebookId: string, input: NotebookUpdate) =>
     NotebooksService.updateNotebook({ notebookId, requestBody: input }),
   uploadSource: (notebookId: string, file: File) =>

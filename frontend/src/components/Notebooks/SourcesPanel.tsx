@@ -1,20 +1,26 @@
+import { useMutation } from "@tanstack/react-query"
 import {
   File,
   FileText,
   Loader2,
   RotateCcw,
+  Search,
   Trash2,
   Upload,
+  X,
 } from "lucide-react"
-import { type ChangeEvent, useRef } from "react"
+import { type ChangeEvent, useRef, useState } from "react"
 
+import type { RetrievedChunkPublic } from "@/client"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import useCustomToast from "@/hooks/useCustomToast"
 import { cn } from "@/lib/utils"
-import type { Source } from "@/services/notebooks"
+import { notebooksApi, type Source } from "@/services/notebooks"
 
 interface SourcesPanelProps {
+  notebookId: string
   sources?: Source[]
   isLoading: boolean
   isError: boolean
@@ -82,7 +88,60 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
+function SearchResults({
+  results,
+  isPending,
+}: {
+  results?: RetrievedChunkPublic[]
+  isPending: boolean
+}) {
+  if (isPending) {
+    return (
+      <div className="space-y-2">
+        <Skeleton className="h-20 rounded-lg" />
+        <Skeleton className="h-20 rounded-lg" />
+      </div>
+    )
+  }
+  if (!results?.length) {
+    return (
+      <p className="rounded-lg border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+        没有找到匹配的内容
+      </p>
+    )
+  }
+  return (
+    <ul className="space-y-2">
+      {results.map((result) => (
+        <li key={result.id} className="rounded-lg border bg-background p-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="truncate text-xs font-medium">
+              {result.source_display_name}
+              {result.page_number != null ? ` · p. ${result.page_number}` : ""}
+            </p>
+            <span className="shrink-0 text-xs font-semibold text-primary">
+              {Math.round(result.score * 100)}%
+            </span>
+          </div>
+          <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-brand-gradient"
+              style={{
+                width: `${Math.max(4, Math.round(result.score * 100))}%`,
+              }}
+            />
+          </div>
+          <p className="mt-2 line-clamp-3 text-xs leading-relaxed text-muted-foreground">
+            {result.content}
+          </p>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 export function SourcesPanel({
+  notebookId,
   sources,
   isLoading,
   isError,
@@ -96,11 +155,32 @@ export function SourcesPanel({
   onDelete,
 }: SourcesPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { showErrorToast } = useCustomToast()
+  const [searchQuery, setSearchQuery] = useState("")
+  const [searched, setSearched] = useState(false)
+
+  const searchMutation = useMutation({
+    mutationFn: (query: string) => notebooksApi.search(notebookId, query),
+    onError: (error: Error) => showErrorToast(error.message),
+  })
 
   const onFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const [file] = Array.from(event.target.files ?? [])
     if (file) onUploadFile(file)
     event.target.value = ""
+  }
+
+  const submitSearch = () => {
+    const query = searchQuery.trim()
+    if (!query || searchMutation.isPending) return
+    setSearched(true)
+    searchMutation.mutate(query)
+  }
+
+  const clearSearch = () => {
+    setSearched(false)
+    setSearchQuery("")
+    searchMutation.reset()
   }
 
   const readyCount =
@@ -143,86 +223,134 @@ export function SourcesPanel({
         </Button>
       </header>
 
+      <div className="border-b px-4 py-2">
+        <div className="flex items-center gap-2">
+          <Search className="size-4 shrink-0 text-muted-foreground" />
+          <input
+            value={searchQuery}
+            placeholder="在资料中检索…"
+            onChange={(event) => setSearchQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") submitSearch()
+            }}
+            className="h-8 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          />
+          {searched ? (
+            <button
+              type="button"
+              aria-label="清除检索"
+              onClick={clearSearch}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <X className="size-4" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              aria-label="检索"
+              onClick={submitSearch}
+              disabled={searchMutation.isPending || !searchQuery.trim()}
+              className="text-primary disabled:opacity-40"
+            >
+              {searchMutation.isPending ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Search className="size-4" />
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+
       <div className="p-4">
-        {isLoading ? (
-          <div className="space-y-2">
-            <Skeleton className="h-16 rounded-lg" />
-            <Skeleton className="h-16 rounded-lg" />
-          </div>
-        ) : null}
-        {isError ? (
-          <p className="text-sm text-destructive">{errorMessage}</p>
-        ) : null}
-        {sources?.length ? (
-          <ul className="space-y-2">
-            {sources.map((source) => {
-              const { Icon, tone } = fileTone(source.media_type)
-              return (
-                <li
-                  key={source.id}
-                  className="group flex items-center gap-3 rounded-lg border bg-background p-3 transition-colors hover:bg-muted/40"
-                >
-                  <span
-                    className={cn(
-                      "inline-flex size-9 shrink-0 items-center justify-center rounded-lg",
-                      tone,
-                    )}
-                  >
-                    <Icon className="size-4" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">
-                      {source.display_name}
-                    </p>
-                    <div className="mt-1 flex items-center gap-2">
-                      <StatusBadge status={source.status} />
-                      <p className="truncate text-xs text-muted-foreground">
-                        {sourceMeta(source)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-0.5 opacity-100 transition-opacity group-hover:opacity-100 focus-within:opacity-100 max-lg:opacity-100 lg:opacity-0 lg:group-hover:opacity-100">
-                    {source.status === "failed" ? (
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-8"
-                        aria-label={`重试 ${source.display_name}`}
-                        disabled={isRetrying}
-                        onClick={() => onRetry(source.id)}
-                      >
-                        <RotateCcw className="size-4" />
-                      </Button>
-                    ) : null}
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 text-muted-foreground hover:text-destructive"
-                      aria-label={`删除 ${source.display_name}`}
-                      disabled={isDeleting}
-                      onClick={() => onDelete(source.id)}
+        {searched ? (
+          <SearchResults
+            results={searchMutation.data?.data}
+            isPending={searchMutation.isPending}
+          />
+        ) : (
+          <>
+            {isLoading ? (
+              <div className="space-y-2">
+                <Skeleton className="h-16 rounded-lg" />
+                <Skeleton className="h-16 rounded-lg" />
+              </div>
+            ) : null}
+            {isError ? (
+              <p className="text-sm text-destructive">{errorMessage}</p>
+            ) : null}
+            {sources?.length ? (
+              <ul className="space-y-2">
+                {sources.map((source) => {
+                  const { Icon, tone } = fileTone(source.media_type)
+                  return (
+                    <li
+                      key={source.id}
+                      className="group flex items-center gap-3 rounded-lg border bg-background p-3 transition-colors hover:bg-muted/40"
                     >
-                      <Trash2 className="size-4" />
-                    </Button>
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-        ) : null}
-        {!isLoading && !sources?.length ? (
-          <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-8 text-center">
-            <span className="inline-flex size-10 items-center justify-center rounded-full bg-muted">
-              <FileText className="size-5 text-muted-foreground" />
-            </span>
-            <p className="text-sm font-medium">还没有资料</p>
-            <p className="text-xs leading-relaxed text-muted-foreground">
-              上传 PDF、TXT 或 Markdown，
-              <br />
-              解析完成后即可检索提问。
-            </p>
-          </div>
-        ) : null}
+                      <span
+                        className={cn(
+                          "inline-flex size-9 shrink-0 items-center justify-center rounded-lg",
+                          tone,
+                        )}
+                      >
+                        <Icon className="size-4" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">
+                          {source.display_name}
+                        </p>
+                        <div className="mt-1 flex items-center gap-2">
+                          <StatusBadge status={source.status} />
+                          <p className="truncate text-xs text-muted-foreground">
+                            {sourceMeta(source)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-0.5 opacity-100 transition-opacity group-hover:opacity-100 focus-within:opacity-100 max-lg:opacity-100 lg:opacity-0 lg:group-hover:opacity-100">
+                        {source.status === "failed" ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-8"
+                            aria-label={`重试 ${source.display_name}`}
+                            disabled={isRetrying}
+                            onClick={() => onRetry(source.id)}
+                          >
+                            <RotateCcw className="size-4" />
+                          </Button>
+                        ) : null}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-8 text-muted-foreground hover:text-destructive"
+                          aria-label={`删除 ${source.display_name}`}
+                          disabled={isDeleting}
+                          onClick={() => onDelete(source.id)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                    </li>
+                  )
+                })}
+              </ul>
+            ) : null}
+            {!isLoading && !sources?.length ? (
+              <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-8 text-center">
+                <span className="inline-flex size-10 items-center justify-center rounded-full bg-muted">
+                  <FileText className="size-5 text-muted-foreground" />
+                </span>
+                <p className="text-sm font-medium">还没有资料</p>
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  上传 PDF、TXT 或 Markdown，
+                  <br />
+                  解析完成后即可检索提问。
+                </p>
+              </div>
+            ) : null}
+          </>
+        )}
       </div>
     </section>
   )
