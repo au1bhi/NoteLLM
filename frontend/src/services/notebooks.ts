@@ -4,6 +4,7 @@ import {
   type NotebookPublic,
   type NotebooksPublic,
   NotebooksService,
+  type NotebookUpdate,
   type SourcePublic,
   type SourcesPublic,
 } from "@/client"
@@ -24,6 +25,8 @@ export const notebooksApi = {
     NotebooksService.readSources({ notebookId }),
   retrySource: (notebookId: string, sourceId: string) =>
     NotebooksService.retrySource({ notebookId, sourceId }),
+  update: (notebookId: string, input: NotebookUpdate) =>
+    NotebooksService.updateNotebook({ notebookId, requestBody: input }),
   uploadSource: (notebookId: string, file: File) =>
     NotebooksService.uploadSource({
       notebookId,

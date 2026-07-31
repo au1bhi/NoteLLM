@@ -36,7 +36,10 @@ export type ConversationDetailPublic = {
 
 export type ConversationMessageCreate = {
     content: string;
+    mode?: 'grounded' | 'hybrid' | 'knowledge';
 };
+
+export type mode = 'grounded' | 'hybrid' | 'knowledge';
 
 export type ConversationMessagePublic = {
     id: string;
@@ -229,6 +232,13 @@ export type ConversationsReadConversationData = {
 };
 
 export type ConversationsReadConversationResponse = (ConversationDetailPublic);
+
+export type ConversationsUpdateConversationData = {
+    conversationId: string;
+    requestBody: ConversationCreate;
+};
+
+export type ConversationsUpdateConversationResponse = (ConversationPublic);
 
 export type ConversationsStreamMessageData = {
     conversationId: string;

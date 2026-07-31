@@ -172,6 +172,12 @@ export const ConversationMessageCreateSchema = {
             maxLength: 4000,
             minLength: 1,
             title: 'Content'
+        },
+        mode: {
+            type: 'string',
+            enum: ['grounded', 'hybrid', 'knowledge'],
+            title: 'Mode',
+            default: 'grounded'
         }
     },
     type: 'object',

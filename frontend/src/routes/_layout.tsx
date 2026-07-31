@@ -28,13 +28,14 @@ function Layout() {
   return (
     <SidebarProvider>
       <AppSidebar />
-      <SidebarInset>
-        <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center gap-2 border-b px-4">
+      <SidebarInset className="relative">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-50 h-0.5 bg-brand-gradient" />
+        <header className="sticky top-0 z-10 flex h-16 shrink-0 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur-md">
           <SidebarTrigger className="-ml-1 text-muted-foreground" />
           <Button
             variant="ghost"
             size="sm"
-            className="ml-auto gap-2"
+            className="ml-auto gap-2 text-muted-foreground hover:text-foreground"
             onClick={logout}
           >
             <LogOut className="size-4" />
@@ -42,7 +43,7 @@ function Layout() {
           </Button>
         </header>
         <main className="flex-1 p-6 md:p-8">
-          <div className="mx-auto max-w-7xl">
+          <div className="mx-auto w-full max-w-7xl">
             <Outlet />
           </div>
         </main>

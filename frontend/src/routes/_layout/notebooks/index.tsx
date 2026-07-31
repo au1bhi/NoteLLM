@@ -1,8 +1,10 @@
 import { useQuery } from "@tanstack/react-query"
-import { createFileRoute, Link } from "@tanstack/react-router"
+import { createFileRoute } from "@tanstack/react-router"
 import { BookOpen } from "lucide-react"
 
 import { AddNotebook } from "@/components/Notebooks/AddNotebook"
+import { NotebookCard } from "@/components/Notebooks/NotebookCard"
+import { Skeleton } from "@/components/ui/skeleton"
 import { notebooksApi } from "@/services/notebooks"
 
 export const Route = createFileRoute("/_layout/notebooks/")({
@@ -18,44 +20,50 @@ function Notebooks() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Notebooks</h1>
-          <p className="text-muted-foreground">
-            Organize sources and grounded conversations.
+          <h1 className="text-2xl font-bold tracking-tight">笔记本</h1>
+          <p className="mt-1 text-muted-foreground">
+            组织资料并开启带引用的问答会话。
           </p>
         </div>
         <AddNotebook />
       </div>
+
       {isLoading ? (
-        <p className="text-muted-foreground">Loading notebooks…</p>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <Skeleton className="h-40 rounded-xl" />
+          <Skeleton className="h-40 rounded-xl" />
+          <Skeleton className="h-40 rounded-xl" />
+        </div>
       ) : null}
-      {error ? <p className="text-destructive">{error.message}</p> : null}
-      {data?.data.length ? (
+      {error ? (
+        <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+          {error.message}
+        </p>
+      ) : null}
+
+      {!isLoading && !error && data?.data.length ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {data.data.map((notebook) => (
-            <Link
-              key={notebook.id}
-              to="/notebooks/$notebookId"
-              params={{ notebookId: notebook.id }}
-              className="rounded-lg border p-5 transition-colors hover:bg-muted"
-            >
-              <BookOpen className="mb-4 size-5 text-primary" />
-              <h2 className="font-semibold">{notebook.title}</h2>
-              <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
-                {notebook.description || "No description yet"}
-              </p>
-            </Link>
+            <NotebookCard key={notebook.id} notebook={notebook} />
           ))}
         </div>
       ) : null}
+
       {!isLoading && !error && data?.data.length === 0 ? (
-        <div className="rounded-lg border border-dashed px-6 py-16 text-center">
-          <BookOpen className="mx-auto mb-4 size-8 text-muted-foreground" />
-          <h2 className="text-lg font-semibold">Create your first notebook</h2>
-          <p className="mt-1 text-muted-foreground">
-            Add a notebook to begin organizing your learning sources.
-          </p>
+        <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed px-6 py-16 text-center">
+          <span className="inline-flex size-14 items-center justify-center rounded-2xl bg-brand-gradient-soft text-primary">
+            <BookOpen className="size-7" />
+          </span>
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">
+              创建你的第一个笔记本
+            </h2>
+            <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+              上传讲义或研究资料，即可开始只基于这些内容的问答。
+            </p>
+          </div>
           <AddNotebook />
         </div>
       ) : null}

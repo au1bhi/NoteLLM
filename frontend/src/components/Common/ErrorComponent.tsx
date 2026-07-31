@@ -1,27 +1,31 @@
 import { Link } from "@tanstack/react-router"
+import { ArrowLeft } from "lucide-react"
+
+import { Logo } from "@/components/Common/Logo"
 import { Button } from "@/components/ui/button"
 
 const ErrorComponent = () => {
   return (
     <div
-      className="flex min-h-screen items-center justify-center flex-col p-4"
+      className="flex min-h-svh flex-col items-center justify-center gap-8 p-4"
       data-testid="error-component"
     >
-      <div className="flex items-center z-10">
-        <div className="flex flex-col ml-4 items-center justify-center p-4">
-          <span className="text-6xl md:text-8xl font-bold leading-none mb-4">
-            Error
-          </span>
-          <span className="text-2xl font-bold mb-2">Oops!</span>
-        </div>
+      <Logo variant="full" asLink={false} />
+      <div className="flex flex-col items-center gap-2 text-center">
+        <span className="text-gradient text-6xl font-bold leading-none">
+          Oops
+        </span>
+        <h1 className="mt-2 text-2xl font-bold tracking-tight">出了点问题</h1>
+        <p className="max-w-sm text-muted-foreground">
+          发生了一些错误，请稍后重试。
+        </p>
       </div>
-
-      <p className="text-lg text-muted-foreground mb-4 text-center z-10">
-        Something went wrong. Please try again.
-      </p>
-      <Link to="/">
-        <Button>Go Home</Button>
-      </Link>
+      <Button asChild>
+        <Link to="/">
+          <ArrowLeft className="size-4" />
+          返回首页
+        </Link>
+      </Button>
     </div>
   )
 }

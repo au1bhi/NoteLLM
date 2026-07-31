@@ -10,7 +10,10 @@ import {
 type StreamHandlers = {
   onCitations: (citations: CitationPublic[]) => void
   onDelta: (text: string) => void
+  mode?: AnswerMode
 }
+
+export type AnswerMode = "grounded" | "hybrid" | "knowledge"
 
 export const conversationsApi = {
   create: (notebookId: string) =>
@@ -22,6 +25,11 @@ export const conversationsApi = {
     ConversationsService.readConversation({ conversationId }),
   list: (notebookId: string) =>
     NotebooksService.readConversations({ notebookId }),
+  update: (conversationId: string, title: string) =>
+    ConversationsService.updateConversation({
+      conversationId,
+      requestBody: { title },
+    }),
   stream: async (
     conversationId: string,
     content: string,
@@ -30,7 +38,10 @@ export const conversationsApi = {
     const response = await fetch(
       `${OpenAPI.BASE}/api/v1/conversations/${conversationId}/messages/stream`,
       {
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({
+          content,
+          mode: handlers.mode ?? "grounded",
+        }),
         headers: {
           Authorization: `Bearer ${localStorage.getItem("access_token") || ""}`,
           "Content-Type": "application/json",
@@ -46,6 +57,27 @@ export const conversationsApi = {
     const decoder = new TextDecoder()
     let buffer = ""
     let event = "message"
+
+    const processLine = (line: string) => {
+      if (line.startsWith("event: ")) event = line.slice(7)
+      if (line.startsWith("data: ")) {
+        const data = JSON.parse(line.slice(6)) as {
+          citations?: CitationPublic[]
+          message?: string
+          text?: string
+        }
+        if (event === "delta" && data.text) handlers.onDelta(data.text)
+        if (event === "citations" && data.citations) {
+          handlers.onCitations(data.citations)
+        }
+        if (event === "error") throw new Error(data.message || "Answer failed")
+      }
+    }
+
+    const processRecord = (record: string) => {
+      for (const line of record.split("\n")) processLine(line)
+    }
+
     while (true) {
       const { done, value } = await reader.read()
       buffer += decoder.decode(value, { stream: !done })
@@ -53,23 +85,12 @@ export const conversationsApi = {
       const records = buffer.split("\n\n")
       buffer = records.pop() || ""
       for (const record of records) {
-        for (const line of record.split("\n")) {
-          if (line.startsWith("event: ")) event = line.slice(7)
-          if (line.startsWith("data: ")) {
-            const data = JSON.parse(line.slice(6)) as {
-              citations?: CitationPublic[]
-              message?: string
-              text?: string
-            }
-            if (event === "delta" && data.text) handlers.onDelta(data.text)
-            if (event === "citations" && data.citations) {
-              handlers.onCitations(data.citations)
-            }
-            if (event === "error") throw new Error(data.message || "Answer failed")
-          }
-        }
+        processRecord(record)
       }
-      if (done) return
+      if (done) {
+        if (buffer.trim()) processRecord(buffer)
+        return
+      }
     }
   },
 }

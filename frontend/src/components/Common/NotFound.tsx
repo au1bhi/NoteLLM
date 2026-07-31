@@ -1,29 +1,31 @@
 import { Link } from "@tanstack/react-router"
+import { ArrowLeft } from "lucide-react"
+
+import { Logo } from "@/components/Common/Logo"
 import { Button } from "@/components/ui/button"
 
 const NotFound = () => {
   return (
     <div
-      className="flex min-h-screen items-center justify-center flex-col p-4"
+      className="flex min-h-svh flex-col items-center justify-center gap-8 p-4"
       data-testid="not-found"
     >
-      <div className="flex items-center z-10">
-        <div className="flex flex-col ml-4 items-center justify-center p-4">
-          <span className="text-6xl md:text-8xl font-bold leading-none mb-4">
-            404
-          </span>
-          <span className="text-2xl font-bold mb-2">Oops!</span>
-        </div>
+      <Logo variant="full" asLink={false} />
+      <div className="flex flex-col items-center gap-2 text-center">
+        <span className="text-gradient text-7xl font-bold leading-none">
+          404
+        </span>
+        <h1 className="mt-2 text-2xl font-bold tracking-tight">页面不存在</h1>
+        <p className="max-w-sm text-muted-foreground">
+          你访问的页面可能已被移动或删除。
+        </p>
       </div>
-
-      <p className="text-lg text-muted-foreground mb-4 text-center z-10">
-        The page you are looking for was not found.
-      </p>
-      <div className="z-10">
+      <Button asChild>
         <Link to="/">
-          <Button className="mt-4">Go Back</Button>
+          <ArrowLeft className="size-4" />
+          返回首页
         </Link>
-      </div>
+      </Button>
     </div>
   )
 }

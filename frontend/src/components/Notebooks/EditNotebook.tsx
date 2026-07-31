@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { Plus } from "lucide-react"
-import { useState } from "react"
+import { Pencil } from "lucide-react"
+import { useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 
@@ -27,67 +27,77 @@ import {
 import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
 import useCustomToast from "@/hooks/useCustomToast"
-import { cn } from "@/lib/utils"
-import { notebooksApi } from "@/services/notebooks"
+import { type Notebook, notebooksApi } from "@/services/notebooks"
 
 const formSchema = z.object({
   description: z.string().max(1000).optional(),
-  title: z.string().min(1, "A notebook title is required").max(255),
+  title: z.string().min(1, "标题不能为空").max(255),
 })
 
 type FormData = z.infer<typeof formSchema>
 
-interface AddNotebookProps {
-  compact?: boolean
+interface EditNotebookProps {
+  notebook: Notebook
   triggerClassName?: string
 }
 
-export function AddNotebook({
-  compact = false,
+export function EditNotebook({
+  notebook,
   triggerClassName,
-}: AddNotebookProps) {
+}: EditNotebookProps) {
   const [isOpen, setIsOpen] = useState(false)
   const queryClient = useQueryClient()
   const { showErrorToast, showSuccessToast } = useCustomToast()
   const form = useForm<FormData>({
-    defaultValues: { description: "", title: "" },
+    defaultValues: {
+      description: notebook.description ?? "",
+      title: notebook.title,
+    },
     resolver: zodResolver(formSchema),
   })
+
+  useEffect(() => {
+    if (isOpen) {
+      form.reset({
+        description: notebook.description ?? "",
+        title: notebook.title,
+      })
+    }
+  }, [isOpen, notebook, form])
+
   const mutation = useMutation({
-    mutationFn: notebooksApi.create,
+    mutationFn: (data: FormData) => notebooksApi.update(notebook.id, data),
     onError: (error: Error) => showErrorToast(error.message),
     onSuccess: () => {
       form.reset()
       setIsOpen(false)
-      showSuccessToast("Notebook created")
+      showSuccessToast("Notebook updated")
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ["notebooks"] }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["notebooks"] })
+      queryClient.invalidateQueries({ queryKey: ["notebooks", notebook.id] })
+    },
   })
 
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button
-          className={cn(
-            compact &&
-              "w-full justify-start gap-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2",
-            triggerClassName,
-          )}
+          type="button"
+          variant="ghost"
+          size="sm"
+          className={triggerClassName}
+          aria-label={`编辑 ${notebook.title}`}
+          onClick={(event) => event.stopPropagation()}
         >
-          <Plus className="size-4 shrink-0" />
-          <span
-            className={cn(compact && "group-data-[collapsible=icon]:hidden")}
-          >
-            New notebook
-          </span>
+          <Pencil className="size-4" />
+          <span className="sr-only">编辑笔记本</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Create a notebook</DialogTitle>
-          <DialogDescription>
-            Keep related learning materials and conversations together.
-          </DialogDescription>
+          <DialogTitle>编辑笔记本</DialogTitle>
+          <DialogDescription>修改标题与描述。</DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form
@@ -99,13 +109,9 @@ export function AddNotebook({
               name="title"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Title</FormLabel>
+                  <FormLabel>标题</FormLabel>
                   <FormControl>
-                    <Input
-                      autoFocus
-                      placeholder="e.g. Machine learning"
-                      {...field}
-                    />
+                    <Input autoFocus {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -116,9 +122,9 @@ export function AddNotebook({
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Description</FormLabel>
+                  <FormLabel>描述</FormLabel>
                   <FormControl>
-                    <Input placeholder="Optional context" {...field} />
+                    <Input placeholder="可选" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -127,11 +133,11 @@ export function AddNotebook({
             <DialogFooter>
               <DialogClose asChild>
                 <Button variant="outline" disabled={mutation.isPending}>
-                  Cancel
+                  取消
                 </Button>
               </DialogClose>
               <LoadingButton type="submit" loading={mutation.isPending}>
-                Create
+                保存
               </LoadingButton>
             </DialogFooter>
           </form>
