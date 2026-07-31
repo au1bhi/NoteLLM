@@ -26,20 +26,15 @@ Source excerpts:
 """
 
 
-def generate_overview(
-    *,
-    session: Session,
-    notebook_id: uuid.UUID,
-    chat_provider: ChatProvider,
-) -> NotebookOverview:
-    """Generate an overview from the notebook's ready sources (best-effort)."""
+def sample_ready_chunks(session: Session, notebook_id: uuid.UUID) -> list[str]:
+    """Return a character-budgeted sample of the notebook's ready source text."""
     sources = session.exec(
         select(Source)
         .where(Source.notebook_id == notebook_id)
         .where(Source.status == "ready")
     ).all()
     if not sources:
-        return NotebookOverview(summary="", topics=[])
+        return []
 
     source_ids = [source.id for source in sources]
     chunks = session.exec(
@@ -49,9 +44,8 @@ def generate_overview(
         .order_by(col(Chunk.source_id), col(Chunk.ordinal))
     ).all()
     if not chunks:
-        return NotebookOverview(summary="", topics=[])
+        return []
 
-    # Sample chunks (skipping the overlap tail) up to the character budget.
     sampled: list[str] = []
     total = 0
     for chunk in chunks:
@@ -62,6 +56,19 @@ def generate_overview(
         total += len(piece)
         if total >= OVERVIEW_CHAR_BUDGET:
             break
+    return sampled
+
+
+def generate_overview(
+    *,
+    session: Session,
+    notebook_id: uuid.UUID,
+    chat_provider: ChatProvider,
+) -> NotebookOverview:
+    """Generate an overview from the notebook's ready sources (best-effort)."""
+    sampled = sample_ready_chunks(session, notebook_id)
+    if not sampled:
+        return NotebookOverview(summary="", topics=[])
 
     data = chat_provider.complete_json(
         prompt=build_overview_prompt(excerpts="\n\n".join(sampled))

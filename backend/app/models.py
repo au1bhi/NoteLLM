@@ -212,6 +212,21 @@ class NotebookOverviewPublic(SQLModel):
     updated_at: datetime | None = None
 
 
+class StudySectionPublic(SQLModel):
+    title: str
+    content: str
+
+
+class StudyFaqPublic(SQLModel):
+    question: str
+    answer: str
+
+
+class StudyGuidePublic(SQLModel):
+    sections: list[StudySectionPublic]
+    faqs: list[StudyFaqPublic]
+
+
 class NotebooksPublic(SQLModel):
     data: list[NotebookPublic]
     count: int

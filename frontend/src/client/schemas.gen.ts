@@ -809,6 +809,60 @@ export const SourcesPublicSchema = {
     title: 'SourcesPublic'
 } as const;
 
+export const StudyFaqPublicSchema = {
+    properties: {
+        question: {
+            type: 'string',
+            title: 'Question'
+        },
+        answer: {
+            type: 'string',
+            title: 'Answer'
+        }
+    },
+    type: 'object',
+    required: ['question', 'answer'],
+    title: 'StudyFaqPublic'
+} as const;
+
+export const StudyGuidePublicSchema = {
+    properties: {
+        sections: {
+            items: {
+                '$ref': '#/components/schemas/StudySectionPublic'
+            },
+            type: 'array',
+            title: 'Sections'
+        },
+        faqs: {
+            items: {
+                '$ref': '#/components/schemas/StudyFaqPublic'
+            },
+            type: 'array',
+            title: 'Faqs'
+        }
+    },
+    type: 'object',
+    required: ['sections', 'faqs'],
+    title: 'StudyGuidePublic'
+} as const;
+
+export const StudySectionPublicSchema = {
+    properties: {
+        title: {
+            type: 'string',
+            title: 'Title'
+        },
+        content: {
+            type: 'string',
+            title: 'Content'
+        }
+    },
+    type: 'object',
+    required: ['title', 'content'],
+    title: 'StudySectionPublic'
+} as const;
+
 export const TokenSchema = {
     properties: {
         access_token: {

@@ -173,6 +173,21 @@ export type SourcesPublic = {
     count: number;
 };
 
+export type StudyFaqPublic = {
+    question: string;
+    answer: string;
+};
+
+export type StudyGuidePublic = {
+    sections: Array<StudySectionPublic>;
+    faqs: Array<StudyFaqPublic>;
+};
+
+export type StudySectionPublic = {
+    title: string;
+    content: string;
+};
+
 export type Token = {
     access_token: string;
     token_type?: string;
@@ -418,6 +433,12 @@ export type NotebooksRegenerateNotebookOverviewData = {
 };
 
 export type NotebooksRegenerateNotebookOverviewResponse = (NotebookOverviewPublic);
+
+export type NotebooksGenerateNotebookStudyGuideData = {
+    notebookId: string;
+};
+
+export type NotebooksGenerateNotebookStudyGuideResponse = (StudyGuidePublic);
 
 export type NotebooksRemoveSourceData = {
     notebookId: string;

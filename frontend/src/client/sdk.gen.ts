@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ConversationsReadConversationData, ConversationsReadConversationResponse, ConversationsUpdateConversationData, ConversationsUpdateConversationResponse, ConversationsStreamMessageData, ConversationsStreamMessageResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, NotebooksReadNotebooksData, NotebooksReadNotebooksResponse, NotebooksCreateNotebookData, NotebooksCreateNotebookResponse, NotebooksReadNotebookData, NotebooksReadNotebookResponse, NotebooksUpdateNotebookData, NotebooksUpdateNotebookResponse, NotebooksDeleteNotebookData, NotebooksDeleteNotebookResponse, NotebooksReadSourcesData, NotebooksReadSourcesResponse, NotebooksUploadSourceData, NotebooksUploadSourceResponse, NotebooksReadConversationsData, NotebooksReadConversationsResponse, NotebooksCreateConversationData, NotebooksCreateConversationResponse, NotebooksSearchNotebookData, NotebooksSearchNotebookResponse, NotebooksReadNotebookOverviewData, NotebooksReadNotebookOverviewResponse, NotebooksRegenerateNotebookOverviewData, NotebooksRegenerateNotebookOverviewResponse, NotebooksRemoveSourceData, NotebooksRemoveSourceResponse, NotebooksRetrySourceData, NotebooksRetrySourceResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersReadUserProviderSettingsResponse, UsersUpsertUserProviderSettingsData, UsersUpsertUserProviderSettingsResponse, UsersDeleteUserProviderSettingsResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+import type { ConversationsReadConversationData, ConversationsReadConversationResponse, ConversationsUpdateConversationData, ConversationsUpdateConversationResponse, ConversationsStreamMessageData, ConversationsStreamMessageResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, NotebooksReadNotebooksData, NotebooksReadNotebooksResponse, NotebooksCreateNotebookData, NotebooksCreateNotebookResponse, NotebooksReadNotebookData, NotebooksReadNotebookResponse, NotebooksUpdateNotebookData, NotebooksUpdateNotebookResponse, NotebooksDeleteNotebookData, NotebooksDeleteNotebookResponse, NotebooksReadSourcesData, NotebooksReadSourcesResponse, NotebooksUploadSourceData, NotebooksUploadSourceResponse, NotebooksReadConversationsData, NotebooksReadConversationsResponse, NotebooksCreateConversationData, NotebooksCreateConversationResponse, NotebooksSearchNotebookData, NotebooksSearchNotebookResponse, NotebooksReadNotebookOverviewData, NotebooksReadNotebookOverviewResponse, NotebooksRegenerateNotebookOverviewData, NotebooksRegenerateNotebookOverviewResponse, NotebooksGenerateNotebookStudyGuideData, NotebooksGenerateNotebookStudyGuideResponse, NotebooksRemoveSourceData, NotebooksRemoveSourceResponse, NotebooksRetrySourceData, NotebooksRetrySourceResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersReadUserProviderSettingsResponse, UsersUpsertUserProviderSettingsData, UsersUpsertUserProviderSettingsResponse, UsersDeleteUserProviderSettingsResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
 
 export class ConversationsService {
     /**
@@ -539,6 +539,27 @@ export class NotebooksService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/notebooks/{notebook_id}/overview/regenerate',
+            path: {
+                notebook_id: data.notebookId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Generate Notebook Study Guide
+     * Generate a printable study guide (sections + FAQs) from the notebook.
+     * @param data The data for the request.
+     * @param data.notebookId
+     * @returns StudyGuidePublic Successful Response
+     * @throws ApiError
+     */
+    public static generateNotebookStudyGuide(data: NotebooksGenerateNotebookStudyGuideData): CancelablePromise<NotebooksGenerateNotebookStudyGuideResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/notebooks/{notebook_id}/study-guide',
             path: {
                 notebook_id: data.notebookId
             },

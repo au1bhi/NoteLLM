@@ -14,6 +14,7 @@ import { DeleteNotebook } from "@/components/Notebooks/DeleteNotebook"
 import { EditNotebook } from "@/components/Notebooks/EditNotebook"
 import { NotebookOverview } from "@/components/Notebooks/NotebookOverview"
 import { SourcesPanel } from "@/components/Notebooks/SourcesPanel"
+import { StudyGuideDialog } from "@/components/Notebooks/StudyGuideDialog"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -268,19 +269,25 @@ function NotebookWorkspace() {
             {notebook.data.description || "暂无描述"}
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-2"
-          onClick={handleToggleSources}
-        >
-          {sourcesOpen && isDesktop ? (
-            <PanelRightClose className="size-4" />
-          ) : (
-            <PanelRight className="size-4" />
-          )}
-          {isDesktop ? (sourcesOpen ? "隐藏资料" : "显示资料") : "资料"}
-        </Button>
+        <div className="flex items-center gap-2">
+          <StudyGuideDialog
+            notebookId={notebookId}
+            hasReadySources={hasReadySources}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-2"
+            onClick={handleToggleSources}
+          >
+            {sourcesOpen && isDesktop ? (
+              <PanelRightClose className="size-4" />
+            ) : (
+              <PanelRight className="size-4" />
+            )}
+            {isDesktop ? (sourcesOpen ? "隐藏资料" : "显示资料") : "资料"}
+          </Button>
+        </div>
       </div>
 
       <NotebookOverview

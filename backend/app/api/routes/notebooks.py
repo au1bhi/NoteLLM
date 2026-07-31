@@ -22,6 +22,9 @@ from app.models import (
     Source,
     SourcePublic,
     SourcesPublic,
+    StudyFaqPublic,
+    StudyGuidePublic,
+    StudySectionPublic,
     get_datetime_utc,
 )
 from app.services.chat import ChatError, get_chat_provider
@@ -38,6 +41,7 @@ from app.services.sources import (
     delete_source,
     process_source,
 )
+from app.services.study_guide import generate_study_guide
 
 router = APIRouter(prefix="/notebooks", tags=["notebooks"])
 
@@ -300,6 +304,36 @@ def regenerate_notebook_overview(
         summary=notebook.overview or "",
         topics=notebook.overview_topics or [],
         updated_at=notebook.overview_updated_at,
+    )
+
+
+@router.post("/{notebook_id}/study-guide", response_model=StudyGuidePublic)
+def generate_notebook_study_guide(
+    notebook_id: uuid.UUID,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> StudyGuidePublic:
+    """Generate a printable study guide (sections + FAQs) from the notebook."""
+    get_notebook_or_404(
+        session=session, current_user=current_user, notebook_id=notebook_id
+    )
+    user_settings = load_user_provider_settings(session, current_user.id)
+    chat_provider = get_chat_provider(effective_chat_config(user_settings))
+    try:
+        guide = generate_study_guide(
+            session=session, notebook_id=notebook_id, chat_provider=chat_provider
+        )
+    except ChatError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    return StudyGuidePublic(
+        sections=[
+            StudySectionPublic(title=section.title, content=section.content)
+            for section in guide.sections
+        ],
+        faqs=[
+            StudyFaqPublic(question=faq.question, answer=faq.answer)
+            for faq in guide.faqs
+        ],
     )
 
 

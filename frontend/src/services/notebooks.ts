@@ -21,6 +21,8 @@ export const notebooksApi = {
     NotebooksService.deleteNotebook({ notebookId }),
   deleteSource: (notebookId: string, sourceId: string) =>
     NotebooksService.removeSource({ notebookId, sourceId }),
+  generateStudyGuide: (notebookId: string) =>
+    NotebooksService.generateNotebookStudyGuide({ notebookId }),
   get: (notebookId: string) => NotebooksService.readNotebook({ notebookId }),
   getOverview: (notebookId: string) =>
     NotebooksService.readNotebookOverview({ notebookId }),

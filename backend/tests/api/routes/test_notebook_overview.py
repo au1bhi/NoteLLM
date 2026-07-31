@@ -116,3 +116,29 @@ def test_overview_empty_without_ready_sources(
     assert response.json()["summary"] == ""
     assert response.json()["topics"] == []
     assert provider.calls == 0
+
+
+def test_generate_study_guide(client: TestClient, db: Session, monkeypatch: MonkeyPatch) -> None:
+    user = create_random_user(db)
+    notebook = create_random_notebook(db=db, owner_id=user.id)
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+    _add_ready_source(db, notebook.id)
+    provider = FakeOverviewProvider(
+        summary="",
+        topics=[],
+    )
+    provider.complete_json = lambda prompt: {
+        "sections": [{"title": "Core", "content": "The core idea."}],
+        "faqs": [{"question": "What?", "answer": "A thing."}],
+    }
+    monkeypatch.setattr(
+        "app.api.routes.notebooks.get_chat_provider", lambda _config=None: provider
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/notebooks/{notebook.id}/study-guide", headers=headers
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["sections"][0] == {"title": "Core", "content": "The core idea."}
+    assert body["faqs"][0] == {"question": "What?", "answer": "A thing."}
