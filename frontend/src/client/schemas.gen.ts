@@ -472,6 +472,37 @@ export const NotebookCreateSchema = {
     title: 'NotebookCreate'
 } as const;
 
+export const NotebookOverviewPublicSchema = {
+    properties: {
+        summary: {
+            type: 'string',
+            title: 'Summary'
+        },
+        topics: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Topics'
+        },
+        updated_at: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Updated At'
+        }
+    },
+    type: 'object',
+    required: ['summary', 'topics'],
+    title: 'NotebookOverviewPublic'
+} as const;
+
 export const NotebookPublicSchema = {
     properties: {
         title: {

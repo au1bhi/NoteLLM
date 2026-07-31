@@ -104,6 +104,12 @@ export type NotebookCreate = {
     description?: (string | null);
 };
 
+export type NotebookOverviewPublic = {
+    summary: string;
+    topics: Array<(string)>;
+    updated_at?: (string | null);
+};
+
 export type NotebookPublic = {
     title: string;
     description?: (string | null);
@@ -400,6 +406,18 @@ export type NotebooksSearchNotebookData = {
 };
 
 export type NotebooksSearchNotebookResponse = (RetrievedChunksPublic);
+
+export type NotebooksReadNotebookOverviewData = {
+    notebookId: string;
+};
+
+export type NotebooksReadNotebookOverviewResponse = (NotebookOverviewPublic);
+
+export type NotebooksRegenerateNotebookOverviewData = {
+    notebookId: string;
+};
+
+export type NotebooksRegenerateNotebookOverviewResponse = (NotebookOverviewPublic);
 
 export type NotebooksRemoveSourceData = {
     notebookId: string;

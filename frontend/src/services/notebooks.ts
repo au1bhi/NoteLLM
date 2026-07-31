@@ -22,9 +22,13 @@ export const notebooksApi = {
   deleteSource: (notebookId: string, sourceId: string) =>
     NotebooksService.removeSource({ notebookId, sourceId }),
   get: (notebookId: string) => NotebooksService.readNotebook({ notebookId }),
+  getOverview: (notebookId: string) =>
+    NotebooksService.readNotebookOverview({ notebookId }),
   list: () => NotebooksService.readNotebooks(),
   listSources: (notebookId: string) =>
     NotebooksService.readSources({ notebookId }),
+  regenerateOverview: (notebookId: string) =>
+    NotebooksService.regenerateNotebookOverview({ notebookId }),
   retrySource: (notebookId: string, sourceId: string) =>
     NotebooksService.retrySource({ notebookId, sourceId }),
   update: (notebookId: string, input: NotebookUpdate) =>

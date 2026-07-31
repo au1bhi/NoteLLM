@@ -12,6 +12,7 @@ from app.models import (
     ConversationsPublic,
     Notebook,
     NotebookCreate,
+    NotebookOverviewPublic,
     NotebookPublic,
     NotebooksPublic,
     NotebookUpdate,
@@ -23,8 +24,11 @@ from app.models import (
     SourcesPublic,
     get_datetime_utc,
 )
+from app.services.chat import ChatError, get_chat_provider
 from app.services.embeddings import EmbeddingError, get_embedding_provider
+from app.services.overview import generate_overview, store_overview
 from app.services.provider_settings import (
+    effective_chat_config,
     effective_embedding_config,
     load_user_provider_settings,
 )
@@ -237,6 +241,68 @@ def search_notebook(
     )
 
 
+def _clear_overview(session: SessionDep, notebook: Notebook) -> None:
+    notebook.overview = None
+    notebook.overview_topics = []
+    notebook.overview_updated_at = None
+    session.add(notebook)
+    session.commit()
+
+
+def _generate_and_store_overview(
+    *, session: SessionDep, notebook: Notebook, current_user: CurrentUser
+) -> None:
+    user_settings = load_user_provider_settings(session, current_user.id)
+    chat_provider = get_chat_provider(effective_chat_config(user_settings))
+    try:
+        overview = generate_overview(
+            session=session, notebook_id=notebook.id, chat_provider=chat_provider
+        )
+    except ChatError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    store_overview(session=session, notebook=notebook, overview=overview)
+
+
+@router.get("/{notebook_id}/overview", response_model=NotebookOverviewPublic)
+def read_notebook_overview(
+    notebook_id: uuid.UUID,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> NotebookOverviewPublic:
+    """Return the notebook overview, generating it lazily on first view."""
+    notebook = get_notebook_or_404(
+        session=session, current_user=current_user, notebook_id=notebook_id
+    )
+    if notebook.overview is None:
+        _generate_and_store_overview(
+            session=session, notebook=notebook, current_user=current_user
+        )
+    return NotebookOverviewPublic(
+        summary=notebook.overview or "",
+        topics=notebook.overview_topics or [],
+        updated_at=notebook.overview_updated_at,
+    )
+
+
+@router.post("/{notebook_id}/overview/regenerate", response_model=NotebookOverviewPublic)
+def regenerate_notebook_overview(
+    notebook_id: uuid.UUID,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> NotebookOverviewPublic:
+    notebook = get_notebook_or_404(
+        session=session, current_user=current_user, notebook_id=notebook_id
+    )
+    _generate_and_store_overview(
+        session=session, notebook=notebook, current_user=current_user
+    )
+    return NotebookOverviewPublic(
+        summary=notebook.overview or "",
+        topics=notebook.overview_topics or [],
+        updated_at=notebook.overview_updated_at,
+    )
+
+
 @router.post("/{notebook_id}/sources/", response_model=SourcePublic)
 async def upload_source(
     notebook_id: uuid.UUID,
@@ -247,9 +313,11 @@ async def upload_source(
     notebook = get_notebook_or_404(
         session=session, current_user=current_user, notebook_id=notebook_id
     )
-    return await create_source_from_upload(
+    created = await create_source_from_upload(
         session=session, notebook=notebook, upload=file
     )
+    _clear_overview(session, notebook)
+    return created
 
 
 @router.delete("/{notebook_id}/sources/{source_id}")
@@ -259,13 +327,14 @@ def remove_source(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> dict[str, str]:
-    get_notebook_or_404(
+    notebook = get_notebook_or_404(
         session=session, current_user=current_user, notebook_id=notebook_id
     )
     source = get_source_or_404(
         session=session, notebook_id=notebook_id, source_id=source_id
     )
     delete_source(session=session, source=source)
+    _clear_overview(session, notebook)
     return {"message": "Source deleted successfully"}
 
 
@@ -276,11 +345,12 @@ def retry_source(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> Source:
-    get_notebook_or_404(
+    notebook = get_notebook_or_404(
         session=session, current_user=current_user, notebook_id=notebook_id
     )
     source = get_source_or_404(
         session=session, notebook_id=notebook_id, source_id=source_id
     )
     process_source(session=session, source=source)
+    _clear_overview(session, notebook)
     return source

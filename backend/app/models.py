@@ -192,6 +192,11 @@ class Notebook(NotebookBase, table=True):
     conversations: list[Conversation] = Relationship(
         back_populates="notebook", cascade_delete=True
     )
+    overview: str | None = Field(default=None)
+    overview_topics: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    overview_updated_at: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=True)  # type: ignore
+    )
 
 
 class NotebookPublic(NotebookBase):
@@ -199,6 +204,12 @@ class NotebookPublic(NotebookBase):
     owner_id: uuid.UUID
     created_at: datetime
     updated_at: datetime
+
+
+class NotebookOverviewPublic(SQLModel):
+    summary: str
+    topics: list[str]
+    updated_at: datetime | None = None
 
 
 class NotebooksPublic(SQLModel):

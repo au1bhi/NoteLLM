@@ -12,6 +12,7 @@ import type { ConversationMessagePublic } from "@/client"
 import { ChatPanel } from "@/components/Notebooks/ChatPanel"
 import { DeleteNotebook } from "@/components/Notebooks/DeleteNotebook"
 import { EditNotebook } from "@/components/Notebooks/EditNotebook"
+import { NotebookOverview } from "@/components/Notebooks/NotebookOverview"
 import { SourcesPanel } from "@/components/Notebooks/SourcesPanel"
 import { Button } from "@/components/ui/button"
 import {
@@ -280,6 +281,11 @@ function NotebookWorkspace() {
           {isDesktop ? (sourcesOpen ? "隐藏资料" : "显示资料") : "资料"}
         </Button>
       </div>
+
+      <NotebookOverview
+        notebookId={notebookId}
+        hasReadySources={hasReadySources}
+      />
 
       <div className="flex items-start gap-6">
         <ChatPanel
