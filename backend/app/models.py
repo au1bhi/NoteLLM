@@ -337,6 +337,7 @@ AnswerMode = Literal["grounded", "hybrid", "knowledge"]
 class ConversationMessageCreate(SQLModel):
     content: str = Field(min_length=1, max_length=4000)
     mode: AnswerMode = "grounded"
+    source_ids: list[uuid.UUID] | None = Field(default=None, max_length=100)
 
 
 class ConversationMessage(SQLModel, table=True):

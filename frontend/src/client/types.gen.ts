@@ -37,6 +37,7 @@ export type ConversationDetailPublic = {
 export type ConversationMessageCreate = {
     content: string;
     mode?: 'grounded' | 'hybrid' | 'knowledge';
+    source_ids?: (Array<(string)> | null);
 };
 
 export type mode = 'grounded' | 'hybrid' | 'knowledge';

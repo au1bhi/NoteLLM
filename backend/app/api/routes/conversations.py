@@ -98,7 +98,11 @@ def conversation_detail(*, session: Session, conversation: Conversation) -> Conv
 
 
 def persist_answer(
-    *, conversation_id: uuid.UUID, question: str, mode: AnswerMode = "grounded"
+    *,
+    conversation_id: uuid.UUID,
+    question: str,
+    mode: AnswerMode = "grounded",
+    source_ids: list[uuid.UUID] | None = None,
 ) -> GroundedAnswer:
     with Session(engine) as session:
         conversation = session.get(Conversation, conversation_id)
@@ -123,6 +127,7 @@ def persist_answer(
                 effective_embedding_config(user_settings)
             ),
             mode=mode,
+            source_ids=source_ids,
         )
         assistant_message = ConversationMessage(
             conversation_id=conversation.id,
@@ -195,6 +200,7 @@ async def stream_message(
                 conversation_id=conversation_id,
                 question=message_in.content,
                 mode=message_in.mode,
+                source_ids=message_in.source_ids,
             )
         )
     except (ChatError, EmbeddingError) as error:

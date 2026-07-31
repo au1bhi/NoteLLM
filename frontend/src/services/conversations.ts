@@ -11,6 +11,7 @@ type StreamHandlers = {
   onCitations: (citations: CitationPublic[]) => void
   onDelta: (text: string) => void
   mode?: AnswerMode
+  sourceIds?: string[]
 }
 
 export type AnswerMode = "grounded" | "hybrid" | "knowledge"
@@ -41,6 +42,9 @@ export const conversationsApi = {
         body: JSON.stringify({
           content,
           mode: handlers.mode ?? "grounded",
+          source_ids: handlers.sourceIds?.length
+            ? handlers.sourceIds
+            : undefined,
         }),
         headers: {
           Authorization: `Bearer ${localStorage.getItem("access_token") || ""}`,

@@ -48,6 +48,26 @@ function NotebookWorkspace() {
   const [isStreaming, setIsStreaming] = useState(false)
   const [sourcesOpen, setSourcesOpen] = useState(true)
   const [mobileSourcesOpen, setMobileSourcesOpen] = useState(false)
+  const [selectedSourceIds, setSelectedSourceIds] = useState<Set<string>>(
+    new Set(),
+  )
+
+  const toggleSource = (sourceId: string) => {
+    setSelectedSourceIds((prev) => {
+      const next = new Set(prev)
+      if (prev.size === 0) {
+        next.add(sourceId)
+        return next
+      }
+      if (next.has(sourceId)) {
+        next.delete(sourceId)
+        return next
+      }
+      next.add(sourceId)
+      return next
+    })
+  }
+  const selectAllSources = () => setSelectedSourceIds(new Set())
 
   const notebook = useQuery({
     queryFn: () => notebooksApi.get(notebookId),
@@ -168,6 +188,7 @@ function NotebookWorkspace() {
     try {
       await conversationsApi.stream(conversationId, content, {
         mode,
+        sourceIds: selectedSourceIds.size ? [...selectedSourceIds] : undefined,
         onCitations: () => undefined,
         onDelta: (text) => setStreamingAnswer((answer) => answer + text),
       })
@@ -224,6 +245,7 @@ function NotebookWorkspace() {
     <SourcesPanel
       notebookId={notebookId}
       sources={sources.data?.data}
+      selectedSourceIds={selectedSourceIds}
       isLoading={sources.isLoading}
       isError={Boolean(sources.error)}
       errorMessage={
@@ -235,6 +257,8 @@ function NotebookWorkspace() {
       onUploadFile={(file) => uploadMutation.mutate(file)}
       onRetry={(sourceId) => retryMutation.mutate(sourceId)}
       onDelete={(sourceId) => deleteMutation.mutate(sourceId)}
+      onToggleSource={toggleSource}
+      onSelectAll={selectAllSources}
     />
   )
 
@@ -308,6 +332,11 @@ function NotebookWorkspace() {
           hasReadySources={hasReadySources}
           onCreatePending={createConversationMutation.isPending}
           isRenaming={renameConversationMutation.isPending}
+          sourceScope={
+            selectedSourceIds.size === 0
+              ? "全部资料"
+              : `已选 ${selectedSourceIds.size} 个来源`
+          }
           className="min-w-0 flex-1"
           onNewConversation={() => createConversationMutation.mutate()}
           onSelectConversation={setConversationId}
@@ -333,6 +362,7 @@ function NotebookWorkspace() {
             <SourcesPanel
               notebookId={notebookId}
               sources={sources.data?.data}
+              selectedSourceIds={selectedSourceIds}
               isLoading={sources.isLoading}
               isError={Boolean(sources.error)}
               errorMessage={
@@ -347,6 +377,8 @@ function NotebookWorkspace() {
               onUploadFile={(file) => uploadMutation.mutate(file)}
               onRetry={(sourceId) => retryMutation.mutate(sourceId)}
               onDelete={(sourceId) => deleteMutation.mutate(sourceId)}
+              onToggleSource={toggleSource}
+              onSelectAll={selectAllSources}
             />
           </div>
         </SheetContent>

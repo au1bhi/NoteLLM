@@ -178,6 +178,22 @@ export const ConversationMessageCreateSchema = {
             enum: ['grounded', 'hybrid', 'knowledge'],
             title: 'Mode',
             default: 'grounded'
+        },
+        source_ids: {
+            anyOf: [
+                {
+                    items: {
+                        type: 'string',
+                        format: 'uuid'
+                    },
+                    type: 'array',
+                    maxItems: 100
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Source Ids'
         }
     },
     type: 'object',

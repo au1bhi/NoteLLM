@@ -53,6 +53,7 @@ interface ChatPanelProps {
   hasReadySources: boolean
   onCreatePending: boolean
   isRenaming: boolean
+  sourceScope?: string
   className?: string
   onNewConversation: () => void
   onSelectConversation: (id: string) => void
@@ -147,6 +148,7 @@ export function ChatPanel({
   hasReadySources,
   onCreatePending,
   isRenaming,
+  sourceScope,
   className,
   onNewConversation,
   onSelectConversation,
@@ -353,6 +355,11 @@ export function ChatPanel({
               {item.label}
             </button>
           ))}
+          {sourceScope ? (
+            <span className="ml-auto text-xs text-muted-foreground">
+              {sourceScope}
+            </span>
+          ) : null}
         </div>
         <div className="flex items-end gap-2">
           <textarea

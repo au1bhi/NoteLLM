@@ -89,3 +89,43 @@ def test_retrieval_orders_by_cosine_similarity_and_isolates_notebooks(
         "less relevant evidence",
     ]
     assert results[0].score > results[1].score
+
+
+def test_retrieval_respects_source_selection(db: Session) -> None:
+    user = create_random_user(db)
+    notebook = Notebook(title="Selection", owner_id=user.id)
+    db.add(notebook)
+    db.flush()
+    source_a = create_source(session=db, notebook_id=notebook.id, name="a.txt")
+    source_b = create_source(session=db, notebook_id=notebook.id, name="b.txt")
+    db.add_all(
+        [
+            Chunk(
+                source_id=source_a.id,
+                ordinal=0,
+                content="from A",
+                char_start=0,
+                char_end=6,
+                embedding=vector(0),
+            ),
+            Chunk(
+                source_id=source_b.id,
+                ordinal=0,
+                content="from B",
+                char_start=0,
+                char_end=6,
+                embedding=vector(0),
+            ),
+        ]
+    )
+    db.commit()
+
+    results = retrieve_chunks(
+        session=db,
+        embedding_provider=FixedEmbeddingProvider(),
+        notebook_id=notebook.id,
+        query="x",
+        source_ids=[source_a.id],
+    )
+
+    assert {result.chunk.source_id for result in results} == {source_a.id}

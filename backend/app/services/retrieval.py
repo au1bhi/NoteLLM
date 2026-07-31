@@ -24,6 +24,7 @@ def retrieve_chunks(
     notebook_id: uuid.UUID,
     query: str,
     limit: int = DEFAULT_RETRIEVAL_LIMIT,
+    source_ids: list[uuid.UUID] | None = None,
 ) -> list[RetrievedChunk]:
     query_embedding = embedding_provider.embed([query])[0]
     chunk_table = Chunk.__dict__["__table__"]
@@ -38,6 +39,8 @@ def retrieve_chunks(
         .order_by(distance)
         .limit(limit)
     )
+    if source_ids:
+        statement = statement.where(col(Source.id).in_(source_ids))
     rows = session.exec(statement).all()
     return [
         RetrievedChunk(

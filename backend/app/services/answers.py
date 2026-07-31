@@ -132,6 +132,7 @@ def answer_question(
     query: str,
     session: Session,
     mode: AnswerMode = "grounded",
+    source_ids: list[uuid.UUID] | None = None,
 ) -> GroundedAnswer:
     if mode == "knowledge":
         model_answer = chat_provider.answer(
@@ -144,6 +145,7 @@ def answer_question(
         embedding_provider=embedding_provider,
         notebook_id=notebook_id,
         query=query,
+        source_ids=source_ids,
     )
     if not retrieved:
         if mode == "hybrid":

@@ -14,6 +14,7 @@ import { type ChangeEvent, useRef, useState } from "react"
 import type { RetrievedChunkPublic } from "@/client"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Skeleton } from "@/components/ui/skeleton"
 import useCustomToast from "@/hooks/useCustomToast"
 import { cn } from "@/lib/utils"
@@ -22,6 +23,7 @@ import { notebooksApi, type Source } from "@/services/notebooks"
 interface SourcesPanelProps {
   notebookId: string
   sources?: Source[]
+  selectedSourceIds: Set<string>
   isLoading: boolean
   isError: boolean
   errorMessage?: string
@@ -32,6 +34,8 @@ interface SourcesPanelProps {
   onUploadFile: (file: File) => void
   onRetry: (sourceId: string) => void
   onDelete: (sourceId: string) => void
+  onToggleSource: (sourceId: string) => void
+  onSelectAll: () => void
 }
 
 function fileTone(mediaType: string) {
@@ -143,6 +147,7 @@ function SearchResults({
 export function SourcesPanel({
   notebookId,
   sources,
+  selectedSourceIds,
   isLoading,
   isError,
   errorMessage,
@@ -153,6 +158,8 @@ export function SourcesPanel({
   onUploadFile,
   onRetry,
   onDelete,
+  onToggleSource,
+  onSelectAll,
 }: SourcesPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { showErrorToast } = useCustomToast()
@@ -280,61 +287,95 @@ export function SourcesPanel({
               <p className="text-sm text-destructive">{errorMessage}</p>
             ) : null}
             {sources?.length ? (
-              <ul className="space-y-2">
-                {sources.map((source) => {
-                  const { Icon, tone } = fileTone(source.media_type)
-                  return (
-                    <li
-                      key={source.id}
-                      className="group flex items-center gap-3 rounded-lg border bg-background p-3 transition-colors hover:bg-muted/40"
+              <>
+                {readyCount > 0 ? (
+                  <div className="mb-2 flex items-center justify-between gap-2 px-1">
+                    <button
+                      type="button"
+                      onClick={onSelectAll}
+                      className={cn(
+                        "text-xs font-medium transition-colors",
+                        selectedSourceIds.size === 0
+                          ? "text-primary"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
                     >
-                      <span
-                        className={cn(
-                          "inline-flex size-9 shrink-0 items-center justify-center rounded-lg",
-                          tone,
-                        )}
+                      全部资料
+                    </button>
+                    <span className="text-xs text-muted-foreground">
+                      {selectedSourceIds.size === 0
+                        ? "使用全部资料"
+                        : `已选 ${selectedSourceIds.size} 份`}
+                    </span>
+                  </div>
+                ) : null}
+                <ul className="space-y-2">
+                  {sources.map((source) => {
+                    const { Icon, tone } = fileTone(source.media_type)
+                    return (
+                      <li
+                        key={source.id}
+                        className="group flex items-center gap-3 rounded-lg border bg-background p-3 transition-colors hover:bg-muted/40"
                       >
-                        <Icon className="size-4" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium">
-                          {source.display_name}
-                        </p>
-                        <div className="mt-1 flex items-center gap-2">
-                          <StatusBadge status={source.status} />
-                          <p className="truncate text-xs text-muted-foreground">
-                            {sourceMeta(source)}
+                        {source.status === "ready" ? (
+                          <Checkbox
+                            checked={
+                              selectedSourceIds.size === 0 ||
+                              selectedSourceIds.has(source.id)
+                            }
+                            onCheckedChange={() => onToggleSource(source.id)}
+                            aria-label={`选择 ${source.display_name}`}
+                            className="shrink-0"
+                          />
+                        ) : null}
+                        <span
+                          className={cn(
+                            "inline-flex size-9 shrink-0 items-center justify-center rounded-lg",
+                            tone,
+                          )}
+                        >
+                          <Icon className="size-4" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium">
+                            {source.display_name}
                           </p>
+                          <div className="mt-1 flex items-center gap-2">
+                            <StatusBadge status={source.status} />
+                            <p className="truncate text-xs text-muted-foreground">
+                              {sourceMeta(source)}
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-0.5 opacity-100 transition-opacity group-hover:opacity-100 focus-within:opacity-100 max-lg:opacity-100 lg:opacity-0 lg:group-hover:opacity-100">
-                        {source.status === "failed" ? (
+                        <div className="flex shrink-0 items-center gap-0.5 opacity-100 transition-opacity group-hover:opacity-100 focus-within:opacity-100 max-lg:opacity-100 lg:opacity-0 lg:group-hover:opacity-100">
+                          {source.status === "failed" ? (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-8"
+                              aria-label={`重试 ${source.display_name}`}
+                              disabled={isRetrying}
+                              onClick={() => onRetry(source.id)}
+                            >
+                              <RotateCcw className="size-4" />
+                            </Button>
+                          ) : null}
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="size-8"
-                            aria-label={`重试 ${source.display_name}`}
-                            disabled={isRetrying}
-                            onClick={() => onRetry(source.id)}
+                            className="size-8 text-muted-foreground hover:text-destructive"
+                            aria-label={`删除 ${source.display_name}`}
+                            disabled={isDeleting}
+                            onClick={() => onDelete(source.id)}
                           >
-                            <RotateCcw className="size-4" />
+                            <Trash2 className="size-4" />
                           </Button>
-                        ) : null}
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="size-8 text-muted-foreground hover:text-destructive"
-                          aria-label={`删除 ${source.display_name}`}
-                          disabled={isDeleting}
-                          onClick={() => onDelete(source.id)}
-                        >
-                          <Trash2 className="size-4" />
-                        </Button>
-                      </div>
-                    </li>
-                  )
-                })}
-              </ul>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </>
             ) : null}
             {!isLoading && !sources?.length ? (
               <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed px-4 py-8 text-center">
