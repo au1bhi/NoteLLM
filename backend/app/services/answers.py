@@ -114,9 +114,11 @@ def suggest_questions(
     data = chat_provider.complete_json(
         prompt=build_suggestions_prompt(question=question, retrieved=retrieved)
     )
-    questions = data.get("questions", [])
+    raw_questions = data.get("questions", [])
+    if not isinstance(raw_questions, list):
+        return []
     cleaned: list[str] = []
-    for raw in questions:
+    for raw in raw_questions:
         if isinstance(raw, str) and raw.strip() and raw.strip() not in cleaned:
             cleaned.append(raw.strip())
     return cleaned[:MAX_SUGGESTIONS]

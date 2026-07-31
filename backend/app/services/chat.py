@@ -20,7 +20,7 @@ class ModelAnswer:
 
 class ChatProvider(Protocol):
     def answer(self, *, prompt: str) -> ModelAnswer: ...
-    def complete_json(self, *, prompt: str) -> dict: ...
+    def complete_json(self, *, prompt: str) -> dict[str, object]: ...
 
 
 class OpenAICompatibleChatProvider:
@@ -53,11 +53,13 @@ class OpenAICompatibleChatProvider:
             )
             response.raise_for_status()
             content = response.json()["choices"][0]["message"]["content"]
-        except (httpx.HTTPError, KeyError, TypeError, ValueError) as error:
+            if not isinstance(content, str):
+                raise ChatError("The chat provider did not return a valid response")
+        except (httpx.HTTPError, KeyError, TypeError, ValueError, IndexError) as error:
             raise ChatError("The chat provider did not return a valid response") from error
         return content
 
-    def complete_json(self, *, prompt: str) -> dict:
+    def complete_json(self, *, prompt: str) -> dict[str, object]:
         """Ask the provider for any JSON object (used for structured generation)."""
         try:
             parsed = json.loads(self._chat(prompt=prompt))
@@ -69,16 +71,18 @@ class OpenAICompatibleChatProvider:
 
     def answer(self, *, prompt: str) -> ModelAnswer:
         data = self.complete_json(prompt=prompt)
-        try:
-            answer = data["answer"].strip()
-            citations = data.get("citations", [])
-        except (KeyError, AttributeError) as error:
-            raise ChatError("The chat provider returned an invalid answer format") from error
-        if not answer or not isinstance(citations, list) or not all(
-            isinstance(citation, str) for citation in citations
+        raw_answer = data.get("answer")
+        raw_citations = data.get("citations", [])
+        if not isinstance(raw_answer, str) or not raw_answer.strip():
+            raise ChatError("The chat provider returned an invalid answer format")
+        if not isinstance(raw_citations, list) or not all(
+            isinstance(citation, str) for citation in raw_citations
         ):
             raise ChatError("The chat provider returned an invalid answer format")
-        return ModelAnswer(content=answer, citation_chunk_ids=citations)
+        return ModelAnswer(
+            content=raw_answer.strip(),
+            citation_chunk_ids=[citation for citation in raw_citations if isinstance(citation, str)],
+        )
 
 
 def get_chat_provider(config: ProviderConfig | None = None) -> ChatProvider:

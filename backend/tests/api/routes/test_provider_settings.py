@@ -1,9 +1,14 @@
+import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from app.core.config import settings
 from app.core.security import decrypt_secret, encrypt_secret
 from app.models import UserProviderSettings
+from app.services.provider_settings import (
+    effective_chat_config,
+    load_user_provider_settings,
+)
 from tests.utils.user import authentication_token_from_email, create_random_user
 
 
@@ -116,3 +121,43 @@ def test_provider_settings_are_user_isolated(
     response = client.get(_url(), headers=headers_b)
     assert response.status_code == 200
     assert response.json()["chat_api_key"] == ""
+
+
+def test_custom_base_url_without_key_does_not_leak_server_key(
+    client: TestClient, db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "LLM_API_KEY", "server-secret-key")
+    monkeypatch.setattr(
+        settings, "LLM_BASE_URL", "https://api.example.com/v1"
+    )
+    _, headers = _auth(client, db)
+    client.put(
+        _url(), headers=headers, json={"chat_base_url": "https://evil.example.com"}
+    )
+    user_settings = load_user_provider_settings(
+        db, _current_user_id(client, headers)
+    )
+    config = effective_chat_config(user_settings)
+    assert config.base_url == "https://evil.example.com"
+    assert config.api_key == ""
+
+
+def test_server_key_used_when_endpoint_is_server_default(
+    client: TestClient, db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "LLM_API_KEY", "server-secret-key")
+    monkeypatch.setattr(
+        settings, "LLM_BASE_URL", "https://api.example.com/v1"
+    )
+    _, headers = _auth(client, db)
+    user_settings = load_user_provider_settings(
+        db, _current_user_id(client, headers)
+    )
+    config = effective_chat_config(user_settings)
+    assert config.api_key == "server-secret-key"
+
+
+def _current_user_id(client: TestClient, headers: dict[str, str]) -> str:
+    return client.get(
+        f"{settings.API_V1_STR}/users/me", headers=headers
+    ).json()["id"]

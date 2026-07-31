@@ -153,6 +153,11 @@ def process_source(*, session: Session, source: Source) -> None:
     session.add(source)
     session.commit()
 
+    def mark_failed(message: str) -> None:
+        source.status = "failed"
+        source.error_message = message[:1000]
+        source.processed_at = get_datetime_utc()
+
     try:
         pages = extract_pages(get_upload_path(source), source.media_type)
         chunks = [chunk for page in pages for chunk in split_page(page)]
@@ -193,12 +198,19 @@ def process_source(*, session: Session, source: Source) -> None:
         source.char_count = sum(len(page.text) for page in pages)
         source.processed_at = get_datetime_utc()
     except (EmbeddingError, OSError, ValueError, fitz.FileDataError) as error:
-        source.status = "failed"
-        source.error_message = str(error)[:1000]
-        source.processed_at = get_datetime_utc()
-    session.add(source)
-    session.commit()
-    session.refresh(source)
+        mark_failed(str(error))
+    except Exception as error:
+        # Never leave the source stuck in "processing" on an unexpected error.
+        mark_failed(f"Unexpected error: {error}")
+
+    try:
+        session.add(source)
+        session.commit()
+        session.refresh(source)
+    except Exception:
+        # The commit/refresh failed (e.g. the source was deleted concurrently);
+        # roll back cleanly instead of surfacing a 500.
+        session.rollback()
 
 
 async def create_source_from_upload(
