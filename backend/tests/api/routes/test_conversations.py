@@ -92,3 +92,90 @@ def test_message_stream_emits_delta_citations_and_done(
     assert "event: delta" in response.text
     assert "event: citations" in response.text
     assert "event: done" in response.text
+
+
+def test_message_stream_forwards_answer_mode(
+    client: TestClient,
+    db: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    user = create_random_user(db)
+    notebook = create_random_notebook(db=db, owner_id=user.id)
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+    conversation = client.post(
+        f"{settings.API_V1_STR}/notebooks/{notebook.id}/conversations/",
+        headers=headers,
+        json={},
+    ).json()
+    captured: dict[str, object] = {}
+
+    def fake_persist(**kwargs: object) -> GroundedAnswer:
+        captured.update(kwargs)
+        return GroundedAnswer(content="Hybrid answer", citations=[])
+
+    monkeypatch.setattr(
+        "app.api.routes.conversations.persist_answer", fake_persist
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/conversations/{conversation['id']}/messages/stream",
+        headers=headers,
+        json={"content": "Explain it", "mode": "hybrid"},
+    )
+
+    assert response.status_code == 200
+    assert captured.get("mode") == "hybrid"
+
+
+def test_update_conversation_title(
+    client: TestClient,
+    db: Session,
+) -> None:
+    user = create_random_user(db)
+    notebook = create_random_notebook(db=db, owner_id=user.id)
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+    conversation = client.post(
+        f"{settings.API_V1_STR}/notebooks/{notebook.id}/conversations/",
+        headers=headers,
+        json={},
+    ).json()
+
+    renamed = client.patch(
+        f"{settings.API_V1_STR}/conversations/{conversation['id']}",
+        headers=headers,
+        json={"title": "Renamed notes"},
+    )
+    assert renamed.status_code == 200
+    assert renamed.json()["title"] == "Renamed notes"
+
+    detail = client.get(
+        f"{settings.API_V1_STR}/conversations/{conversation['id']}", headers=headers
+    )
+    assert detail.json()["title"] == "Renamed notes"
+
+
+def test_user_cannot_rename_another_users_conversation(
+    client: TestClient,
+    db: Session,
+) -> None:
+    owner = create_random_user(db)
+    notebook = create_random_notebook(db=db, owner_id=owner.id)
+    owner_headers = authentication_token_from_email(
+        client=client, email=owner.email, db=db
+    )
+    conversation = client.post(
+        f"{settings.API_V1_STR}/notebooks/{notebook.id}/conversations/",
+        headers=owner_headers,
+        json={},
+    ).json()
+    other_user = create_random_user(db)
+    other_headers = authentication_token_from_email(
+        client=client, email=other_user.email, db=db
+    )
+
+    response = client.patch(
+        f"{settings.API_V1_STR}/conversations/{conversation['id']}",
+        headers=other_headers,
+        json={"title": "Nope"},
+    )
+    assert response.status_code == 404

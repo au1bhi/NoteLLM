@@ -65,3 +65,85 @@ def test_answer_persists_only_retrieved_citation(monkeypatch: MonkeyPatch) -> No
 
     assert answer.content == "Verified evidence answers the question."
     assert [citation.chunk_id for citation in answer.citations] == [chunk.id]
+
+
+def test_knowledge_mode_skips_retrieval_and_returns_answer(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    def fail_if_called(**_: object) -> list[RetrievedChunk]:
+        raise AssertionError("retrieve_chunks should not run in knowledge mode")
+
+    monkeypatch.setattr("app.services.answers.retrieve_chunks", fail_if_called)
+
+    answer = answer_question(
+        session=cast(Session, None),
+        notebook_id=uuid.uuid4(),
+        query="What is machine learning?",
+        embedding_provider=FakeEmbeddingProvider(),
+        chat_provider=FakeChatProvider(
+            ModelAnswer(
+                content="Machine learning is a subset of AI.",
+                citation_chunk_ids=[],
+            )
+        ),
+        mode="knowledge",
+    )
+
+    assert answer.content == "Machine learning is a subset of AI."
+    assert answer.citations == []
+
+
+def test_hybrid_mode_answers_from_knowledge_without_evidence(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.services.answers.retrieve_chunks", lambda **_: []
+    )
+
+    answer = answer_question(
+        session=cast(Session, None),
+        notebook_id=uuid.uuid4(),
+        query="What is the capital of France?",
+        embedding_provider=FakeEmbeddingProvider(),
+        chat_provider=FakeChatProvider(
+            ModelAnswer(
+                content="The capital of France is Paris.",
+                citation_chunk_ids=[],
+            )
+        ),
+        mode="hybrid",
+    )
+
+    assert answer.content == "The capital of France is Paris."
+    assert answer.citations == []
+
+
+def test_hybrid_mode_keeps_answer_when_model_cites_nothing(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    chunk = Chunk(
+        source_id=uuid.uuid4(),
+        ordinal=0,
+        content="Paris is the capital and largest city of France.",
+        char_start=0,
+        char_end=52,
+    )
+    retrieved = [RetrievedChunk(chunk=chunk, score=0.8, source_display_name="notes.txt")]
+    monkeypatch.setattr("app.services.answers.retrieve_chunks", lambda **_: retrieved)
+
+    answer = answer_question(
+        session=cast(Session, None),
+        notebook_id=uuid.uuid4(),
+        query="Where is the Eiffel Tower?",
+        embedding_provider=FakeEmbeddingProvider(),
+        chat_provider=FakeChatProvider(
+            ModelAnswer(
+                content="The Eiffel Tower is in Paris, France.",
+                citation_chunk_ids=[],
+            )
+        ),
+        mode="hybrid",
+    )
+
+    assert answer.content == "The Eiffel Tower is in Paris, France."
+    assert answer.citations == []

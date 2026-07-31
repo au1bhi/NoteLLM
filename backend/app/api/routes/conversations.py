@@ -9,14 +9,17 @@ from starlette.concurrency import run_in_threadpool
 from app.api.deps import CurrentUser, SessionDep
 from app.core.db import engine
 from app.models import (
+    AnswerMode,
     Chunk,
     Citation,
     CitationPublic,
     Conversation,
+    ConversationCreate,
     ConversationDetailPublic,
     ConversationMessage,
     ConversationMessageCreate,
     ConversationMessagePublic,
+    ConversationPublic,
     Notebook,
     Source,
     get_datetime_utc,
@@ -89,7 +92,7 @@ def conversation_detail(*, session: Session, conversation: Conversation) -> Conv
 
 
 def persist_answer(
-    *, conversation_id: uuid.UUID, question: str
+    *, conversation_id: uuid.UUID, question: str, mode: AnswerMode = "grounded"
 ) -> GroundedAnswer:
     with Session(engine) as session:
         conversation = session.get(Conversation, conversation_id)
@@ -105,6 +108,7 @@ def persist_answer(
             query=question,
             chat_provider=get_chat_provider(),
             embedding_provider=get_embedding_provider(),
+            mode=mode,
         )
         assistant_message = ConversationMessage(
             conversation_id=conversation.id, role="assistant", content=answer.content
@@ -138,6 +142,26 @@ def read_conversation(
     return conversation_detail(session=session, conversation=conversation)
 
 
+@router.patch("/{conversation_id}", response_model=ConversationPublic)
+def update_conversation(
+    conversation_id: uuid.UUID,
+    conversation_in: ConversationCreate,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> ConversationPublic:
+    conversation = get_conversation_or_404(
+        session=session, current_user=current_user, conversation_id=conversation_id
+    )
+    if not conversation_in.title or not conversation_in.title.strip():
+        raise HTTPException(status_code=422, detail="Title cannot be empty")
+    conversation.title = conversation_in.title.strip()
+    conversation.updated_at = get_datetime_utc()
+    session.add(conversation)
+    session.commit()
+    session.refresh(conversation)
+    return ConversationPublic.model_validate(conversation)
+
+
 @router.post("/{conversation_id}/messages/stream", response_class=EventSourceResponse)
 async def stream_message(
     conversation_id: uuid.UUID,
@@ -151,7 +175,9 @@ async def stream_message(
     try:
         answer = await run_in_threadpool(
             lambda: persist_answer(
-                conversation_id=conversation_id, question=message_in.content
+                conversation_id=conversation_id,
+                question=message_in.content,
+                mode=message_in.mode,
             )
         )
     except (ChatError, EmbeddingError) as error:

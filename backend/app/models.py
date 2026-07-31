@@ -1,5 +1,6 @@
 import uuid
 from datetime import UTC, datetime
+from typing import Literal
 
 from pgvector.sqlalchemy import Vector
 from pydantic import EmailStr
@@ -263,8 +264,12 @@ class ConversationsPublic(SQLModel):
     count: int
 
 
+AnswerMode = Literal["grounded", "hybrid", "knowledge"]
+
+
 class ConversationMessageCreate(SQLModel):
     content: str = Field(min_length=1, max_length=4000)
+    mode: AnswerMode = "grounded"
 
 
 class ConversationMessage(SQLModel, table=True):
