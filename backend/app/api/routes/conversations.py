@@ -83,6 +83,7 @@ def conversation_detail(*, session: Session, conversation: Conversation) -> Conv
                 role=message.role,
                 content=message.content,
                 created_at=message.created_at,
+                suggestions=message.suggestions or [],
                 citations=[citation_public(session=session, citation=citation) for citation in citations],
             )
         )
@@ -124,7 +125,10 @@ def persist_answer(
             mode=mode,
         )
         assistant_message = ConversationMessage(
-            conversation_id=conversation.id, role="assistant", content=answer.content
+            conversation_id=conversation.id,
+            role="assistant",
+            content=answer.content,
+            suggestions=answer.suggestions,
         )
         session.add(assistant_message)
         session.flush()

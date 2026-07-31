@@ -46,6 +46,7 @@ export type ConversationMessagePublic = {
     role: string;
     content: string;
     created_at: string;
+    suggestions?: Array<(string)>;
     citations: Array<CitationPublic>;
 };
 

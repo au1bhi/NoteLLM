@@ -17,11 +17,20 @@ class FakeEmbeddingProvider:
 
 
 class FakeChatProvider:
-    def __init__(self, answer: ModelAnswer) -> None:
+    def __init__(self, answer: ModelAnswer, suggestions: list[str] | None = None) -> None:
         self.answer_result = answer
+        self.suggestions = suggestions if suggestions is not None else []
 
     def answer(self, *, prompt: str) -> ModelAnswer:
         return self.answer_result
+
+    def complete_json(self, *, prompt: str) -> dict:
+        if "questions" in prompt:
+            return {"questions": self.suggestions}
+        return {
+            "answer": self.answer_result.content,
+            "citations": self.answer_result.citation_chunk_ids,
+        }
 
 
 def test_answer_discards_citations_not_in_retrieved_set(
@@ -147,3 +156,64 @@ def test_hybrid_mode_keeps_answer_when_model_cites_nothing(
 
     assert answer.content == "The Eiffel Tower is in Paris, France."
     assert answer.citations == []
+
+
+def test_answer_includes_suggestions(monkeypatch: MonkeyPatch) -> None:
+    chunk = Chunk(
+        source_id=uuid.uuid4(),
+        ordinal=0,
+        content="Verified evidence",
+        char_start=0,
+        char_end=17,
+    )
+    retrieved = [RetrievedChunk(chunk=chunk, score=0.9, source_display_name="notes.txt")]
+    monkeypatch.setattr("app.services.answers.retrieve_chunks", lambda **_: retrieved)
+
+    answer = answer_question(
+        session=cast(Session, None),
+        notebook_id=uuid.uuid4(),
+        query="What is verified?",
+        embedding_provider=FakeEmbeddingProvider(),
+        chat_provider=FakeChatProvider(
+            ModelAnswer(
+                content="Verified evidence answers the question.",
+                citation_chunk_ids=[str(chunk.id)],
+            ),
+            suggestions=["What else?", "Give an example"],
+        ),
+    )
+
+    assert answer.suggestions == ["What else?", "Give an example"]
+    assert answer.citations
+
+
+def test_suggestions_are_best_effort_on_failure(monkeypatch: MonkeyPatch) -> None:
+    chunk = Chunk(
+        source_id=uuid.uuid4(),
+        ordinal=0,
+        content="Verified evidence",
+        char_start=0,
+        char_end=17,
+    )
+    retrieved = [RetrievedChunk(chunk=chunk, score=0.9, source_display_name="notes.txt")]
+    monkeypatch.setattr("app.services.answers.retrieve_chunks", lambda **_: retrieved)
+
+    class BrokenSuggestionsProvider(FakeChatProvider):
+        def complete_json(self, *, prompt: str) -> dict:
+            raise AttributeError("no suggestions today")
+
+    answer = answer_question(
+        session=cast(Session, None),
+        notebook_id=uuid.uuid4(),
+        query="What is verified?",
+        embedding_provider=FakeEmbeddingProvider(),
+        chat_provider=BrokenSuggestionsProvider(
+            ModelAnswer(
+                content="Verified evidence answers the question.",
+                citation_chunk_ids=[str(chunk.id)],
+            )
+        ),
+    )
+
+    assert answer.suggestions == []
+    assert answer.content == "Verified evidence answers the question."

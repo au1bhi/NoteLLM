@@ -20,13 +20,14 @@ class ModelAnswer:
 
 class ChatProvider(Protocol):
     def answer(self, *, prompt: str) -> ModelAnswer: ...
+    def complete_json(self, *, prompt: str) -> dict: ...
 
 
 class OpenAICompatibleChatProvider:
     def __init__(self, config: ProviderConfig) -> None:
         self.config = config
 
-    def answer(self, *, prompt: str) -> ModelAnswer:
+    def _chat(self, *, prompt: str) -> str:
         if (
             not self.config.base_url
             or not self.config.api_key
@@ -52,12 +53,27 @@ class OpenAICompatibleChatProvider:
             )
             response.raise_for_status()
             content = response.json()["choices"][0]["message"]["content"]
-            parsed = json.loads(content)
-            answer = parsed["answer"].strip()
-            citations = parsed.get("citations", [])
-        except (httpx.HTTPError, KeyError, TypeError, ValueError, json.JSONDecodeError) as error:
-            raise ChatError("The chat provider did not return a valid grounded answer") from error
+        except (httpx.HTTPError, KeyError, TypeError, ValueError) as error:
+            raise ChatError("The chat provider did not return a valid response") from error
+        return content
 
+    def complete_json(self, *, prompt: str) -> dict:
+        """Ask the provider for any JSON object (used for structured generation)."""
+        try:
+            parsed = json.loads(self._chat(prompt=prompt))
+        except (json.JSONDecodeError, ChatError) as error:
+            raise ChatError("The chat provider did not return valid JSON") from error
+        if not isinstance(parsed, dict):
+            raise ChatError("The chat provider did not return a JSON object")
+        return parsed
+
+    def answer(self, *, prompt: str) -> ModelAnswer:
+        data = self.complete_json(prompt=prompt)
+        try:
+            answer = data["answer"].strip()
+            citations = data.get("citations", [])
+        except (KeyError, AttributeError) as error:
+            raise ChatError("The chat provider returned an invalid answer format") from error
         if not answer or not isinstance(citations, list) or not all(
             isinstance(citation, str) for citation in citations
         ):

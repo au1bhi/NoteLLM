@@ -4,7 +4,7 @@ from typing import Literal
 
 from pgvector.sqlalchemy import Vector
 from pydantic import EmailStr
-from sqlalchemy import Column, DateTime
+from sqlalchemy import JSON, Column, DateTime
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.core.config import settings
@@ -322,6 +322,7 @@ class ConversationMessage(SQLModel, table=True):
     )
     role: str = Field(max_length=16)
     content: str
+    suggestions: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     created_at: datetime = Field(
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),  # type: ignore
@@ -358,6 +359,7 @@ class ConversationMessagePublic(SQLModel):
     role: str
     content: str
     created_at: datetime
+    suggestions: list[str] = []
     citations: list[CitationPublic]
 
 

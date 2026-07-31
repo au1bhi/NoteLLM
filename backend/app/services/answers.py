@@ -1,16 +1,18 @@
 import uuid
-from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor
+from dataclasses import dataclass, field
 
 from sqlmodel import Session
 
 from app.models import AnswerMode
-from app.services.chat import ChatProvider
+from app.services.chat import ChatError, ChatProvider
 from app.services.embeddings import EmbeddingProvider
 from app.services.retrieval import RetrievedChunk, retrieve_chunks
 
 INSUFFICIENT_EVIDENCE_ANSWER = "资料不足，无法根据当前笔记本中的来源可靠回答。"
 MAX_CITATIONS = 5
 QUOTE_LENGTH = 500
+MAX_SUGGESTIONS = 3
 
 
 @dataclass(frozen=True)
@@ -25,6 +27,7 @@ class AnswerCitation:
 class GroundedAnswer:
     citations: list[AnswerCitation]
     content: str
+    suggestions: list[str] = field(default_factory=list)
 
 
 def build_evidence(retrieved: list[RetrievedChunk]) -> str:
@@ -87,6 +90,38 @@ Retrieved source chunks:
 """
 
 
+def build_suggestions_prompt(
+    *, question: str, retrieved: list[RetrievedChunk]
+) -> str:
+    evidence = build_evidence(retrieved)
+    return f"""Based on the retrieved source chunks, propose {MAX_SUGGESTIONS} short, specific follow-up questions the user could ask next about this material. Each question should be 2-12 words.
+Return valid JSON with exactly one field: \"questions\" (an array of {MAX_SUGGESTIONS} strings).
+
+Question asked:
+{question}
+
+Retrieved source chunks:
+{evidence}
+"""
+
+
+def suggest_questions(
+    *,
+    chat_provider: ChatProvider,
+    question: str,
+    retrieved: list[RetrievedChunk],
+) -> list[str]:
+    data = chat_provider.complete_json(
+        prompt=build_suggestions_prompt(question=question, retrieved=retrieved)
+    )
+    questions = data.get("questions", [])
+    cleaned: list[str] = []
+    for raw in questions:
+        if isinstance(raw, str) and raw.strip() and raw.strip() not in cleaned:
+            cleaned.append(raw.strip())
+    return cleaned[:MAX_SUGGESTIONS]
+
+
 def answer_question(
     *,
     chat_provider: ChatProvider,
@@ -116,9 +151,22 @@ def answer_question(
             return GroundedAnswer(citations=[], content=model_answer.content)
         return GroundedAnswer(citations=[], content=INSUFFICIENT_EVIDENCE_ANSWER)
 
-    model_answer = chat_provider.answer(
-        prompt=build_prompt(question=query, retrieved=retrieved, mode=mode)
-    )
+    answer_prompt = build_prompt(question=query, retrieved=retrieved, mode=mode)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        answer_future = pool.submit(chat_provider.answer, prompt=answer_prompt)
+        suggestions_future = pool.submit(
+            suggest_questions,
+            chat_provider=chat_provider,
+            question=query,
+            retrieved=retrieved,
+        )
+        model_answer = answer_future.result()
+        try:
+            suggestions = suggestions_future.result()
+        except (ChatError, AttributeError):
+            # Suggestions are best-effort; never fail the answer because of them.
+            suggestions = []
+
     retrieved_by_id = {str(result.chunk.id): result for result in retrieved}
     cited_ids = list(dict.fromkeys(model_answer.citation_chunk_ids))[:MAX_CITATIONS]
     citations = [
@@ -133,6 +181,10 @@ def answer_question(
     ]
     if not citations:
         if mode == "hybrid":
-            return GroundedAnswer(citations=[], content=model_answer.content)
+            return GroundedAnswer(
+                citations=[], content=model_answer.content, suggestions=suggestions
+            )
         return GroundedAnswer(citations=[], content=INSUFFICIENT_EVIDENCE_ANSWER)
-    return GroundedAnswer(citations=citations, content=model_answer.content)
+    return GroundedAnswer(
+        citations=citations, content=model_answer.content, suggestions=suggestions
+    )

@@ -60,7 +60,13 @@ interface ChatPanelProps {
   onSend: (content: string, mode: AnswerMode) => void
 }
 
-function MessageBubble({ message }: { message: ConversationMessagePublic }) {
+function MessageBubble({
+  message,
+  onPickSuggestion,
+}: {
+  message: ConversationMessagePublic
+  onPickSuggestion?: (question: string) => void
+}) {
   if (message.role === "user") {
     return (
       <div className="ml-auto max-w-[85%]">
@@ -75,7 +81,35 @@ function MessageBubble({ message }: { message: ConversationMessagePublic }) {
       <div className="rounded-2xl rounded-bl-md border bg-background p-4 shadow-soft">
         <Markdown content={message.content} />
         <Citations citations={message.citations} />
+        <Suggestions
+          suggestions={message.suggestions}
+          onPick={onPickSuggestion}
+        />
       </div>
+    </div>
+  )
+}
+
+function Suggestions({
+  suggestions,
+  onPick,
+}: {
+  suggestions?: string[]
+  onPick?: (question: string) => void
+}) {
+  if (!suggestions?.length || !onPick) return null
+  return (
+    <div className="mt-3 flex flex-wrap gap-2 border-t pt-3">
+      {suggestions.map((question, index) => (
+        <button
+          key={`${index}-${question}`}
+          type="button"
+          onClick={() => onPick(question)}
+          className="rounded-full border bg-muted/40 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+        >
+          {question}
+        </button>
+      ))}
     </div>
   )
 }
@@ -153,6 +187,11 @@ export function ChatPanel({
     const content = question.trim()
     setQuestion("")
     onSend(content, mode)
+  }
+
+  const pickSuggestion = (question: string) => {
+    if (isStreaming || !activeConversationId) return
+    onSend(question, mode)
   }
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -273,7 +312,11 @@ export function ChatPanel({
         ) : null}
 
         {messages?.map((message) => (
-          <MessageBubble key={message.id} message={message} />
+          <MessageBubble
+            key={message.id}
+            message={message}
+            onPickSuggestion={pickSuggestion}
+          />
         ))}
 
         {isStreaming ? <StreamingBubble text={streamingAnswer} /> : null}

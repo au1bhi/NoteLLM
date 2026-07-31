@@ -205,6 +205,14 @@ export const ConversationMessagePublicSchema = {
             format: 'date-time',
             title: 'Created At'
         },
+        suggestions: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Suggestions',
+            default: []
+        },
         citations: {
             items: {
                 '$ref': '#/components/schemas/CitationPublic'
