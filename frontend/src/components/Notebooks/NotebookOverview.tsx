@@ -21,6 +21,7 @@ export function NotebookOverview({
 
   const { data, isLoading, error } = useQuery({
     enabled: hasReadySources,
+    retry: false,
     queryKey: ["notebooks", notebookId, "overview"],
     queryFn: () => notebooksApi.getOverview(notebookId),
   })

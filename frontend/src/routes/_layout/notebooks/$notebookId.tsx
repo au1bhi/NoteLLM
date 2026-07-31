@@ -113,20 +113,28 @@ function NotebookWorkspace() {
         showErrorToast(source.error_message || "Source could not be processed")
       }
     },
-    onSettled: () =>
+    onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: ["notebooks", notebookId, "sources"],
-      }),
+      })
+      queryClient.invalidateQueries({
+        queryKey: ["notebooks", notebookId, "overview"],
+      })
+    },
   })
   const deleteMutation = useMutation({
     mutationFn: (sourceId: string) =>
       notebooksApi.deleteSource(notebookId, sourceId),
     onError: (error: Error) => showErrorToast(error.message),
     onSuccess: () => showSuccessToast("Source deleted"),
-    onSettled: () =>
+    onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: ["notebooks", notebookId, "sources"],
-      }),
+      })
+      queryClient.invalidateQueries({
+        queryKey: ["notebooks", notebookId, "overview"],
+      })
+    },
   })
   const retryMutation = useMutation({
     mutationFn: (sourceId: string) =>
@@ -141,10 +149,14 @@ function NotebookWorkspace() {
         showErrorToast(source.error_message || "Source could not be processed")
       }
     },
-    onSettled: () =>
+    onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: ["notebooks", notebookId, "sources"],
-      }),
+      })
+      queryClient.invalidateQueries({
+        queryKey: ["notebooks", notebookId, "overview"],
+      })
+    },
   })
   const renameConversationMutation = useMutation({
     mutationFn: ({

@@ -156,20 +156,24 @@ def answer_question(
         return GroundedAnswer(citations=[], content=INSUFFICIENT_EVIDENCE_ANSWER)
 
     answer_prompt = build_prompt(question=query, retrieved=retrieved, mode=mode)
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        answer_future = pool.submit(chat_provider.answer, prompt=answer_prompt)
-        suggestions_future = pool.submit(
-            suggest_questions,
-            chat_provider=chat_provider,
-            question=query,
-            retrieved=retrieved,
-        )
+    pool = ThreadPoolExecutor(max_workers=2)
+    answer_future = pool.submit(chat_provider.answer, prompt=answer_prompt)
+    suggestions_future = pool.submit(
+        suggest_questions,
+        chat_provider=chat_provider,
+        question=query,
+        retrieved=retrieved,
+    )
+    try:
         model_answer = answer_future.result()
         try:
             suggestions = suggestions_future.result()
         except (ChatError, AttributeError):
             # Suggestions are best-effort; never fail the answer because of them.
             suggestions = []
+    finally:
+        # If the answer failed, do not block waiting for the suggestions call.
+        pool.shutdown(wait=False, cancel_futures=True)
 
     retrieved_by_id = {str(result.chunk.id): result for result in retrieved}
     cited_ids = list(dict.fromkeys(model_answer.citation_chunk_ids))[:MAX_CITATIONS]

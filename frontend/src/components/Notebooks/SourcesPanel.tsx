@@ -124,7 +124,7 @@ function SearchResults({
               {result.page_number != null ? ` · p. ${result.page_number}` : ""}
             </p>
             <span className="shrink-0 text-xs font-semibold text-primary">
-              {Math.round(result.score * 100)}%
+              {Math.max(0, Math.round(result.score * 100))}%
             </span>
           </div>
           <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">

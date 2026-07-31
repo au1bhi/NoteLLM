@@ -203,8 +203,16 @@ async def stream_message(
                 source_ids=message_in.source_ids,
             )
         )
-    except (ChatError, EmbeddingError) as error:
+    except (ChatError, EmbeddingError, RuntimeError) as error:
         yield ServerSentEvent(data={"message": str(error)}, event="error")
+        yield ServerSentEvent(data={"conversation_id": str(conversation_id)}, event="done")
+        return
+    except Exception as error:
+        yield ServerSentEvent(
+            data={"message": f"Unexpected error: {type(error).__name__}"},
+            event="error",
+        )
+        yield ServerSentEvent(data={"conversation_id": str(conversation_id)}, event="done")
         return
     for word in answer.content.split(" "):
         yield ServerSentEvent(data={"text": f"{word} "}, event="delta")
