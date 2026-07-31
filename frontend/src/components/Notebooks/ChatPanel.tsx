@@ -43,6 +43,30 @@ const ANSWER_MODES: { value: AnswerMode; label: string; hint: string }[] = [
   },
 ]
 
+const DEFAULT_STARTERS = [
+  "总结这份资料的核心内容",
+  "这份资料讲了什么？",
+  "有哪些关键概念？",
+  "用三句话概括主要观点",
+]
+
+function StarterChips({ onPick }: { onPick: (question: string) => void }) {
+  return (
+    <div className="mt-4 flex flex-wrap justify-center gap-2">
+      {DEFAULT_STARTERS.map((question) => (
+        <button
+          key={question}
+          type="button"
+          onClick={() => onPick(question)}
+          className="rounded-full border bg-muted/40 px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+        >
+          {question}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 interface ChatPanelProps {
   messages?: ConversationMessagePublic[]
   conversations: ConversationPublic[]
@@ -327,10 +351,11 @@ export function ChatPanel({
         activeConversationId &&
         !isStreaming &&
         !messages?.length ? (
-          <div className="flex h-full items-center justify-center py-10 text-center">
+          <div className="flex h-full flex-col items-center justify-center gap-3 py-10 text-center">
             <p className="text-sm text-muted-foreground">
               还没有消息，试着问一个关于资料的问题。
             </p>
+            {hasReadySources ? <StarterChips onPick={pickSuggestion} /> : null}
           </div>
         ) : null}
       </div>
