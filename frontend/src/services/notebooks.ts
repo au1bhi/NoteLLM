@@ -17,6 +17,8 @@ export type SourcesResponse = SourcesPublic
 export const notebooksApi = {
   create: (input: NotebookCreate) =>
     NotebooksService.createNotebook({ requestBody: input }),
+  delete: (notebookId: string) =>
+    NotebooksService.deleteNotebook({ notebookId }),
   deleteSource: (notebookId: string, sourceId: string) =>
     NotebooksService.removeSource({ notebookId, sourceId }),
   get: (notebookId: string) => NotebooksService.readNotebook({ notebookId }),

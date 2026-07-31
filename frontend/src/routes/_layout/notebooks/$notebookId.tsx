@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { createFileRoute, Link } from "@tanstack/react-router"
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router"
 import {
   ArrowLeft,
   NotebookPen,
@@ -10,6 +10,7 @@ import { useState } from "react"
 
 import type { ConversationMessagePublic } from "@/client"
 import { ChatPanel } from "@/components/Notebooks/ChatPanel"
+import { DeleteNotebook } from "@/components/Notebooks/DeleteNotebook"
 import { EditNotebook } from "@/components/Notebooks/EditNotebook"
 import { SourcesPanel } from "@/components/Notebooks/SourcesPanel"
 import { Button } from "@/components/ui/button"
@@ -36,6 +37,7 @@ export const Route = createFileRoute("/_layout/notebooks/$notebookId")({
 
 function NotebookWorkspace() {
   const { notebookId } = Route.useParams()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { showErrorToast, showSuccessToast } = useCustomToast()
   const isDesktop = useIsDesktop()
@@ -253,6 +255,11 @@ function NotebookWorkspace() {
             <EditNotebook
               notebook={notebook.data}
               triggerClassName="size-8 shrink-0 rounded-lg text-muted-foreground hover:text-foreground"
+            />
+            <DeleteNotebook
+              notebook={notebook.data}
+              triggerClassName="size-8 shrink-0 rounded-lg text-muted-foreground hover:text-destructive"
+              onDeleted={() => navigate({ to: "/notebooks" })}
             />
           </div>
           <p className="mt-1.5 line-clamp-2 text-muted-foreground">
