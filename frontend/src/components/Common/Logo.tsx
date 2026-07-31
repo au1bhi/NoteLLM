@@ -57,15 +57,21 @@ export function Logo({
     >
       <Mark className={variant === "full" ? "size-8" : "size-7"} />
       {variant !== "icon" ? (
-        monochrome ? (
-          <span className="text-[17px] font-semibold tracking-tight text-white">
-            NoteLLM
-          </span>
-        ) : (
-          <span className="text-[17px] font-semibold tracking-tight">
-            Note<span className="text-gradient">LLM</span>
-          </span>
-        )
+        <span
+          className={cn(
+            "text-[17px] font-semibold tracking-tight",
+            variant === "responsive" && "group-data-[collapsible=icon]:hidden",
+            monochrome && "text-white",
+          )}
+        >
+          {monochrome ? (
+            "NoteLLM"
+          ) : (
+            <>
+              Note<span className="text-gradient">LLM</span>
+            </>
+          )}
+        </span>
       ) : null}
     </span>
   )
