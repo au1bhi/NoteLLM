@@ -4,7 +4,7 @@ import httpx
 import pytest
 
 from app.core.config import settings
-from app.services.embeddings import EmbeddingError, OpenAICompatibleEmbeddingProvider
+from app.services.embeddings import EmbeddingError, get_embedding_provider
 
 
 def test_embedding_provider_requires_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -13,7 +13,7 @@ def test_embedding_provider_requires_configuration(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(settings, "EMBEDDING_MODEL", None)
 
     with pytest.raises(EmbeddingError, match="not configured"):
-        OpenAICompatibleEmbeddingProvider().embed(["question"])
+        get_embedding_provider().embed(["question"])
 
 
 def test_embedding_provider_orders_vectors_and_validates_dimensions(
@@ -39,7 +39,7 @@ def test_embedding_provider_orders_vectors_and_validates_dimensions(
         )
 
     monkeypatch.setattr(httpx, "post", post)
-    assert OpenAICompatibleEmbeddingProvider().embed(["first", "second"]) == [
+    assert get_embedding_provider().embed(["first", "second"]) == [
         [1.0, 1.0],
         [2.0, 2.0],
     ]

@@ -10,6 +10,10 @@ from sqlmodel import Session, col, delete
 from app.core.config import settings
 from app.models import Chunk, Notebook, Source, get_datetime_utc
 from app.services.embeddings import EmbeddingError, get_embedding_provider
+from app.services.provider_settings import (
+    effective_embedding_config,
+    load_user_provider_settings,
+)
 
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 150
@@ -154,7 +158,15 @@ def process_source(*, session: Session, source: Source) -> None:
         chunks = [chunk for page in pages for chunk in split_page(page)]
         if not chunks:
             raise ValueError("The source did not contain extractable text")
-        embedding_provider = get_embedding_provider()
+        notebook = session.get(Notebook, source.notebook_id)
+        user_settings = (
+            load_user_provider_settings(session, notebook.owner_id)
+            if notebook
+            else None
+        )
+        embedding_provider = get_embedding_provider(
+            effective_embedding_config(user_settings)
+        )
         embeddings = [
             embedding
             for start in range(0, len(chunks), EMBEDDING_BATCH_SIZE)

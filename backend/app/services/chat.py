@@ -5,6 +5,7 @@ from typing import Protocol
 import httpx
 
 from app.core.config import settings
+from app.services.provider_settings import ProviderConfig
 
 
 class ChatError(Exception):
@@ -22,19 +23,27 @@ class ChatProvider(Protocol):
 
 
 class OpenAICompatibleChatProvider:
+    def __init__(self, config: ProviderConfig) -> None:
+        self.config = config
+
     def answer(self, *, prompt: str) -> ModelAnswer:
-        if not settings.LLM_BASE_URL or not settings.LLM_API_KEY or not settings.LLM_MODEL:
+        if (
+            not self.config.base_url
+            or not self.config.api_key
+            or not self.config.model
+        ):
             raise ChatError(
-                "Chat is not configured. Set LLM_BASE_URL, LLM_API_KEY, and LLM_MODEL."
+                "Chat is not configured. Add your API key in Settings, or set "
+                "LLM_BASE_URL, LLM_API_KEY, and LLM_MODEL on the server."
             )
 
-        endpoint = f"{str(settings.LLM_BASE_URL).rstrip('/')}/chat/completions"
+        endpoint = f"{self.config.base_url.rstrip('/')}/chat/completions"
         try:
             response = httpx.post(
                 endpoint,
-                headers={"Authorization": f"Bearer {settings.LLM_API_KEY}"},
+                headers={"Authorization": f"Bearer {self.config.api_key}"},
                 json={
-                    "model": settings.LLM_MODEL,
+                    "model": self.config.model,
                     "messages": [{"role": "user", "content": prompt}],
                     "response_format": {"type": "json_object"},
                     "temperature": 0,
@@ -56,5 +65,11 @@ class OpenAICompatibleChatProvider:
         return ModelAnswer(content=answer, citation_chunk_ids=citations)
 
 
-def get_chat_provider() -> ChatProvider:
-    return OpenAICompatibleChatProvider()
+def get_chat_provider(config: ProviderConfig | None = None) -> ChatProvider:
+    if config is None:
+        config = ProviderConfig(
+            base_url=str(settings.LLM_BASE_URL) if settings.LLM_BASE_URL else "",
+            api_key=settings.LLM_API_KEY or "",
+            model=settings.LLM_MODEL or "",
+        )
+    return OpenAICompatibleChatProvider(config)

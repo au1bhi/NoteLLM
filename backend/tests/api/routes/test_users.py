@@ -454,7 +454,7 @@ def test_token_for_deleted_user_returns_401(
     username = random_email()
     password = random_lower_string()
     user_in = UserCreate(email=username, password=password)
-    user = crud.create_user(session=db, user_create=user_in)
+    crud.create_user(session=db, user_create=user_in)
 
     login_data = {
         "username": username,

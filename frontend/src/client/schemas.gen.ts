@@ -849,6 +849,148 @@ export const UserCreateSchema = {
     title: 'UserCreate'
 } as const;
 
+export const UserProviderSettingsCreateSchema = {
+    properties: {
+        chat_base_url: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 1000
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Chat Base Url'
+        },
+        chat_api_key: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 1000
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Chat Api Key'
+        },
+        chat_model: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 255
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Chat Model'
+        },
+        embedding_base_url: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 1000
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Embedding Base Url'
+        },
+        embedding_api_key: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 1000
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Embedding Api Key'
+        },
+        embedding_model: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 255
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Embedding Model'
+        }
+    },
+    type: 'object',
+    title: 'UserProviderSettingsCreate',
+    description: 'Incoming per-user provider settings; empty api_key fields keep the stored key.'
+} as const;
+
+export const UserProviderSettingsPublicSchema = {
+    properties: {
+        chat_base_url: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Chat Base Url'
+        },
+        chat_api_key: {
+            type: 'string',
+            title: 'Chat Api Key',
+            default: ''
+        },
+        chat_model: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Chat Model'
+        },
+        embedding_base_url: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Embedding Base Url'
+        },
+        embedding_api_key: {
+            type: 'string',
+            title: 'Embedding Api Key',
+            default: ''
+        },
+        embedding_model: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Embedding Model'
+        }
+    },
+    type: 'object',
+    title: 'UserProviderSettingsPublic',
+    description: 'Settings returned to the client; API keys are always masked.'
+} as const;
+
 export const UserPublicSchema = {
     properties: {
         email: {

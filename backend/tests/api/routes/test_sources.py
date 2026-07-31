@@ -7,9 +7,13 @@ from pytest import MonkeyPatch
 from sqlmodel import Session, select
 
 from app.core.config import settings
-from app.models import Chunk
+from app.core.security import encrypt_secret
+from app.models import Chunk, UserProviderSettings
 from app.services.embeddings import EmbeddingProvider
-from tests.utils.user import authentication_token_from_email, create_random_user
+from tests.utils.user import (
+    authentication_token_from_email,
+    create_random_user,
+)
 
 
 class FakeEmbeddingProvider(EmbeddingProvider):
@@ -36,7 +40,8 @@ def test_upload_text_source_creates_chunks(
 ) -> None:
     monkeypatch.setattr(settings, "UPLOADS_DIR", tmp_path)
     monkeypatch.setattr(
-        "app.services.sources.get_embedding_provider", lambda: FakeEmbeddingProvider()
+        "app.services.sources.get_embedding_provider",
+        lambda _config=None: FakeEmbeddingProvider(),
     )
     notebook = create_notebook(client, normal_user_token_headers)
     content = "NotebookLM retrieves relevant source text. " * 60
@@ -95,3 +100,50 @@ def test_user_cannot_upload_to_another_notebook(
         files={"file": ("lecture.txt", b"private notes", "text/plain")},
     )
     assert response.status_code == 404
+
+
+def test_process_source_uses_user_embedding_key(
+    client: TestClient,
+    db: Session,
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    user = create_random_user(db)
+    headers = authentication_token_from_email(
+        client=client, email=user.email, db=db
+    )
+    db.add(
+        UserProviderSettings(
+            user_id=user.id,
+            embedding_base_url="https://embed.example.com",
+            embedding_api_key=encrypt_secret("user-embed-key-999"),
+            embedding_model="embed-model",
+        )
+    )
+    db.commit()
+    monkeypatch.setattr(settings, "UPLOADS_DIR", tmp_path)
+
+    captured: dict[str, object] = {}
+
+    def fake_provider(_config=None):
+        captured["config"] = _config
+        return FakeEmbeddingProvider()
+
+    monkeypatch.setattr(
+        "app.services.sources.get_embedding_provider", fake_provider
+    )
+
+    notebook = create_notebook(client, headers)
+    content = "User-provided embedding key. " * 40
+    response = client.post(
+        f"{settings.API_V1_STR}/notebooks/{notebook['id']}/sources/",
+        headers=headers,
+        files={"file": ("lecture.txt", content.encode(), "text/plain")},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "ready"
+    config = captured["config"]
+    assert config.api_key == "user-embed-key-999"
+    assert config.base_url == "https://embed.example.com"
+    assert config.model == "embed-model"

@@ -184,6 +184,30 @@ export type UserCreate = {
     password: string;
 };
 
+/**
+ * Incoming per-user provider settings; empty api_key fields keep the stored key.
+ */
+export type UserProviderSettingsCreate = {
+    chat_base_url?: (string | null);
+    chat_api_key?: (string | null);
+    chat_model?: (string | null);
+    embedding_base_url?: (string | null);
+    embedding_api_key?: (string | null);
+    embedding_model?: (string | null);
+};
+
+/**
+ * Settings returned to the client; API keys are always masked.
+ */
+export type UserProviderSettingsPublic = {
+    chat_base_url?: (string | null);
+    chat_api_key?: string;
+    chat_model?: (string | null);
+    embedding_base_url?: (string | null);
+    embedding_api_key?: string;
+    embedding_model?: (string | null);
+};
+
 export type UserPublic = {
     email: string;
     is_active?: boolean;
@@ -426,6 +450,16 @@ export type UsersUpdatePasswordMeData = {
 };
 
 export type UsersUpdatePasswordMeResponse = (Message);
+
+export type UsersReadUserProviderSettingsResponse = (UserProviderSettingsPublic);
+
+export type UsersUpsertUserProviderSettingsData = {
+    requestBody: UserProviderSettingsCreate;
+};
+
+export type UsersUpsertUserProviderSettingsResponse = (UserProviderSettingsPublic);
+
+export type UsersDeleteUserProviderSettingsResponse = (Message);
 
 export type UsersRegisterUserData = {
     requestBody: UserRegister;

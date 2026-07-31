@@ -4,6 +4,7 @@ from typing import Protocol
 import httpx
 
 from app.core.config import settings
+from app.services.provider_settings import ProviderConfig
 
 
 class EmbeddingError(Exception):
@@ -15,23 +16,28 @@ class EmbeddingProvider(Protocol):
 
 
 class OpenAICompatibleEmbeddingProvider:
+    def __init__(self, config: ProviderConfig) -> None:
+        self.config = config
+
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
         if (
-            not settings.EMBEDDING_BASE_URL
-            or not settings.EMBEDDING_API_KEY
-            or not settings.EMBEDDING_MODEL
+            not self.config.base_url
+            or not self.config.api_key
+            or not self.config.model
         ):
             raise EmbeddingError(
-                "Embedding is not configured. Set EMBEDDING_BASE_URL, EMBEDDING_API_KEY, and EMBEDDING_MODEL."
+                "Embedding is not configured. Add your API key in Settings, or "
+                "set EMBEDDING_BASE_URL, EMBEDDING_API_KEY, and EMBEDDING_MODEL "
+                "on the server."
             )
 
-        endpoint = f"{str(settings.EMBEDDING_BASE_URL).rstrip('/')}/embeddings"
+        endpoint = f"{self.config.base_url.rstrip('/')}/embeddings"
         try:
             response = httpx.post(
                 endpoint,
-                headers={"Authorization": f"Bearer {settings.EMBEDDING_API_KEY}"},
+                headers={"Authorization": f"Bearer {self.config.api_key}"},
                 json={
-                    "model": settings.EMBEDDING_MODEL,
+                    "model": self.config.model,
                     "input": list(texts),
                     "dimensions": settings.EMBEDDING_DIMENSIONS,
                 },
@@ -52,5 +58,15 @@ class OpenAICompatibleEmbeddingProvider:
         return [[float(value) for value in vector] for vector in vectors]
 
 
-def get_embedding_provider() -> EmbeddingProvider:
-    return OpenAICompatibleEmbeddingProvider()
+def get_embedding_provider(
+    config: ProviderConfig | None = None,
+) -> EmbeddingProvider:
+    if config is None:
+        config = ProviderConfig(
+            base_url=str(settings.EMBEDDING_BASE_URL)
+            if settings.EMBEDDING_BASE_URL
+            else "",
+            api_key=settings.EMBEDDING_API_KEY or "",
+            model=settings.EMBEDDING_MODEL or "",
+        )
+    return OpenAICompatibleEmbeddingProvider(config)

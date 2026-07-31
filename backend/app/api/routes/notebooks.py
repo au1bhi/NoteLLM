@@ -24,6 +24,10 @@ from app.models import (
     get_datetime_utc,
 )
 from app.services.embeddings import EmbeddingError, get_embedding_provider
+from app.services.provider_settings import (
+    effective_embedding_config,
+    load_user_provider_settings,
+)
 from app.services.retrieval import retrieve_chunks
 from app.services.sources import (
     create_source_from_upload,
@@ -206,9 +210,12 @@ def search_notebook(
         session=session, current_user=current_user, notebook_id=notebook_id
     )
     try:
+        user_settings = load_user_provider_settings(session, current_user.id)
         retrieved = retrieve_chunks(
             session=session,
-            embedding_provider=get_embedding_provider(),
+            embedding_provider=get_embedding_provider(
+                effective_embedding_config(user_settings)
+            ),
             notebook_id=notebook_id,
             query=search_in.query,
             limit=search_in.limit,

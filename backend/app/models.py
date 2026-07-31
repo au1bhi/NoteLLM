@@ -77,6 +77,47 @@ class UsersPublic(SQLModel):
     count: int
 
 
+class UserProviderSettingsCreate(SQLModel):
+    """Incoming per-user provider settings; empty api_key fields keep the stored key."""
+
+    chat_base_url: str | None = Field(default=None, max_length=1000)
+    chat_api_key: str | None = Field(default=None, max_length=1000)
+    chat_model: str | None = Field(default=None, max_length=255)
+    embedding_base_url: str | None = Field(default=None, max_length=1000)
+    embedding_api_key: str | None = Field(default=None, max_length=1000)
+    embedding_model: str | None = Field(default=None, max_length=255)
+
+
+class UserProviderSettings(UserProviderSettingsCreate, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(
+        foreign_key="user.id",
+        nullable=False,
+        ondelete="CASCADE",
+        index=True,
+        unique=True,
+    )
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+    updated_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+
+
+class UserProviderSettingsPublic(SQLModel):
+    """Settings returned to the client; API keys are always masked."""
+
+    chat_base_url: str | None = None
+    chat_api_key: str = ""
+    chat_model: str | None = None
+    embedding_base_url: str | None = None
+    embedding_api_key: str = ""
+    embedding_model: str | None = None
+
+
 # Shared properties
 class ItemBase(SQLModel):
     title: str = Field(min_length=1, max_length=255)

@@ -1,7 +1,10 @@
+import base64
+import hashlib
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
+from cryptography.fernet import Fernet, InvalidToken
 from pwdlib import PasswordHash
 from pwdlib.hashers.argon2 import Argon2Hasher
 from pwdlib.hashers.bcrypt import BcryptHasher
@@ -14,6 +17,24 @@ password_hash = PasswordHash(
         BcryptHasher(),
     )
 )
+
+
+def _fernet() -> Fernet:
+    key = base64.urlsafe_b64encode(hashlib.sha256(settings.SECRET_KEY.encode()).digest())
+    return Fernet(key)
+
+
+def encrypt_secret(value: str) -> str:
+    """Encrypt a sensitive value (e.g. an API key) for storage at rest."""
+    return _fernet().encrypt(value.encode()).decode()
+
+
+def decrypt_secret(value: str) -> str | None:
+    """Decrypt a stored secret; returns None if the value cannot be decrypted."""
+    try:
+        return _fernet().decrypt(value.encode()).decode()
+    except (InvalidToken, ValueError):
+        return None
 
 
 ALGORITHM = "HS256"

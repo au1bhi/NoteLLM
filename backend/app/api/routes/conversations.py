@@ -27,6 +27,11 @@ from app.models import (
 from app.services.answers import GroundedAnswer, answer_question
 from app.services.chat import ChatError, get_chat_provider
 from app.services.embeddings import EmbeddingError, get_embedding_provider
+from app.services.provider_settings import (
+    effective_chat_config,
+    effective_embedding_config,
+    load_user_provider_settings,
+)
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -102,12 +107,20 @@ def persist_answer(
             conversation_id=conversation.id, role="user", content=question
         )
         session.add(user_message)
+        notebook = session.get(Notebook, conversation.notebook_id)
+        user_settings = (
+            load_user_provider_settings(session, notebook.owner_id)
+            if notebook
+            else None
+        )
         answer = answer_question(
             session=session,
             notebook_id=conversation.notebook_id,
             query=question,
-            chat_provider=get_chat_provider(),
-            embedding_provider=get_embedding_provider(),
+            chat_provider=get_chat_provider(effective_chat_config(user_settings)),
+            embedding_provider=get_embedding_provider(
+                effective_embedding_config(user_settings)
+            ),
             mode=mode,
         )
         assistant_message = ConversationMessage(

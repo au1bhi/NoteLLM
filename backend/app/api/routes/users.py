@@ -11,18 +11,31 @@ from app.api.deps import (
     get_current_active_superuser,
 )
 from app.core.config import settings
-from app.core.security import get_password_hash, verify_password
+from app.core.security import (
+    decrypt_secret,
+    encrypt_secret,
+    get_password_hash,
+    verify_password,
+)
 from app.models import (
     Item,
     Message,
     UpdatePassword,
     User,
     UserCreate,
+    UserProviderSettings,
+    UserProviderSettingsCreate,
+    UserProviderSettingsPublic,
     UserPublic,
     UserRegister,
     UsersPublic,
     UserUpdate,
     UserUpdateMe,
+    get_datetime_utc,
+)
+from app.services.provider_settings import (
+    load_user_provider_settings,
+    mask_secret,
 )
 from app.utils import generate_new_account_email, send_email
 
@@ -141,6 +154,91 @@ def delete_user_me(session: SessionDep, current_user: CurrentUser) -> Any:
     session.delete(current_user)
     session.commit()
     return Message(message="User deleted successfully")
+
+
+def _provider_settings_public(
+    settings_row: UserProviderSettings | None,
+) -> UserProviderSettingsPublic:
+    if settings_row is None:
+        return UserProviderSettingsPublic()
+
+    def masked(field: str) -> str:
+        value = getattr(settings_row, field)
+        if not value:
+            return ""
+        return mask_secret(decrypt_secret(value))
+
+    return UserProviderSettingsPublic(
+        chat_base_url=settings_row.chat_base_url,
+        chat_api_key=masked("chat_api_key"),
+        chat_model=settings_row.chat_model,
+        embedding_base_url=settings_row.embedding_base_url,
+        embedding_api_key=masked("embedding_api_key"),
+        embedding_model=settings_row.embedding_model,
+    )
+
+
+@router.get("/me/provider-settings", response_model=UserProviderSettingsPublic)
+def read_user_provider_settings(
+    session: SessionDep, current_user: CurrentUser
+) -> UserProviderSettingsPublic:
+    """
+    Get the current user's own LLM/embedding provider settings (keys masked).
+    """
+    settings_row = load_user_provider_settings(session, current_user.id)
+    return _provider_settings_public(settings_row)
+
+
+@router.put("/me/provider-settings", response_model=UserProviderSettingsPublic)
+def upsert_user_provider_settings(
+    session: SessionDep,
+    current_user: CurrentUser,
+    settings_in: UserProviderSettingsCreate,
+) -> UserProviderSettingsPublic:
+    """
+    Save the current user's provider settings. An empty API key keeps the
+    stored key; empty base_url/model fall back to the server defaults.
+    """
+    settings_row = load_user_provider_settings(session, current_user.id)
+    if settings_row is None:
+        settings_row = UserProviderSettings(user_id=current_user.id)
+        session.add(settings_row)
+
+    data = settings_in.model_dump(exclude_unset=True)
+    for field in ("chat_api_key", "embedding_api_key"):
+        if field in data:
+            if data[field]:
+                data[field] = encrypt_secret(data[field])
+            else:
+                data.pop(field)
+    for field in (
+        "chat_base_url",
+        "chat_model",
+        "embedding_base_url",
+        "embedding_model",
+    ):
+        if field in data and not data[field]:
+            data[field] = None
+    settings_row.sqlmodel_update(data)
+    settings_row.updated_at = get_datetime_utc()
+    session.add(settings_row)
+    session.commit()
+    session.refresh(settings_row)
+    return _provider_settings_public(settings_row)
+
+
+@router.delete("/me/provider-settings", response_model=Message)
+def delete_user_provider_settings(
+    session: SessionDep, current_user: CurrentUser
+) -> Message:
+    """
+    Clear the current user's provider settings, reverting to server defaults.
+    """
+    settings_row = load_user_provider_settings(session, current_user.id)
+    if settings_row is not None:
+        session.delete(settings_row)
+        session.commit()
+    return Message(message="Provider settings cleared")
 
 
 @router.post("/signup", response_model=UserPublic)
