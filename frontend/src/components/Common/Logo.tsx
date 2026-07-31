@@ -51,7 +51,7 @@ export function Logo({
       className={cn(
         "inline-flex items-center gap-2.5",
         variant === "responsive" &&
-          "group-data-[collapsible=icon]:justify-center",
+          "group-data-[collapsible=icon]:w-full group-data-[collapsible=icon]:justify-center",
         className,
       )}
     >
