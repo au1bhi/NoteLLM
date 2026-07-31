@@ -54,6 +54,8 @@ Keep LLM and embedding providers behind interfaces. Keys, retrieval, prompts, an
 - `cd backend && bash scripts/lint.sh && bash scripts/test.sh`: run mypy, ty, Ruff, pytest, and coverage.
 - `uv run prek run --all-files`: run the complete pre-commit suite.
 
+CI (`.github/workflows/`) runs `test-backend` (pytest + coverage, gate at 80%) and `test-docker-compose` on push to `master`. There are no Playwright/e2e tests and no `playwright` or `mailcatcher` compose services — do not re-add a Playwright workflow or reference those services in CI without first adding the real setup.
+
 ## Code & Testing Standards
 
 Python 3.14 uses four spaces, strict typing, `snake_case`, and Ruff. TypeScript uses Biome, two spaces, `PascalCase.tsx` components, and `useCamelCase.ts` hooks.
