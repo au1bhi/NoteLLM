@@ -192,6 +192,24 @@ function NotebookWorkspace() {
         queryKey: ["notebooks", notebookId, "conversations"],
       }),
   })
+  const deleteConversationMutation = useMutation({
+    mutationFn: (conversationId: string) =>
+      conversationsApi.delete(conversationId),
+    onError: (error: Error) => showErrorToast(extractErrorMessage(error)),
+    onSuccess: (_, deletedId) => {
+      showSuccessToast("会话已删除")
+      if (deletedId === conversationId) {
+        setConversationId(null)
+      }
+      queryClient.invalidateQueries({
+        queryKey: ["conversations", deletedId],
+      })
+    },
+    onSettled: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["notebooks", notebookId, "conversations"],
+      }),
+  })
 
   const sendQuestion = async (
     content: string,
@@ -374,6 +392,10 @@ function NotebookWorkspace() {
           onPinConversation={(conversationId, isPinned) =>
             pinConversationMutation.mutate({ conversationId, isPinned })
           }
+          onDeleteConversation={(conversationId) =>
+            deleteConversationMutation.mutate(conversationId)
+          }
+          isDeleting={deleteConversationMutation.isPending}
           onSend={(content, mode) => void sendQuestion(content, mode)}
         />
 

@@ -13,7 +13,8 @@
     "Geist Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas,
     monospace;
   --font-display:
-    "Noto Serif SC Variable", "Songti SC", "STSong", Georgia, ui-serif, serif;
+    "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "STSong", "SimSun",
+    Georgia, ui-serif, serif;
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

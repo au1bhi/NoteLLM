@@ -330,6 +330,14 @@ export type ConversationsUpdateConversationData = {
 
 export type ConversationsUpdateConversationResponse = (ConversationPublic);
 
+export type ConversationsDeleteConversationData = {
+    conversationId: string;
+};
+
+export type ConversationsDeleteConversationResponse = ({
+    [key: string]: (string);
+});
+
 export type ConversationsStreamMessageData = {
     conversationId: string;
     requestBody: ConversationMessageCreate;

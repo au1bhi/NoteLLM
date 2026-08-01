@@ -212,6 +212,21 @@ def update_conversation(
     return ConversationPublic.model_validate(conversation)
 
 
+@router.delete("/{conversation_id}")
+def delete_conversation(
+    conversation_id: uuid.UUID,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> dict[str, str]:
+    """Delete a conversation and its messages/citations (cascade)."""
+    conversation = get_conversation_or_404(
+        session=session, current_user=current_user, conversation_id=conversation_id
+    )
+    session.delete(conversation)
+    session.commit()
+    return {"message": "会话删除成功"}
+
+
 @router.post("/{conversation_id}/messages/stream", response_class=EventSourceResponse)
 async def stream_message(
     conversation_id: uuid.UUID,

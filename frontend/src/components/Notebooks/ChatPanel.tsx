@@ -4,6 +4,7 @@ import {
   MessagesSquare,
   Pencil,
   Send,
+  Trash2,
 } from "lucide-react"
 import { type KeyboardEvent, useEffect, useRef, useState } from "react"
 
@@ -86,6 +87,8 @@ interface ChatPanelProps {
   onSelectConversation: (id: string) => void
   onRenameConversation: (conversationId: string, title: string) => void
   onPinConversation: (conversationId: string, isPinned: boolean) => void
+  onDeleteConversation: (conversationId: string) => void
+  isDeleting?: boolean
   onSend: (content: string, mode: AnswerMode) => void
 }
 
@@ -183,12 +186,17 @@ export function ChatPanel({
   onSelectConversation,
   onRenameConversation,
   onPinConversation,
+  onDeleteConversation,
+  isDeleting,
   onSend,
 }: ChatPanelProps) {
   const [question, setQuestion] = useState("")
   const [mode, setMode] = useState<AnswerMode>("grounded")
   const [renameOpen, setRenameOpen] = useState(false)
   const [renameTitle, setRenameTitle] = useState("")
+  const [deleteTarget, setDeleteTarget] = useState<ConversationPublic | null>(
+    null,
+  )
   const scrollRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
@@ -304,20 +312,30 @@ export function ChatPanel({
         {conversations.length ? (
           <div className="mt-3 flex gap-2 overflow-x-auto pb-0.5">
             {sortPinnedFirst(conversations).map((conversation) => (
-              <Button
-                key={conversation.id}
-                size="sm"
-                variant={
-                  activeConversationId === conversation.id
-                    ? "default"
-                    : "outline"
-                }
-                className="shrink-0"
-                disabled={isStreaming}
-                onClick={() => onSelectConversation(conversation.id)}
-              >
-                {conversation.title || "会话"}
-              </Button>
+              <div key={conversation.id} className="group relative shrink-0">
+                <Button
+                  size="sm"
+                  variant={
+                    activeConversationId === conversation.id
+                      ? "default"
+                      : "outline"
+                  }
+                  className="pr-8"
+                  disabled={isStreaming}
+                  onClick={() => onSelectConversation(conversation.id)}
+                >
+                  {conversation.title || "会话"}
+                </Button>
+                <button
+                  type="button"
+                  aria-label={`删除会话：${conversation.title || "未命名"}`}
+                  disabled={isStreaming || isDeleting}
+                  onClick={() => setDeleteTarget(conversation)}
+                  className="absolute right-1 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground/70 transition-colors opacity-0 hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100 max-sm:opacity-100"
+                >
+                  <Trash2 className="size-3" />
+                </button>
+              </div>
             ))}
           </div>
         ) : null}
@@ -478,6 +496,42 @@ export function ChatPanel({
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>删除会话</DialogTitle>
+            <DialogDescription>
+              将删除“{deleteTarget?.title || "未命名"}
+              ”及其全部消息，此操作不可恢复。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline" disabled={isDeleting}>
+                取消
+              </Button>
+            </DialogClose>
+            <Button
+              variant="destructive"
+              disabled={isDeleting}
+              onClick={() => {
+                if (!deleteTarget) return
+                const id = deleteTarget.id
+                setDeleteTarget(null)
+                onDeleteConversation(id)
+              }}
+            >
+              {isDeleting ? <Loader2 className="size-4 animate-spin" /> : null}
+              删除
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </section>

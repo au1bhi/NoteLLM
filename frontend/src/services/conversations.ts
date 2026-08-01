@@ -32,6 +32,8 @@ export const conversationsApi = {
       conversationId,
       requestBody: input,
     }),
+  delete: (conversationId: string) =>
+    ConversationsService.deleteConversation({ conversationId }),
   stream: async (
     conversationId: string,
     content: string,
