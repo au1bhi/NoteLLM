@@ -141,6 +141,17 @@ class UserUsagePublic(SQLModel):
     updated_at: datetime | None = None
 
 
+class ModelFetchRequest(SQLModel):
+    """Fetch available model IDs from an OpenAI-compatible /models endpoint."""
+
+    base_url: str = Field(min_length=1, max_length=1000)
+    api_key: str = Field(min_length=1, max_length=1000)
+
+
+class ModelInfoPublic(SQLModel):
+    id: str
+
+
 # Shared properties
 class ItemBase(SQLModel):
     title: str = Field(min_length=1, max_length=255)

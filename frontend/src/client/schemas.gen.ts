@@ -485,6 +485,39 @@ export const MessageSchema = {
     title: 'Message'
 } as const;
 
+export const ModelFetchRequestSchema = {
+    properties: {
+        base_url: {
+            type: 'string',
+            maxLength: 1000,
+            minLength: 1,
+            title: 'Base Url'
+        },
+        api_key: {
+            type: 'string',
+            maxLength: 1000,
+            minLength: 1,
+            title: 'Api Key'
+        }
+    },
+    type: 'object',
+    required: ['base_url', 'api_key'],
+    title: 'ModelFetchRequest',
+    description: 'Fetch available model IDs from an OpenAI-compatible /models endpoint.'
+} as const;
+
+export const ModelInfoPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            title: 'Id'
+        }
+    },
+    type: 'object',
+    required: ['id'],
+    title: 'ModelInfoPublic'
+} as const;
+
 export const NewPasswordSchema = {
     properties: {
         token: {

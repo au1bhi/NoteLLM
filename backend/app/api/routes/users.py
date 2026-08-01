@@ -1,6 +1,7 @@
 import uuid
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import col, delete, func, select
 
@@ -20,6 +21,8 @@ from app.core.security import (
 from app.models import (
     Item,
     Message,
+    ModelFetchRequest,
+    ModelInfoPublic,
     UpdatePassword,
     User,
     UserCreate,
@@ -256,6 +259,45 @@ def delete_user_provider_settings(
         session.delete(settings_row)
         session.commit()
     return Message(message="Provider settings cleared")
+
+
+@router.post(
+    "/me/provider-settings/models",
+    response_model=list[ModelInfoPublic],
+)
+def fetch_available_models(
+    body: ModelFetchRequest,
+    _current_user: CurrentUser,
+) -> list[ModelInfoPublic]:
+    """
+    Fetch the model IDs available on the user's OpenAI-compatible endpoint.
+    The key is used once for this request and is not stored.
+    """
+    endpoint = f"{body.base_url.rstrip('/')}/models"
+    try:
+        response = httpx.get(
+            endpoint,
+            headers={"Authorization": f"Bearer {body.api_key}"},
+            timeout=30.0,
+        )
+        response.raise_for_status()
+        data = response.json().get("data", [])
+    except (httpx.HTTPError, KeyError, TypeError, ValueError) as error:
+        raise HTTPException(
+            status_code=503, detail=f"Failed to fetch models: {error}"
+        ) from error
+    if not isinstance(data, list):
+        raise HTTPException(
+            status_code=502, detail="The provider returned an unexpected models payload"
+        )
+    model_ids = [
+        item.get("id")
+        for item in data
+        if isinstance(item, dict) and isinstance(item.get("id"), str)
+    ]
+    if not model_ids:
+        raise HTTPException(status_code=502, detail="The provider returned no models")
+    return [ModelInfoPublic(id=model_id) for model_id in model_ids]
 
 
 @router.post("/signup", response_model=UserPublic)

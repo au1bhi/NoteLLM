@@ -102,6 +102,18 @@ export type Message = {
     message: string;
 };
 
+/**
+ * Fetch available model IDs from an OpenAI-compatible /models endpoint.
+ */
+export type ModelFetchRequest = {
+    base_url: string;
+    api_key: string;
+};
+
+export type ModelInfoPublic = {
+    id: string;
+};
+
 export type NewPassword = {
     token: string;
     new_password: string;
@@ -518,6 +530,12 @@ export type UsersUpsertUserProviderSettingsData = {
 export type UsersUpsertUserProviderSettingsResponse = (UserProviderSettingsPublic);
 
 export type UsersDeleteUserProviderSettingsResponse = (Message);
+
+export type UsersFetchAvailableModelsData = {
+    requestBody: ModelFetchRequest;
+};
+
+export type UsersFetchAvailableModelsResponse = (Array<ModelInfoPublic>);
 
 export type UsersRegisterUserData = {
     requestBody: UserRegister;

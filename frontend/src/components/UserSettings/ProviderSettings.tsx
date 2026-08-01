@@ -29,6 +29,7 @@ import { LoadingButton } from "@/components/ui/loading-button"
 import { PasswordInput } from "@/components/ui/password-input"
 import useCustomToast from "@/hooks/useCustomToast"
 import { providerSettingsApi } from "@/services/provider-settings"
+import { ModelPicker } from "./ModelPicker"
 
 const formSchema = z.object({
   chat_base_url: z.string().max(1000).optional().or(z.literal("")),
@@ -210,11 +211,23 @@ export function ProviderSettings() {
                   type="password"
                   masked={data?.[section.maskedKey] || undefined}
                 />
-                <SectionField
+                <FormField
                   control={form.control}
                   name={section.model}
-                  label="模型名"
-                  placeholder="gpt-4o-mini"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>模型名</FormLabel>
+                      <FormControl>
+                        <ModelPicker
+                          value={field.value ?? ""}
+                          baseUrl={form.watch(section.baseUrl) ?? ""}
+                          apiKey={form.watch(section.apiKey) ?? ""}
+                          onValueChange={field.onChange}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
               </div>
             </section>
