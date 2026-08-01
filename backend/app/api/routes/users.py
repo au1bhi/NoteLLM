@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -180,6 +181,38 @@ def delete_user_me(session: SessionDep, current_user: CurrentUser) -> Any:
     return Message(message="用户删除成功")
 
 
+def _cooldown_until(
+    settings_row: UserProviderSettings | None,
+) -> datetime | None:
+    """When the user may switch back to server-default billing, or None.
+
+    The switch-back window opens when a user configures their own API key and
+    closes 24 hours later (PROVIDER_SWITCH_COOLDOWN_HOURS). Users without an
+    own key have nothing to switch back from, so no cooldown applies.
+    """
+    if (
+        settings_row is None
+        or settings_row.provider_changed_at is None
+        or not (settings_row.chat_api_key or settings_row.embedding_api_key)
+    ):
+        return None
+    expires = settings_row.provider_changed_at + timedelta(
+        hours=settings.PROVIDER_SWITCH_COOLDOWN_HOURS
+    )
+    if expires <= datetime.now(UTC):
+        return None
+    return expires
+
+
+def _cooldown_detail(until: datetime) -> str:
+    remaining = until - datetime.now(UTC)
+    total_minutes = max(1, int(remaining.total_seconds()) // 60)
+    hours, minutes = divmod(total_minutes, 60)
+    if hours:
+        return f"切换回系统 API 需等待冷却，还需 {hours} 小时 {minutes} 分钟后可操作"
+    return f"切换回系统 API 需等待冷却，还需 {minutes} 分钟后可操作"
+
+
 def _provider_settings_public(
     settings_row: UserProviderSettings | None,
 ) -> UserProviderSettingsPublic:
@@ -199,6 +232,7 @@ def _provider_settings_public(
         embedding_base_url=settings_row.embedding_base_url,
         embedding_api_key=masked("embedding_api_key"),
         embedding_model=settings_row.embedding_model,
+        cooldown_until=_cooldown_until(settings_row),
     )
 
 
@@ -235,6 +269,9 @@ def upsert_user_provider_settings(
                 data[field] = encrypt_secret(data[field])
             else:
                 data.pop(field)
+    # Configuring an own key opens the switch-back cooldown window.
+    if data.get("chat_api_key") or data.get("embedding_api_key"):
+        settings_row.provider_changed_at = get_datetime_utc()
     for field in (
         "chat_base_url",
         "chat_model",
@@ -257,8 +294,14 @@ def delete_user_provider_settings(
 ) -> Message:
     """
     Clear the current user's provider settings, reverting to server defaults.
+    Blocked by the switch-back cooldown for 24h after configuring an own key.
     """
     settings_row = load_user_provider_settings(session, current_user.id)
+    cooldown_until = _cooldown_until(settings_row)
+    if cooldown_until is not None:
+        raise HTTPException(
+            status_code=429, detail=_cooldown_detail(cooldown_until)
+        )
     if settings_row is not None:
         session.delete(settings_row)
         session.commit()

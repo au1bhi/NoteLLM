@@ -63,7 +63,10 @@ class Settings(BaseSettings):
     # Free-tier allowance, applied only to usage billed to the server's own
     # keys. Users who bring their own API key are not limited by these.
     FREE_QUOTA_CHAT_TOKENS: int = 100_000
-    FREE_QUOTA_EMBEDDING_CHARS: int = 2_000_000
+    FREE_QUOTA_EMBEDDING_CHARS: int = 300_000
+    # How long a user must wait before switching their provider billing back
+    # to the server's default after configuring their own API key.
+    PROVIDER_SWITCH_COOLDOWN_HOURS: int = 24
     # Whether brute-force protection is active on auth endpoints.
     RATE_LIMIT_ENABLED: bool = True
     POSTGRES_SERVER: str

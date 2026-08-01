@@ -105,10 +105,21 @@ class UserProviderSettings(UserProviderSettingsCreate, table=True):
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),  # type: ignore
     )
+    # When the user last switched billing between their own key and the
+    # server default; drives the switch-back cooldown. None means no switch
+    # has happened yet (or they have no own key).
+    provider_changed_at: datetime | None = Field(
+        default=None, sa_type=DateTime(timezone=True)  # type: ignore
+    )
 
 
 class UserProviderSettingsPublic(SQLModel):
-    """Settings returned to the client; API keys are always masked."""
+    """Settings returned to the client; API keys are always masked.
+
+    `cooldown_until` is set when the user has configured their own API key and
+    is still inside the switch-back window — clearing the config to revert to
+    the server default is blocked until that time.
+    """
 
     chat_base_url: str | None = None
     chat_api_key: str = ""
@@ -116,6 +127,7 @@ class UserProviderSettingsPublic(SQLModel):
     embedding_base_url: str | None = None
     embedding_api_key: str = ""
     embedding_model: str | None = None
+    cooldown_until: datetime | None = None
 
 
 class UserUsage(SQLModel, table=True):

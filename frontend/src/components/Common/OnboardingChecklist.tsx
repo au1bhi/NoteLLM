@@ -218,7 +218,7 @@ export function OnboardingChecklist({
       </ol>
 
       <p className="mt-6 text-xs text-muted-foreground/70">
-        免费用户每月享有 10 万 token 对话额度与 200 万字符嵌入额度；配置自己的
+        免费用户每月享有 10 万 token 对话额度与 30 万字符嵌入额度；配置自己的
         API Key 后对应维度不再消耗免费额度。
       </p>
     </section>

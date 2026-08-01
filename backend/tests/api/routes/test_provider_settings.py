@@ -41,6 +41,7 @@ def test_get_provider_settings_defaults_empty(client: TestClient, db: Session) -
         "embedding_base_url": None,
         "embedding_api_key": "",
         "embedding_model": None,
+        "cooldown_until": None,
     }
 
 
@@ -247,3 +248,59 @@ def test_fetch_models_server_key_not_sent_to_custom_endpoint(
         json={"base_url": "https://evil.example.com/v1", "api_key": ""},
     )
     assert response.status_code == 422
+
+
+def test_switch_back_cooldown_blocks_immediate_clear(
+    client: TestClient, db: Session
+) -> None:
+    _, headers = _auth(client, db)
+    response = client.put(
+        _url(), headers=headers, json={"chat_api_key": "sk-cooldown-123456"}
+    )
+    assert response.status_code == 200
+    assert response.json()["cooldown_until"] is not None
+
+    cleared = client.delete(_url(), headers=headers)
+    assert cleared.status_code == 429
+    assert "冷却" in cleared.json()["detail"]
+
+
+def test_switch_back_allowed_after_cooldown_expires(
+    client: TestClient, db: Session
+) -> None:
+    from datetime import UTC, datetime, timedelta
+
+    user, headers = _auth(client, db)
+    db.add(
+        UserProviderSettings(
+            user_id=user.id,
+            chat_api_key=encrypt_secret("sk-old-key-12345678"),
+            provider_changed_at=datetime.now(UTC) - timedelta(hours=25),
+        )
+    )
+    db.commit()
+
+    cleared = client.delete(_url(), headers=headers)
+    assert cleared.status_code == 200
+    assert cleared.json()["message"] == "已清除模型配置"
+
+
+def test_clear_without_own_key_has_no_cooldown(
+    client: TestClient, db: Session
+) -> None:
+    _, headers = _auth(client, db)
+    cleared = client.delete(_url(), headers=headers)
+    assert cleared.status_code == 200
+    assert cleared.json()["message"] == "已清除模型配置"
+
+
+def test_provider_settings_returns_cooldown_until(
+    client: TestClient, db: Session
+) -> None:
+    _, headers = _auth(client, db)
+    client.put(
+        _url(), headers=headers, json={"embedding_api_key": "embed-own-key-123"}
+    )
+    response = client.get(_url(), headers=headers)
+    assert response.status_code == 200
+    assert response.json()["cooldown_until"] is not None

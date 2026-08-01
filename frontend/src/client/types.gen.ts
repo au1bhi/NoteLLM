@@ -243,6 +243,10 @@ export type UserProviderSettingsCreate = {
 
 /**
  * Settings returned to the client; API keys are always masked.
+ *
+ * `cooldown_until` is set when the user has configured their own API key and
+ * is still inside the switch-back window — clearing the config to revert to
+ * the server default is blocked until that time.
  */
 export type UserProviderSettingsPublic = {
     chat_base_url?: (string | null);
@@ -251,6 +255,7 @@ export type UserProviderSettingsPublic = {
     embedding_base_url?: (string | null);
     embedding_api_key?: string;
     embedding_model?: (string | null);
+    cooldown_until?: (string | null);
 };
 
 export type UserPublic = {

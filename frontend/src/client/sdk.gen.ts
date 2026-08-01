@@ -819,6 +819,7 @@ export class UsersService {
     /**
      * Delete User Provider Settings
      * Clear the current user's provider settings, reverting to server defaults.
+     * Blocked by the switch-back cooldown for 24h after configuring an own key.
      * @returns Message Successful Response
      * @throws ApiError
      */

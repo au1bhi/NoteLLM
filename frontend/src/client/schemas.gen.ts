@@ -1183,11 +1183,27 @@ export const UserProviderSettingsPublicSchema = {
                 }
             ],
             title: 'Embedding Model'
+        },
+        cooldown_until: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Cooldown Until'
         }
     },
     type: 'object',
     title: 'UserProviderSettingsPublic',
-    description: 'Settings returned to the client; API keys are always masked.'
+    description: `Settings returned to the client; API keys are always masked.
+
+\`cooldown_until\` is set when the user has configured their own API key and
+is still inside the switch-back window — clearing the config to revert to
+the server default is blocked until that time.`
 } as const;
 
 export const UserPublicSchema = {

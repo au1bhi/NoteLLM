@@ -129,6 +129,16 @@ function SectionField({
 
 type BillingSource = "server" | "user" | "none"
 
+function formatCooldownRemaining(until?: string | null): string | null {
+  if (!until) return null
+  const ms = new Date(until).getTime() - Date.now()
+  if (ms <= 0) return null
+  const totalMinutes = Math.ceil(ms / 60_000)
+  const hours = Math.floor(totalMinutes / 60)
+  const minutes = totalMinutes % 60
+  return hours > 0 ? `还需 ${hours} 小时 ${minutes} 分` : `还需 ${minutes} 分`
+}
+
 function ModelStatusChip({
   label,
   source,
@@ -172,6 +182,8 @@ export function ProviderSettings() {
     queryKey: ["provider-settings"],
     queryFn: providerSettingsApi.get,
   })
+
+  const cooldownText = formatCooldownRemaining(data?.cooldown_until)
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -230,7 +242,8 @@ export function ProviderSettings() {
           密钥后，用量将计入你的密钥；留空则回退到服务端默认配置，并计入免费额度。
         </p>
         <p className="mt-1 text-xs text-muted-foreground/80">
-          密钥只会加密保存在后端，前端永远看不到明文。
+          密钥只会加密保存在后端，前端永远看不到明文。配置自己的 Key 后，若想
+          切换回系统 API，需等待 24 小时冷却。
         </p>
       </div>
 
@@ -305,7 +318,12 @@ export function ProviderSettings() {
                 <Button
                   type="button"
                   variant="outline"
-                  disabled={clearMutation.isPending}
+                  disabled={clearMutation.isPending || Boolean(cooldownText)}
+                  title={
+                    cooldownText
+                      ? `切换回系统 API 需冷却 24 小时，${cooldownText}后可用`
+                      : undefined
+                  }
                 >
                   <RotateCcw className="size-4" />
                   清除配置
@@ -338,6 +356,12 @@ export function ProviderSettings() {
               </DialogContent>
             </Dialog>
           </div>
+          {cooldownText ? (
+            <p className="text-xs text-muted-foreground">
+              配置自己的 Key 后，切换回系统 API 需等待 24 小时冷却，
+              {cooldownText}后可操作。
+            </p>
+          ) : null}
         </form>
       </Form>
     </div>
