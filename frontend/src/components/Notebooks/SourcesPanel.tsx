@@ -42,13 +42,13 @@ function fileTone(mediaType: string) {
   if (mediaType.includes("pdf")) {
     return {
       Icon: FileText,
-      tone: "bg-rose-500/10 text-rose-600 dark:text-rose-400",
+      tone: "bg-rose-500/10 text-rose-700 dark:text-rose-400",
     }
   }
   if (mediaType.includes("markdown")) {
     return {
       Icon: FileText,
-      tone: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+      tone: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
     }
   }
   if (mediaType.includes("text")) {
@@ -72,14 +72,14 @@ function sourceMeta(source: Source): string {
 function StatusBadge({ status }: { status: string }) {
   if (status === "ready") {
     return (
-      <Badge className="border-emerald-500/25 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+      <Badge className="border-emerald-500/25 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
         已就绪
       </Badge>
     )
   }
   if (status === "processing") {
     return (
-      <Badge className="border-amber-500/25 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+      <Badge className="border-amber-500/25 bg-amber-500/10 text-amber-700 dark:text-amber-400">
         <Loader2 className="animate-spin" />
         处理中
       </Badge>

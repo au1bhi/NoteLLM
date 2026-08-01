@@ -137,19 +137,19 @@ function Dashboard() {
       label: "资料来源",
       value: sourceCount,
       icon: FileText,
-      tone: "bg-sky-500/10 text-sky-600 dark:text-sky-400",
+      tone: "bg-amber-500/10 text-amber-700 dark:text-amber-400",
     },
     {
       label: "已就绪来源",
       value: readyCount,
       icon: CheckCircle2,
-      tone: "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+      tone: "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
     },
     {
       label: "问答会话",
       value: conversationCount,
       icon: MessagesSquare,
-      tone: "bg-violet-500/10 text-violet-600 dark:text-violet-400",
+      tone: "bg-rose-500/10 text-rose-700 dark:text-rose-400",
     },
   ]
 
@@ -199,7 +199,9 @@ function Dashboard() {
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
         <section className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold tracking-tight">最近笔记本</h2>
+            <h2 className="font-display text-lg font-semibold tracking-tight">
+              最近笔记本
+            </h2>
             <Link
               to="/notebooks"
               className="text-sm font-medium text-primary hover:underline"
@@ -239,7 +241,9 @@ function Dashboard() {
         </section>
 
         <section className="h-fit rounded-xl border bg-card p-6 shadow-soft lg:sticky lg:top-24">
-          <h2 className="text-lg font-semibold tracking-tight">如何使用</h2>
+          <h2 className="font-display text-lg font-semibold tracking-tight">
+            如何使用
+          </h2>
           <ol className="mt-5 space-y-5">
             {STEPS.map((step, index) => (
               <li key={step.title} className="flex gap-4">
