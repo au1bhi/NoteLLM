@@ -59,9 +59,7 @@ def test_recovery_password(
             headers=normal_user_token_headers,
         )
         assert r.status_code == 200
-        assert r.json() == {
-            "message": "如果该邮箱已注册，我们已发送密码重置链接"
-        }
+        assert r.json() == {"message": "如果该邮箱已注册，我们已发送密码重置链接"}
 
 
 def test_recovery_password_user_not_exits(
@@ -74,9 +72,7 @@ def test_recovery_password_user_not_exits(
     )
     # Should return 200 with generic message to prevent email enumeration attacks
     assert r.status_code == 200
-    assert r.json() == {
-        "message": "如果该邮箱已注册，我们已发送密码重置链接"
-    }
+    assert r.json() == {"message": "如果该邮箱已注册，我们已发送密码重置链接"}
 
 
 def test_reset_password(client: TestClient, db: Session) -> None:

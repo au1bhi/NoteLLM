@@ -84,7 +84,9 @@ def generate_overview(
     return NotebookOverview(summary=summary, topics=topics)
 
 
-def store_overview(*, session: Session, notebook: Notebook, overview: NotebookOverview) -> None:
+def store_overview(
+    *, session: Session, notebook: Notebook, overview: NotebookOverview
+) -> None:
     notebook.overview = overview.summary
     notebook.overview_topics = overview.topics
     notebook.overview_updated_at = get_datetime_utc()

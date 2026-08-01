@@ -9,14 +9,13 @@ from app.services.provider_settings import (
     effective_chat_config,
     load_user_provider_settings,
 )
+from app.services.usage import current_period
 from tests.utils.user import authentication_token_from_email, create_random_user
 
 
 def _auth(client: TestClient, db: Session):
     user = create_random_user(db)
-    headers = authentication_token_from_email(
-        client=client, email=user.email, db=db
-    )
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
     return user, headers
 
 
@@ -65,9 +64,7 @@ def test_upsert_stores_encrypted_and_returns_masked(
     assert "sk-my-real-key-123456" not in str(body)
 
     row = db.exec(
-        select(UserProviderSettings).where(
-            UserProviderSettings.user_id == user.id
-        )
+        select(UserProviderSettings).where(UserProviderSettings.user_id == user.id)
     ).one()
     assert row.chat_api_key != "sk-my-real-key-123456"
     assert decrypt_secret(row.chat_api_key) == "sk-my-real-key-123456"
@@ -87,9 +84,7 @@ def test_empty_api_key_keeps_stored_key(client: TestClient, db: Session) -> None
     assert response.json()["chat_api_key"] == "keep***-123"
 
     row = db.exec(
-        select(UserProviderSettings).where(
-            UserProviderSettings.user_id == user.id
-        )
+        select(UserProviderSettings).where(UserProviderSettings.user_id == user.id)
     ).one()
     assert decrypt_secret(row.chat_api_key) == "keep-me-123"
 
@@ -102,21 +97,15 @@ def test_clear_provider_settings(client: TestClient, db: Session) -> None:
     response = client.delete(_url(), headers=headers)
     assert response.status_code == 200
     row = db.exec(
-        select(UserProviderSettings).where(
-            UserProviderSettings.user_id == user.id
-        )
+        select(UserProviderSettings).where(UserProviderSettings.user_id == user.id)
     ).first()
     assert row is None
 
 
-def test_provider_settings_are_user_isolated(
-    client: TestClient, db: Session
-) -> None:
+def test_provider_settings_are_user_isolated(client: TestClient, db: Session) -> None:
     _, headers_a = _auth(client, db)
     _, headers_b = _auth(client, db)
-    client.put(
-        _url(), headers=headers_a, json={"chat_api_key": "aaa-bbb-ccc-111"}
-    )
+    client.put(_url(), headers=headers_a, json={"chat_api_key": "aaa-bbb-ccc-111"})
 
     response = client.get(_url(), headers=headers_b)
     assert response.status_code == 200
@@ -127,16 +116,12 @@ def test_custom_base_url_without_key_does_not_leak_server_key(
     client: TestClient, db: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(settings, "LLM_API_KEY", "server-secret-key")
-    monkeypatch.setattr(
-        settings, "LLM_BASE_URL", "https://api.example.com/v1"
-    )
+    monkeypatch.setattr(settings, "LLM_BASE_URL", "https://api.example.com/v1")
     _, headers = _auth(client, db)
     client.put(
         _url(), headers=headers, json={"chat_base_url": "https://evil.example.com"}
     )
-    user_settings = load_user_provider_settings(
-        db, _current_user_id(client, headers)
-    )
+    user_settings = load_user_provider_settings(db, _current_user_id(client, headers))
     config = effective_chat_config(user_settings)
     assert config.base_url == "https://evil.example.com"
     assert config.api_key == ""
@@ -146,47 +131,68 @@ def test_server_key_used_when_endpoint_is_server_default(
     client: TestClient, db: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(settings, "LLM_API_KEY", "server-secret-key")
-    monkeypatch.setattr(
-        settings, "LLM_BASE_URL", "https://api.example.com/v1"
-    )
+    monkeypatch.setattr(settings, "LLM_BASE_URL", "https://api.example.com/v1")
     _, headers = _auth(client, db)
-    user_settings = load_user_provider_settings(
-        db, _current_user_id(client, headers)
-    )
+    user_settings = load_user_provider_settings(db, _current_user_id(client, headers))
     config = effective_chat_config(user_settings)
     assert config.api_key == "server-secret-key"
 
 
 def _current_user_id(client: TestClient, headers: dict[str, str]) -> str:
-    return client.get(
-        f"{settings.API_V1_STR}/users/me", headers=headers
-    ).json()["id"]
+    return client.get(f"{settings.API_V1_STR}/users/me", headers=headers).json()["id"]
 
 
 def test_user_usage_returns_accumulated_totals(client: TestClient, db: Session) -> None:
     user, headers = _auth(client, db)
     db.add(
-        UserUsage(user_id=user.id, chat_tokens=1234, embedding_chars=5678)
+        UserUsage(
+            user_id=user.id,
+            chat_tokens=1234,
+            embedding_chars=5678,
+            period_start=current_period(),
+        )
     )
     db.commit()
 
-    response = client.get(
-        f"{settings.API_V1_STR}/users/me/usage", headers=headers
-    )
+    response = client.get(f"{settings.API_V1_STR}/users/me/usage", headers=headers)
     assert response.status_code == 200
     body = response.json()
     assert body["chat_tokens"] == 1234
     assert body["embedding_chars"] == 5678
+    assert body["chat_quota"] == settings.FREE_QUOTA_CHAT_TOKENS
+    assert body["chat_source"] == "server"
+    assert body["embedding_quota"] == settings.FREE_QUOTA_EMBEDDING_CHARS
+    assert body["embedding_source"] == "server"
 
 
 def test_user_usage_defaults_to_zero(client: TestClient, db: Session) -> None:
     _, headers = _auth(client, db)
-    response = client.get(
-        f"{settings.API_V1_STR}/users/me/usage", headers=headers
-    )
+    response = client.get(f"{settings.API_V1_STR}/users/me/usage", headers=headers)
     assert response.status_code == 200
-    assert response.json()["chat_tokens"] == 0
-    assert response.json()["embedding_chars"] == 0
+    body = response.json()
+    assert body["chat_tokens"] == 0
+    assert body["embedding_chars"] == 0
+    assert body["chat_quota"] == settings.FREE_QUOTA_CHAT_TOKENS
+    assert body["chat_source"] == "server"
+
+
+def test_user_usage_unlimited_with_own_key(client: TestClient, db: Session) -> None:
+    user, headers = _auth(client, db)
+    client.put(
+        _url(),
+        headers=headers,
+        json={
+            "chat_api_key": "sk-my-own-key-123456",
+            "embedding_api_key": "embed-own-123",
+        },
+    )
+    response = client.get(f"{settings.API_V1_STR}/users/me/usage", headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["chat_quota"] is None
+    assert body["chat_source"] == "user"
+    assert body["embedding_quota"] is None
+    assert body["embedding_source"] == "user"
 
 
 def test_fetch_models_rejects_private_url(client: TestClient, db: Session) -> None:
@@ -217,7 +223,9 @@ def test_fetch_models_requires_auth(client: TestClient) -> None:
     assert response.status_code == 401
 
 
-def test_fetch_models_custom_base_url_requires_key(client: TestClient, db: Session) -> None:
+def test_fetch_models_custom_base_url_requires_key(
+    client: TestClient, db: Session
+) -> None:
     _, headers = _auth(client, db)
     response = client.post(
         _url() + "/models",

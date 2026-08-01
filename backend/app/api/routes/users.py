@@ -12,6 +12,7 @@ from app.api.deps import (
     get_current_active_superuser,
 )
 from app.core.config import settings
+from app.core.rate_limit import rate_limit
 from app.core.security import (
     decrypt_secret,
     encrypt_secret,
@@ -42,7 +43,7 @@ from app.services.provider_settings import (
     load_user_provider_settings,
     mask_secret,
 )
-from app.services.usage import get_usage
+from app.services.usage import quota_status
 from app.utils import generate_new_account_email, send_email
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -108,9 +109,7 @@ def update_user_me(
     if user_in.email:
         existing_user = crud.get_user_by_email(session=session, email=user_in.email)
         if existing_user and existing_user.id != current_user.id:
-            raise HTTPException(
-                status_code=409, detail="该邮箱的用户已存在"
-            )
+            raise HTTPException(status_code=409, detail="该邮箱的用户已存在")
     user_data = user_in.model_dump(exclude_unset=True)
     current_user.sqlmodel_update(user_data)
     session.add(current_user)
@@ -119,7 +118,11 @@ def update_user_me(
     return current_user
 
 
-@router.patch("/me/password", response_model=Message)
+@router.patch(
+    "/me/password",
+    response_model=Message,
+    dependencies=[Depends(rate_limit(limit=10, window=60))],
+)
 def update_password_me(
     *, session: SessionDep, body: UpdatePassword, current_user: CurrentUser
 ) -> Any:
@@ -130,9 +133,7 @@ def update_password_me(
     if not verified:
         raise HTTPException(status_code=400, detail="密码错误")
     if body.current_password == body.new_password:
-        raise HTTPException(
-            status_code=400, detail="新密码不能与当前密码相同"
-        )
+        raise HTTPException(status_code=400, detail="新密码不能与当前密码相同")
     hashed_password = get_password_hash(body.new_password)
     current_user.hashed_password = hashed_password
     session.add(current_user)
@@ -151,15 +152,19 @@ def read_user_me(current_user: CurrentUser) -> Any:
 @router.get("/me/usage", response_model=UserUsagePublic)
 def read_user_usage(session: SessionDep, current_user: CurrentUser) -> UserUsagePublic:
     """
-    Get the current user's accumulated model usage (chat tokens, embedding chars).
+    Get the current user's usage plus the free allowance that applies to each
+    dimension. `chat_quota`/`embedding_quota` are None when the user brings
+    their own API key or when nothing is configured.
     """
-    usage = get_usage(session, current_user.id)
-    if usage is None:
-        return UserUsagePublic(chat_tokens=0, embedding_chars=0)
+    status = quota_status(session, current_user.id)
     return UserUsagePublic(
-        chat_tokens=usage.chat_tokens,
-        embedding_chars=usage.embedding_chars,
-        updated_at=usage.updated_at,
+        chat_tokens=status.chat_tokens,
+        chat_quota=status.chat_quota,
+        chat_source=status.chat_source,
+        embedding_chars=status.embedding_chars,
+        embedding_quota=status.embedding_quota,
+        embedding_source=status.embedding_source,
+        period_start=status.period_start,
     )
 
 
@@ -169,9 +174,7 @@ def delete_user_me(session: SessionDep, current_user: CurrentUser) -> Any:
     Delete own user.
     """
     if current_user.is_superuser:
-        raise HTTPException(
-            status_code=403, detail="超级管理员不能删除自己"
-        )
+        raise HTTPException(status_code=403, detail="超级管理员不能删除自己")
     session.delete(current_user)
     session.commit()
     return Message(message="用户删除成功")
@@ -310,9 +313,7 @@ def fetch_available_models(
         ) from error
     data = payload.get("data", []) if isinstance(payload, dict) else None
     if not isinstance(data, list):
-        raise HTTPException(
-            status_code=502, detail="模型提供方返回了异常数据"
-        )
+        raise HTTPException(status_code=502, detail="模型提供方返回了异常数据")
     model_ids = [
         item.get("id")
         for item in data
@@ -323,7 +324,11 @@ def fetch_available_models(
     return [ModelInfoPublic(id=model_id) for model_id in model_ids]
 
 
-@router.post("/signup", response_model=UserPublic)
+@router.post(
+    "/signup",
+    response_model=UserPublic,
+    dependencies=[Depends(rate_limit(limit=5, window=60))],
+)
 def register_user(session: SessionDep, user_in: UserRegister) -> Any:
     """
     Create new user without the need to be logged in.
@@ -383,9 +388,7 @@ def update_user(
     if user_in.email:
         existing_user = crud.get_user_by_email(session=session, email=user_in.email)
         if existing_user and existing_user.id != user_id:
-            raise HTTPException(
-                status_code=409, detail="该邮箱的用户已存在"
-            )
+            raise HTTPException(status_code=409, detail="该邮箱的用户已存在")
 
     db_user = crud.update_user(session=session, db_user=db_user, user_in=user_in)
     return db_user
@@ -402,9 +405,7 @@ def delete_user(
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
     if user == current_user:
-        raise HTTPException(
-            status_code=403, detail="超级管理员不能删除自己"
-        )
+        raise HTTPException(status_code=403, detail="超级管理员不能删除自己")
     statement = delete(Item).where(col(Item.owner_id) == user_id)
     session.exec(statement)
     session.delete(user)

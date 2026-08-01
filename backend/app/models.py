@@ -129,6 +129,12 @@ class UserUsage(SQLModel, table=True):
     )
     chat_tokens: int = Field(default=0, ge=0)
     embedding_chars: int = Field(default=0, ge=0)
+    # Start of the current allowance period (calendar month). None means the
+    # counters have not been attached to a period yet and reset on first use.
+    period_start: datetime | None = Field(
+        default=None,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
     updated_at: datetime = Field(
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),  # type: ignore
@@ -136,9 +142,20 @@ class UserUsage(SQLModel, table=True):
 
 
 class UserUsagePublic(SQLModel):
+    """Usage counters plus the free allowance that applies to each dimension.
+
+    `chat_quota`/`embedding_quota` are None when the user brings their own API
+    key (unlimited) or when nothing is configured (cannot be used at all).
+    `*_source` tells the client who is billed: "server", "user" or "none".
+    """
+
     chat_tokens: int
+    chat_quota: int | None = None
+    chat_source: Literal["server", "user", "none"] = "none"
     embedding_chars: int
-    updated_at: datetime | None = None
+    embedding_quota: int | None = None
+    embedding_source: Literal["server", "user", "none"] = "none"
+    period_start: datetime | None = None
 
 
 class ModelFetchRequest(SQLModel):
@@ -231,7 +248,8 @@ class Notebook(NotebookBase, table=True):
     overview: str | None = Field(default=None)
     overview_topics: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     overview_updated_at: datetime | None = Field(
-        default=None, sa_type=DateTime(timezone=True)  # type: ignore
+        default=None,
+        sa_type=DateTime(timezone=True),  # type: ignore
     )
     is_pinned: bool = False
 
@@ -408,7 +426,10 @@ class ConversationMessage(SQLModel, table=True):
 class Citation(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     message_id: uuid.UUID = Field(
-        foreign_key="conversation_message.id", nullable=False, ondelete="CASCADE", index=True
+        foreign_key="conversation_message.id",
+        nullable=False,
+        ondelete="CASCADE",
+        index=True,
     )
     chunk_id: uuid.UUID = Field(
         foreign_key="chunk.id", nullable=False, ondelete="CASCADE", index=True

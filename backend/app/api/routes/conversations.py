@@ -32,7 +32,12 @@ from app.services.provider_settings import (
     effective_embedding_config,
     load_user_provider_settings,
 )
-from app.services.usage import record_usage
+from app.services.usage import (
+    QuotaError,
+    check_chat_quota,
+    check_embedding_quota,
+    record_usage,
+)
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -65,7 +70,9 @@ def citation_public(*, session: Session, citation: Citation) -> CitationPublic:
     )
 
 
-def conversation_detail(*, session: Session, conversation: Conversation) -> ConversationDetailPublic:
+def conversation_detail(
+    *, session: Session, conversation: Conversation
+) -> ConversationDetailPublic:
     messages = session.exec(
         select(ConversationMessage)
         .where(ConversationMessage.conversation_id == conversation.id)
@@ -85,7 +92,10 @@ def conversation_detail(*, session: Session, conversation: Conversation) -> Conv
                 content=message.content,
                 created_at=message.created_at,
                 suggestions=message.suggestions or [],
-                citations=[citation_public(session=session, citation=citation) for citation in citations],
+                citations=[
+                    citation_public(session=session, citation=citation)
+                    for citation in citations
+                ],
             )
         )
     return ConversationDetailPublic(
@@ -120,6 +130,12 @@ def persist_answer(
             if notebook
             else None
         )
+        if notebook:
+            # Block before spending any model call when the server-billed
+            # free allowance for this month is already exhausted.
+            check_chat_quota(session, notebook.owner_id, user_settings)
+            if mode != "knowledge":
+                check_embedding_quota(session, notebook.owner_id, user_settings)
         answer = answer_question(
             session=session,
             notebook_id=conversation.notebook_id,
@@ -215,16 +231,20 @@ async def stream_message(
                 source_ids=message_in.source_ids,
             )
         )
-    except (ChatError, EmbeddingError, RuntimeError) as error:
+    except (ChatError, EmbeddingError, QuotaError, RuntimeError) as error:
         yield ServerSentEvent(data={"message": str(error)}, event="error")
-        yield ServerSentEvent(data={"conversation_id": str(conversation_id)}, event="done")
+        yield ServerSentEvent(
+            data={"conversation_id": str(conversation_id)}, event="done"
+        )
         return
     except Exception as error:
         yield ServerSentEvent(
             data={"message": f"意外错误：{type(error).__name__}"},
             event="error",
         )
-        yield ServerSentEvent(data={"conversation_id": str(conversation_id)}, event="done")
+        yield ServerSentEvent(
+            data={"conversation_id": str(conversation_id)}, event="done"
+        )
         return
     for word in answer.content.split(" "):
         yield ServerSentEvent(data={"text": f"{word} "}, event="delta")

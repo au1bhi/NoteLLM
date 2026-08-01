@@ -59,6 +59,13 @@ class Settings(BaseSettings):
     EMBEDDING_API_KEY: str | None = None
     EMBEDDING_MODEL: str | None = None
     EMBEDDING_DIMENSIONS: int = 1024
+
+    # Free-tier allowance, applied only to usage billed to the server's own
+    # keys. Users who bring their own API key are not limited by these.
+    FREE_QUOTA_CHAT_TOKENS: int = 100_000
+    FREE_QUOTA_EMBEDDING_CHARS: int = 2_000_000
+    # Whether brute-force protection is active on auth endpoints.
+    RATE_LIMIT_ENABLED: bool = True
     POSTGRES_SERVER: str
     POSTGRES_PORT: int = 5432
     POSTGRES_USER: str

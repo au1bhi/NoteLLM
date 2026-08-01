@@ -113,9 +113,7 @@ def test_message_stream_forwards_answer_mode(
         captured.update(kwargs)
         return GroundedAnswer(content="Hybrid answer", citations=[])
 
-    monkeypatch.setattr(
-        "app.api.routes.conversations.persist_answer", fake_persist
-    )
+    monkeypatch.setattr("app.api.routes.conversations.persist_answer", fake_persist)
 
     response = client.post(
         f"{settings.API_V1_STR}/conversations/{conversation['id']}/messages/stream",

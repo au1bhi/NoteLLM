@@ -30,6 +30,17 @@ def client() -> Generator[TestClient]:
         yield c
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limits() -> Generator[None]:
+    """Auth endpoints are rate limited per IP; clear the counters so tests
+    never trip the limiter across repeated login/signup requests."""
+    from app.core import rate_limit
+
+    rate_limit.reset()
+    yield
+    rate_limit.reset()
+
+
 @pytest.fixture(scope="module")
 def superuser_token_headers(client: TestClient) -> dict[str, str]:
     return get_superuser_token_headers(client)

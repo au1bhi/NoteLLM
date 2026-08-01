@@ -37,7 +37,7 @@ def build_evidence(retrieved: list[RetrievedChunk]) -> str:
     return "\n\n".join(
         "\n".join(
             [
-                f"<source chunk_id=\"{result.chunk.id}\">",
+                f'<source chunk_id="{result.chunk.id}">',
                 f"source_name: {result.source_display_name}",
                 f"page_number: {result.chunk.page_number or 'not applicable'}",
                 "untrusted_source_text:",
@@ -91,9 +91,7 @@ Retrieved source chunks:
 """
 
 
-def build_suggestions_prompt(
-    *, question: str, retrieved: list[RetrievedChunk]
-) -> str:
+def build_suggestions_prompt(*, question: str, retrieved: list[RetrievedChunk]) -> str:
     evidence = build_evidence(retrieved)
     return f"""Based on the retrieved source chunks, propose {MAX_SUGGESTIONS} short, specific follow-up questions the user could ask next about this material. Each question should be 2-12 words.
 Return valid JSON with exactly one field: \"questions\" (an array of {MAX_SUGGESTIONS} strings).
@@ -181,7 +179,7 @@ def answer_question(
         model_answer = answer_future.result()
         try:
             suggestions = suggestions_future.result()
-        except (ChatError, AttributeError):
+        except ChatError, AttributeError:
             # Suggestions are best-effort; never fail the answer because of them.
             suggestions = []
     finally:

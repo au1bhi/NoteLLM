@@ -9,7 +9,9 @@ from tests.utils.user import authentication_token_from_email, create_random_user
 
 
 class FakeOverviewProvider:
-    def __init__(self, summary: str = "About the material.", topics: list[str] | None = None) -> None:
+    def __init__(
+        self, summary: str = "About the material.", topics: list[str] | None = None
+    ) -> None:
         self.summary = summary
         self.topics = topics if topics is not None else ["topic one"]
         self.calls = 0
@@ -19,7 +21,11 @@ class FakeOverviewProvider:
         return {"summary": self.summary, "topics": self.topics}
 
 
-def _add_ready_source(db: Session, notebook_id, content: str = "pgvector adds vector search to PostgreSQL.") -> Source:
+def _add_ready_source(
+    db: Session,
+    notebook_id,
+    content: str = "pgvector adds vector search to PostgreSQL.",
+) -> Source:
     source = Source(
         notebook_id=notebook_id,
         display_name="notes.txt",
@@ -77,7 +83,9 @@ def test_overview_generates_lazily_and_caches(
     assert provider.calls == 1
 
 
-def test_regenerate_overview(client: TestClient, db: Session, monkeypatch: MonkeyPatch) -> None:
+def test_regenerate_overview(
+    client: TestClient, db: Session, monkeypatch: MonkeyPatch
+) -> None:
     user = create_random_user(db)
     notebook = create_random_notebook(db=db, owner_id=user.id)
     headers = authentication_token_from_email(client=client, email=user.email, db=db)
@@ -118,7 +126,9 @@ def test_overview_empty_without_ready_sources(
     assert provider.calls == 0
 
 
-def test_generate_study_guide(client: TestClient, db: Session, monkeypatch: MonkeyPatch) -> None:
+def test_generate_study_guide(
+    client: TestClient, db: Session, monkeypatch: MonkeyPatch
+) -> None:
     user = create_random_user(db)
     notebook = create_random_notebook(db=db, owner_id=user.id)
     headers = authentication_token_from_email(client=client, email=user.email, db=db)

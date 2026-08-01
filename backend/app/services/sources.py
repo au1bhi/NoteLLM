@@ -14,7 +14,7 @@ from app.services.provider_settings import (
     effective_embedding_config,
     load_user_provider_settings,
 )
-from app.services.usage import record_usage
+from app.services.usage import QuotaError, check_embedding_quota, record_usage
 
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 150
@@ -170,6 +170,8 @@ def process_source(*, session: Session, source: Source) -> None:
             if notebook
             else None
         )
+        if notebook:
+            check_embedding_quota(session, notebook.owner_id, user_settings)
         embedding_provider = get_embedding_provider(
             effective_embedding_config(user_settings)
         )
@@ -177,7 +179,10 @@ def process_source(*, session: Session, source: Source) -> None:
             embedding
             for start in range(0, len(chunks), EMBEDDING_BATCH_SIZE)
             for embedding in embedding_provider.embed(
-                [chunk.content for chunk in chunks[start : start + EMBEDDING_BATCH_SIZE]]
+                [
+                    chunk.content
+                    for chunk in chunks[start : start + EMBEDDING_BATCH_SIZE]
+                ]
             )
         ]
         if notebook:
@@ -204,7 +209,13 @@ def process_source(*, session: Session, source: Source) -> None:
         )
         source.char_count = sum(len(page.text) for page in pages)
         source.processed_at = get_datetime_utc()
-    except (EmbeddingError, OSError, ValueError, fitz.FileDataError) as error:
+    except (
+        EmbeddingError,
+        OSError,
+        ValueError,
+        QuotaError,
+        fitz.FileDataError,
+    ) as error:
         mark_failed(str(error))
     except Exception as error:
         # Never leave the source stuck in "processing" on an unexpected error.

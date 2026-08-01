@@ -7,7 +7,9 @@ from app.core.config import settings
 from app.services.embeddings import EmbeddingError, get_embedding_provider
 
 
-def test_embedding_provider_requires_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_embedding_provider_requires_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(settings, "EMBEDDING_BASE_URL", None)
     monkeypatch.setattr(settings, "EMBEDDING_API_KEY", None)
     monkeypatch.setattr(settings, "EMBEDDING_MODEL", None)
@@ -34,7 +36,12 @@ def test_embedding_provider_orders_vectors_and_validates_dimensions(
         }
         return httpx.Response(
             200,
-            json={"data": [{"index": 1, "embedding": [2, 2]}, {"index": 0, "embedding": [1, 1]}]},
+            json={
+                "data": [
+                    {"index": 1, "embedding": [2, 2]},
+                    {"index": 0, "embedding": [1, 1]},
+                ]
+            },
             request=httpx.Request("POST", url),
         )
 

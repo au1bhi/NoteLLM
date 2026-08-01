@@ -38,9 +38,7 @@ def validate_outbound_url(base_url: str) -> str:
     value = base_url.strip()
     parsed = urlparse(value)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
-        raise HTTPException(
-            status_code=422, detail="base_url 必须是 http(s) URL"
-        )
+        raise HTTPException(status_code=422, detail="base_url 必须是 http(s) URL")
     if _is_private_or_local(parsed.hostname):
         raise HTTPException(
             status_code=422,

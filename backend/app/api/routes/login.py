@@ -9,6 +9,7 @@ from app import crud
 from app.api.deps import CurrentUser, SessionDep, get_current_active_superuser
 from app.core import security
 from app.core.config import settings
+from app.core.rate_limit import rate_limit
 from app.models import Message, NewPassword, Token, UserPublic, UserUpdate
 from app.utils import (
     generate_password_reset_token,
@@ -20,7 +21,10 @@ from app.utils import (
 router = APIRouter(tags=["login"])
 
 
-@router.post("/login/access-token")
+@router.post(
+    "/login/access-token",
+    dependencies=[Depends(rate_limit(limit=20, window=60))],
+)
 def login_access_token(
     session: SessionDep, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
 ) -> Token:
@@ -50,7 +54,10 @@ def test_token(current_user: CurrentUser) -> Any:
     return current_user
 
 
-@router.post("/password-recovery/{email}")
+@router.post(
+    "/password-recovery/{email}",
+    dependencies=[Depends(rate_limit(limit=5, window=60))],
+)
 def recover_password(email: str, session: SessionDep) -> Message:
     """
     Password Recovery
@@ -69,12 +76,13 @@ def recover_password(email: str, session: SessionDep) -> Message:
             subject=email_data.subject,
             html_content=email_data.html_content,
         )
-    return Message(
-        message="如果该邮箱已注册，我们已发送密码重置链接"
-    )
+    return Message(message="如果该邮箱已注册，我们已发送密码重置链接")
 
 
-@router.post("/reset-password/")
+@router.post(
+    "/reset-password/",
+    dependencies=[Depends(rate_limit(limit=10, window=60))],
+)
 def reset_password(session: SessionDep, body: NewPassword) -> Message:
     """
     Reset password

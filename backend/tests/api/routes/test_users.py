@@ -311,9 +311,7 @@ def test_update_password_me_same_password_error(
     )
     assert r.status_code == 400
     updated_user = r.json()
-    assert (
-        updated_user["detail"] == "新密码不能与当前密码相同"
-    )
+    assert updated_user["detail"] == "新密码不能与当前密码相同"
 
 
 def test_register_user(client: TestClient, db: Session) -> None:
@@ -448,9 +446,7 @@ def test_delete_user_me(client: TestClient, db: Session) -> None:
     assert user_db is None
 
 
-def test_token_for_deleted_user_returns_401(
-    client: TestClient, db: Session
-) -> None:
+def test_token_for_deleted_user_returns_401(client: TestClient, db: Session) -> None:
     username = random_email()
     password = random_lower_string()
     user_in = UserCreate(email=username, password=password)

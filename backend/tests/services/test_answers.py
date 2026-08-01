@@ -17,7 +17,9 @@ class FakeEmbeddingProvider:
 
 
 class FakeChatProvider:
-    def __init__(self, answer: ModelAnswer, suggestions: list[str] | None = None) -> None:
+    def __init__(
+        self, answer: ModelAnswer, suggestions: list[str] | None = None
+    ) -> None:
         self.answer_result = answer
         self.suggestions = suggestions if suggestions is not None else []
 
@@ -36,8 +38,16 @@ class FakeChatProvider:
 def test_answer_discards_citations_not_in_retrieved_set(
     monkeypatch: MonkeyPatch,
 ) -> None:
-    chunk = Chunk(source_id=uuid.uuid4(), ordinal=0, content="Verified evidence", char_start=0, char_end=17)
-    retrieved = [RetrievedChunk(chunk=chunk, score=0.9, source_display_name="notes.txt")]
+    chunk = Chunk(
+        source_id=uuid.uuid4(),
+        ordinal=0,
+        content="Verified evidence",
+        char_start=0,
+        char_end=17,
+    )
+    retrieved = [
+        RetrievedChunk(chunk=chunk, score=0.9, source_display_name="notes.txt")
+    ]
     monkeypatch.setattr("app.services.answers.retrieve_chunks", lambda **_: retrieved)
 
     answer = answer_question(
@@ -46,7 +56,9 @@ def test_answer_discards_citations_not_in_retrieved_set(
         query="What is verified?",
         embedding_provider=FakeEmbeddingProvider(),
         chat_provider=FakeChatProvider(
-            ModelAnswer(content="A made-up answer", citation_chunk_ids=[str(uuid.uuid4())])
+            ModelAnswer(
+                content="A made-up answer", citation_chunk_ids=[str(uuid.uuid4())]
+            )
         ),
     )
 
@@ -55,8 +67,16 @@ def test_answer_discards_citations_not_in_retrieved_set(
 
 
 def test_answer_persists_only_retrieved_citation(monkeypatch: MonkeyPatch) -> None:
-    chunk = Chunk(source_id=uuid.uuid4(), ordinal=0, content="Verified evidence", char_start=0, char_end=17)
-    retrieved = [RetrievedChunk(chunk=chunk, score=0.9, source_display_name="notes.txt")]
+    chunk = Chunk(
+        source_id=uuid.uuid4(),
+        ordinal=0,
+        content="Verified evidence",
+        char_start=0,
+        char_end=17,
+    )
+    retrieved = [
+        RetrievedChunk(chunk=chunk, score=0.9, source_display_name="notes.txt")
+    ]
     monkeypatch.setattr("app.services.answers.retrieve_chunks", lambda **_: retrieved)
 
     answer = answer_question(
@@ -105,9 +125,7 @@ def test_knowledge_mode_skips_retrieval_and_returns_answer(
 def test_hybrid_mode_answers_from_knowledge_without_evidence(
     monkeypatch: MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(
-        "app.services.answers.retrieve_chunks", lambda **_: []
-    )
+    monkeypatch.setattr("app.services.answers.retrieve_chunks", lambda **_: [])
 
     answer = answer_question(
         session=cast(Session, None),
@@ -137,7 +155,9 @@ def test_hybrid_mode_keeps_answer_when_model_cites_nothing(
         char_start=0,
         char_end=52,
     )
-    retrieved = [RetrievedChunk(chunk=chunk, score=0.8, source_display_name="notes.txt")]
+    retrieved = [
+        RetrievedChunk(chunk=chunk, score=0.8, source_display_name="notes.txt")
+    ]
     monkeypatch.setattr("app.services.answers.retrieve_chunks", lambda **_: retrieved)
 
     answer = answer_question(
@@ -166,7 +186,9 @@ def test_answer_includes_suggestions(monkeypatch: MonkeyPatch) -> None:
         char_start=0,
         char_end=17,
     )
-    retrieved = [RetrievedChunk(chunk=chunk, score=0.9, source_display_name="notes.txt")]
+    retrieved = [
+        RetrievedChunk(chunk=chunk, score=0.9, source_display_name="notes.txt")
+    ]
     monkeypatch.setattr("app.services.answers.retrieve_chunks", lambda **_: retrieved)
 
     answer = answer_question(
@@ -195,7 +217,9 @@ def test_suggestions_are_best_effort_on_failure(monkeypatch: MonkeyPatch) -> Non
         char_start=0,
         char_end=17,
     )
-    retrieved = [RetrievedChunk(chunk=chunk, score=0.9, source_display_name="notes.txt")]
+    retrieved = [
+        RetrievedChunk(chunk=chunk, score=0.9, source_display_name="notes.txt")
+    ]
     monkeypatch.setattr("app.services.answers.retrieve_chunks", lambda **_: retrieved)
 
     class BrokenSuggestionsProvider(FakeChatProvider):

@@ -29,10 +29,22 @@ def load_user_provider_settings(
     session: Session, user_id: uuid.UUID
 ) -> UserProviderSettings | None:
     return session.exec(
-        select(UserProviderSettings).where(
-            UserProviderSettings.user_id == user_id
-        )
+        select(UserProviderSettings).where(UserProviderSettings.user_id == user_id)
     ).first()
+
+
+def has_own_chat_key(user_settings: UserProviderSettings | None) -> bool:
+    """True when the user configured their own (decryptable) chat API key."""
+    if user_settings is None or not user_settings.chat_api_key:
+        return False
+    return bool(decrypt_secret(user_settings.chat_api_key))
+
+
+def has_own_embedding_key(user_settings: UserProviderSettings | None) -> bool:
+    """True when the user configured their own (decryptable) embedding key."""
+    if user_settings is None or not user_settings.embedding_api_key:
+        return False
+    return bool(decrypt_secret(user_settings.embedding_api_key))
 
 
 def _first(*values: str | None) -> str:

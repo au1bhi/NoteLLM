@@ -20,11 +20,7 @@ class OpenAICompatibleEmbeddingProvider:
         self.config = config
 
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
-        if (
-            not self.config.base_url
-            or not self.config.api_key
-            or not self.config.model
-        ):
+        if not self.config.base_url or not self.config.api_key or not self.config.model:
             raise EmbeddingError(
                 "Embedding is not configured. Add your API key in Settings, or "
                 "set EMBEDDING_BASE_URL, EMBEDDING_API_KEY, and EMBEDDING_MODEL "
@@ -45,7 +41,10 @@ class OpenAICompatibleEmbeddingProvider:
             )
             response.raise_for_status()
             data = response.json()["data"]
-            vectors = [item["embedding"] for item in sorted(data, key=lambda item: item["index"])]
+            vectors = [
+                item["embedding"]
+                for item in sorted(data, key=lambda item: item["index"])
+            ]
         except (httpx.HTTPError, KeyError, TypeError, ValueError) as error:
             raise EmbeddingError("嵌入模型未返回有效向量") from error
 

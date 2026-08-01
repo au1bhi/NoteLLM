@@ -42,7 +42,12 @@ from app.services.sources import (
     process_source,
 )
 from app.services.study_guide import generate_study_guide
-from app.services.usage import record_usage
+from app.services.usage import (
+    QuotaError,
+    check_chat_quota,
+    check_embedding_quota,
+    record_usage,
+)
 
 router = APIRouter(prefix="/notebooks", tags=["notebooks"])
 
@@ -184,10 +189,15 @@ def read_conversations(
         .where(Conversation.notebook_id == notebook_id)
     ).one()
     conversations = session.exec(
-        statement.order_by(col(Conversation.updated_at).desc()).offset(skip).limit(limit)
+        statement.order_by(col(Conversation.updated_at).desc())
+        .offset(skip)
+        .limit(limit)
     ).all()
     return ConversationsPublic(
-        data=[ConversationPublic.model_validate(conversation) for conversation in conversations],
+        data=[
+            ConversationPublic.model_validate(conversation)
+            for conversation in conversations
+        ],
         count=count,
     )
 
@@ -224,6 +234,7 @@ def search_notebook(
     )
     try:
         user_settings = load_user_provider_settings(session, current_user.id)
+        check_embedding_quota(session, current_user.id, user_settings)
         retrieved = retrieve_chunks(
             session=session,
             embedding_provider=get_embedding_provider(
@@ -235,6 +246,8 @@ def search_notebook(
         )
     except EmbeddingError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
+    except QuotaError as error:
+        raise HTTPException(status_code=429, detail=str(error)) from error
     record_usage(
         session=session,
         user_id=current_user.id,
@@ -269,11 +282,13 @@ def _generate_and_store_overview(
     user_settings = load_user_provider_settings(session, current_user.id)
     chat_provider = get_chat_provider(effective_chat_config(user_settings))
     try:
+        check_chat_quota(session, current_user.id, user_settings)
         overview = generate_overview(
             session=session, notebook_id=notebook.id, chat_provider=chat_provider
         )
-    except ChatError as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
+    except (ChatError, QuotaError) as error:
+        status_code = 429 if isinstance(error, QuotaError) else 503
+        raise HTTPException(status_code=status_code, detail=str(error)) from error
     store_overview(session=session, notebook=notebook, overview=overview)
     record_usage(
         session=session,
@@ -303,7 +318,9 @@ def read_notebook_overview(
     )
 
 
-@router.post("/{notebook_id}/overview/regenerate", response_model=NotebookOverviewPublic)
+@router.post(
+    "/{notebook_id}/overview/regenerate", response_model=NotebookOverviewPublic
+)
 def regenerate_notebook_overview(
     notebook_id: uuid.UUID,
     session: SessionDep,
@@ -335,11 +352,13 @@ def generate_notebook_study_guide(
     user_settings = load_user_provider_settings(session, current_user.id)
     chat_provider = get_chat_provider(effective_chat_config(user_settings))
     try:
+        check_chat_quota(session, current_user.id, user_settings)
         guide = generate_study_guide(
             session=session, notebook_id=notebook_id, chat_provider=chat_provider
         )
-    except ChatError as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
+    except (ChatError, QuotaError) as error:
+        status_code = 429 if isinstance(error, QuotaError) else 503
+        raise HTTPException(status_code=status_code, detail=str(error)) from error
     record_usage(
         session=session,
         user_id=current_user.id,
@@ -367,6 +386,11 @@ async def upload_source(
     notebook = get_notebook_or_404(
         session=session, current_user=current_user, notebook_id=notebook_id
     )
+    user_settings = load_user_provider_settings(session, current_user.id)
+    try:
+        check_embedding_quota(session, current_user.id, user_settings)
+    except QuotaError as error:
+        raise HTTPException(status_code=429, detail=str(error)) from error
     created = await create_source_from_upload(
         session=session, notebook=notebook, upload=file
     )

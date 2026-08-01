@@ -18,7 +18,10 @@ from tests.utils.user import (
 
 class FakeEmbeddingProvider(EmbeddingProvider):
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
-        return [[float(index)] * settings.EMBEDDING_DIMENSIONS for index, _ in enumerate(texts)]
+        return [
+            [float(index)] * settings.EMBEDDING_DIMENSIONS
+            for index, _ in enumerate(texts)
+        ]
 
 
 def create_notebook(client: TestClient, headers: dict[str, str]) -> dict[str, object]:
@@ -109,9 +112,7 @@ def test_process_source_uses_user_embedding_key(
     tmp_path: Path,
 ) -> None:
     user = create_random_user(db)
-    headers = authentication_token_from_email(
-        client=client, email=user.email, db=db
-    )
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
     db.add(
         UserProviderSettings(
             user_id=user.id,
@@ -129,9 +130,7 @@ def test_process_source_uses_user_embedding_key(
         captured["config"] = _config
         return FakeEmbeddingProvider()
 
-    monkeypatch.setattr(
-        "app.services.sources.get_embedding_provider", fake_provider
-    )
+    monkeypatch.setattr("app.services.sources.get_embedding_provider", fake_provider)
 
     notebook = create_notebook(client, headers)
     content = "User-provided embedding key. " * 40
