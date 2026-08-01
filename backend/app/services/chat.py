@@ -56,14 +56,14 @@ class OpenAICompatibleChatProvider:
             payload = response.json()
             content = payload["choices"][0]["message"]["content"]
             if not isinstance(content, str):
-                raise ChatError("The chat provider did not return a valid response")
+                raise ChatError("对话模型未返回有效响应")
             usage = payload.get("usage")
             if isinstance(usage, dict):
                 tokens = usage.get("total_tokens")
                 if isinstance(tokens, (int, float)):
                     self.total_tokens_used += int(tokens)
         except (httpx.HTTPError, KeyError, TypeError, ValueError, IndexError) as error:
-            raise ChatError("The chat provider did not return a valid response") from error
+            raise ChatError("对话模型未返回有效响应") from error
         return content
 
     def complete_json(self, *, prompt: str) -> dict[str, object]:
@@ -71,9 +71,9 @@ class OpenAICompatibleChatProvider:
         try:
             parsed = json.loads(self._chat(prompt=prompt))
         except (json.JSONDecodeError, ChatError) as error:
-            raise ChatError("The chat provider did not return valid JSON") from error
+            raise ChatError("对话模型未返回有效 JSON") from error
         if not isinstance(parsed, dict):
-            raise ChatError("The chat provider did not return a JSON object")
+            raise ChatError("对话模型未返回 JSON 对象")
         return parsed
 
     def answer(self, *, prompt: str) -> ModelAnswer:
@@ -81,11 +81,11 @@ class OpenAICompatibleChatProvider:
         raw_answer = data.get("answer")
         raw_citations = data.get("citations", [])
         if not isinstance(raw_answer, str) or not raw_answer.strip():
-            raise ChatError("The chat provider returned an invalid answer format")
+            raise ChatError("对话模型返回的答案格式无效")
         if not isinstance(raw_citations, list) or not all(
             isinstance(citation, str) for citation in raw_citations
         ):
-            raise ChatError("The chat provider returned an invalid answer format")
+            raise ChatError("对话模型返回的答案格式无效")
         return ModelAnswer(
             content=raw_answer.strip(),
             citation_chunk_ids=[citation for citation in raw_citations if isinstance(citation, str)],

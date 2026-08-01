@@ -16,6 +16,7 @@ import {
 import { LoadingButton } from "@/components/ui/loading-button"
 import useCustomToast from "@/hooks/useCustomToast"
 import { type Notebook, notebooksApi } from "@/services/notebooks"
+import { extractErrorMessage } from "@/utils"
 
 interface DeleteNotebookProps {
   notebook: Notebook
@@ -33,7 +34,7 @@ export function DeleteNotebook({
   const { showErrorToast, showSuccessToast } = useCustomToast()
   const mutation = useMutation({
     mutationFn: () => notebooksApi.delete(notebook.id),
-    onError: (error: Error) => showErrorToast(error.message),
+    onError: (error: Error) => showErrorToast(extractErrorMessage(error)),
     onSuccess: () => {
       setIsOpen(false)
       showSuccessToast("笔记本已删除")

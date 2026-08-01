@@ -1,24 +1,33 @@
 import { AxiosError } from "axios"
-import type { ApiError } from "./client"
+import { ApiError } from "./client"
 
-function extractErrorMessage(err: ApiError): string {
-  if (err instanceof AxiosError) {
+/**
+ * Extract a user-facing error message, preferring the backend's Chinese
+ * `detail` over the HTTP status phrase used by the generated client.
+ */
+export function extractErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    const detail = (err.body as { detail?: unknown } | undefined)?.detail
+    if (typeof detail === "string" && detail) return detail
+    if (Array.isArray(detail) && detail.length > 0) {
+      const first = detail[0] as { msg?: unknown }
+      if (typeof first?.msg === "string") return first.msg
+    }
+  }
+  if (err instanceof AxiosError && err.message) {
     return err.message
   }
-
-  const errDetail = (err.body as any)?.detail
-  if (Array.isArray(errDetail) && errDetail.length > 0) {
-    return errDetail[0].msg
+  if (err instanceof Error && err.message) {
+    return err.message
   }
-  return errDetail || "出了点问题。"
+  return "出了点问题。"
 }
 
 export const handleError = function (
   this: (msg: string) => void,
   err: ApiError,
 ) {
-  const errorMessage = extractErrorMessage(err)
-  this(errorMessage)
+  this(extractErrorMessage(err))
 }
 
 export const getInitials = (name: string): string => {

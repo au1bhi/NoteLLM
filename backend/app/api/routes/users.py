@@ -81,7 +81,7 @@ def create_user(*, session: SessionDep, user_in: UserCreate) -> Any:
     if user:
         raise HTTPException(
             status_code=400,
-            detail="The user with this email already exists in the system.",
+            detail="该邮箱的用户已存在于系统中。",
         )
 
     user = crud.create_user(session=session, user_create=user_in)
@@ -109,7 +109,7 @@ def update_user_me(
         existing_user = crud.get_user_by_email(session=session, email=user_in.email)
         if existing_user and existing_user.id != current_user.id:
             raise HTTPException(
-                status_code=409, detail="User with this email already exists"
+                status_code=409, detail="该邮箱的用户已存在"
             )
     user_data = user_in.model_dump(exclude_unset=True)
     current_user.sqlmodel_update(user_data)
@@ -128,16 +128,16 @@ def update_password_me(
     """
     verified, _ = verify_password(body.current_password, current_user.hashed_password)
     if not verified:
-        raise HTTPException(status_code=400, detail="Incorrect password")
+        raise HTTPException(status_code=400, detail="密码错误")
     if body.current_password == body.new_password:
         raise HTTPException(
-            status_code=400, detail="New password cannot be the same as the current one"
+            status_code=400, detail="新密码不能与当前密码相同"
         )
     hashed_password = get_password_hash(body.new_password)
     current_user.hashed_password = hashed_password
     session.add(current_user)
     session.commit()
-    return Message(message="Password updated successfully")
+    return Message(message="密码更新成功")
 
 
 @router.get("/me", response_model=UserPublic)
@@ -170,11 +170,11 @@ def delete_user_me(session: SessionDep, current_user: CurrentUser) -> Any:
     """
     if current_user.is_superuser:
         raise HTTPException(
-            status_code=403, detail="Super users are not allowed to delete themselves"
+            status_code=403, detail="超级管理员不能删除自己"
         )
     session.delete(current_user)
     session.commit()
-    return Message(message="User deleted successfully")
+    return Message(message="用户删除成功")
 
 
 def _provider_settings_public(
@@ -259,7 +259,7 @@ def delete_user_provider_settings(
     if settings_row is not None:
         session.delete(settings_row)
         session.commit()
-    return Message(message="Provider settings cleared")
+    return Message(message="已清除模型配置")
 
 
 @router.post(
@@ -293,7 +293,7 @@ def fetch_available_models(
     if not base_url or not api_key:
         raise HTTPException(
             status_code=422,
-            detail="Configure an API key first, or set one on the server",
+            detail="请先配置 API Key，或使用服务端默认配置",
         )
     try:
         response = httpx.get(
@@ -311,7 +311,7 @@ def fetch_available_models(
     data = payload.get("data", []) if isinstance(payload, dict) else None
     if not isinstance(data, list):
         raise HTTPException(
-            status_code=502, detail="The provider returned an unexpected models payload"
+            status_code=502, detail="模型提供方返回了异常数据"
         )
     model_ids = [
         item.get("id")
@@ -319,7 +319,7 @@ def fetch_available_models(
         if isinstance(item, dict) and isinstance(item.get("id"), str)
     ][:100]
     if not model_ids:
-        raise HTTPException(status_code=502, detail="The provider returned no models")
+        raise HTTPException(status_code=502, detail="模型提供方未返回任何模型")
     return [ModelInfoPublic(id=model_id) for model_id in model_ids]
 
 
@@ -332,7 +332,7 @@ def register_user(session: SessionDep, user_in: UserRegister) -> Any:
     if user:
         raise HTTPException(
             status_code=400,
-            detail="The user with this email already exists in the system",
+            detail="该邮箱的用户已存在于系统中",
         )
     user_create = UserCreate.model_validate(user_in)
     user = crud.create_user(session=session, user_create=user_create)
@@ -352,10 +352,10 @@ def read_user_by_id(
     if not current_user.is_superuser:
         raise HTTPException(
             status_code=403,
-            detail="The user doesn't have enough privileges",
+            detail="该用户权限不足",
         )
     if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="用户不存在")
     return user
 
 
@@ -378,13 +378,13 @@ def update_user(
     if not db_user:
         raise HTTPException(
             status_code=404,
-            detail="The user with this id does not exist in the system",
+            detail="系统中不存在该 ID 的用户",
         )
     if user_in.email:
         existing_user = crud.get_user_by_email(session=session, email=user_in.email)
         if existing_user and existing_user.id != user_id:
             raise HTTPException(
-                status_code=409, detail="User with this email already exists"
+                status_code=409, detail="该邮箱的用户已存在"
             )
 
     db_user = crud.update_user(session=session, db_user=db_user, user_in=user_in)
@@ -400,13 +400,13 @@ def delete_user(
     """
     user = session.get(User, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail="用户不存在")
     if user == current_user:
         raise HTTPException(
-            status_code=403, detail="Super users are not allowed to delete themselves"
+            status_code=403, detail="超级管理员不能删除自己"
         )
     statement = delete(Item).where(col(Item.owner_id) == user_id)
     session.exec(statement)
     session.delete(user)
     session.commit()
-    return Message(message="User deleted successfully")
+    return Message(message="用户删除成功")

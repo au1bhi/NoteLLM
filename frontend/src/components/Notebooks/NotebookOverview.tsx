@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import useCustomToast from "@/hooks/useCustomToast"
 import { cn } from "@/lib/utils"
 import { notebooksApi } from "@/services/notebooks"
+import { extractErrorMessage } from "@/utils"
 
 interface NotebookOverviewProps {
   notebookId: string
@@ -69,7 +70,7 @@ export function NotebookOverview({
       ) : null}
       {error ? (
         <p className="mt-4 text-sm text-destructive">
-          {(error as Error).message}
+          {extractErrorMessage(error)}
         </p>
       ) : null}
       {data?.summary ? (

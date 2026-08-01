@@ -31,6 +31,7 @@ import {
   conversationsApi,
 } from "@/services/conversations"
 import { notebooksApi } from "@/services/notebooks"
+import { extractErrorMessage } from "@/utils"
 
 export const Route = createFileRoute("/_layout/notebooks/$notebookId")({
   component: NotebookWorkspace,
@@ -93,7 +94,7 @@ function NotebookWorkspace() {
 
   const createConversationMutation = useMutation({
     mutationFn: () => conversationsApi.create(notebookId),
-    onError: (error: Error) => showErrorToast(error.message),
+    onError: (error: Error) => showErrorToast(extractErrorMessage(error)),
     onSuccess: (created) => {
       setConversationId(created.id)
       queryClient.invalidateQueries({
@@ -103,7 +104,7 @@ function NotebookWorkspace() {
   })
   const uploadMutation = useMutation({
     mutationFn: (file: File) => notebooksApi.uploadSource(notebookId, file),
-    onError: (error: Error) => showErrorToast(error.message),
+    onError: (error: Error) => showErrorToast(extractErrorMessage(error)),
     onSuccess: (source) => {
       if (source.status === "ready") {
         showSuccessToast("资料处理完成")
@@ -125,7 +126,7 @@ function NotebookWorkspace() {
   const deleteMutation = useMutation({
     mutationFn: (sourceId: string) =>
       notebooksApi.deleteSource(notebookId, sourceId),
-    onError: (error: Error) => showErrorToast(error.message),
+    onError: (error: Error) => showErrorToast(extractErrorMessage(error)),
     onSuccess: () => showSuccessToast("资料已删除"),
     onSettled: () => {
       queryClient.invalidateQueries({
@@ -139,7 +140,7 @@ function NotebookWorkspace() {
   const retryMutation = useMutation({
     mutationFn: (sourceId: string) =>
       notebooksApi.retrySource(notebookId, sourceId),
-    onError: (error: Error) => showErrorToast(error.message),
+    onError: (error: Error) => showErrorToast(extractErrorMessage(error)),
     onSuccess: (source) => {
       if (source.status === "ready") {
         showSuccessToast("资料处理完成")
@@ -166,7 +167,7 @@ function NotebookWorkspace() {
       conversationId: string
       title: string
     }) => conversationsApi.update(conversationId, { title }),
-    onError: (error: Error) => showErrorToast(error.message),
+    onError: (error: Error) => showErrorToast(extractErrorMessage(error)),
     onSuccess: (_, variables) => {
       showSuccessToast("会话已重命名")
       queryClient.invalidateQueries({
@@ -185,7 +186,7 @@ function NotebookWorkspace() {
       conversationId: string
       isPinned: boolean
     }) => conversationsApi.update(conversationId, { is_pinned: isPinned }),
-    onError: (error: Error) => showErrorToast(error.message),
+    onError: (error: Error) => showErrorToast(extractErrorMessage(error)),
     onSettled: () =>
       queryClient.invalidateQueries({
         queryKey: ["notebooks", notebookId, "conversations"],
@@ -225,7 +226,7 @@ function NotebookWorkspace() {
         queryKey: ["notebooks", notebookId, "conversations"],
       })
     } catch (error) {
-      showErrorToast(error instanceof Error ? error.message : "回答失败")
+      showErrorToast(extractErrorMessage(error))
       await queryClient.invalidateQueries({
         queryKey: ["conversations", conversationId],
       })
@@ -256,7 +257,7 @@ function NotebookWorkspace() {
   if (notebook.error) {
     return (
       <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-        {notebook.error.message}
+        {extractErrorMessage(notebook.error)}
       </p>
     )
   }
@@ -275,7 +276,7 @@ function NotebookWorkspace() {
       isLoading={sources.isLoading}
       isError={Boolean(sources.error)}
       errorMessage={
-        sources.error instanceof Error ? sources.error.message : undefined
+        sources.error ? extractErrorMessage(sources.error) : undefined
       }
       isUploading={uploadMutation.isPending}
       isDeleting={deleteMutation.isPending}
@@ -396,9 +397,7 @@ function NotebookWorkspace() {
               isLoading={sources.isLoading}
               isError={Boolean(sources.error)}
               errorMessage={
-                sources.error instanceof Error
-                  ? sources.error.message
-                  : undefined
+                sources.error ? extractErrorMessage(sources.error) : undefined
               }
               isUploading={uploadMutation.isPending}
               isDeleting={deleteMutation.isPending}

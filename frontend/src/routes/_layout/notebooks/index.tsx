@@ -6,7 +6,7 @@ import { AddNotebook } from "@/components/Notebooks/AddNotebook"
 import { NotebookCard } from "@/components/Notebooks/NotebookCard"
 import { Skeleton } from "@/components/ui/skeleton"
 import { notebooksApi } from "@/services/notebooks"
-import { sortPinnedFirst } from "@/utils"
+import { extractErrorMessage, sortPinnedFirst } from "@/utils"
 
 export const Route = createFileRoute("/_layout/notebooks/")({
   component: Notebooks,
@@ -42,7 +42,7 @@ function Notebooks() {
       ) : null}
       {error ? (
         <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-          {error.message}
+          {extractErrorMessage(error)}
         </p>
       ) : null}
 

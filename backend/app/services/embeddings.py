@@ -47,13 +47,13 @@ class OpenAICompatibleEmbeddingProvider:
             data = response.json()["data"]
             vectors = [item["embedding"] for item in sorted(data, key=lambda item: item["index"])]
         except (httpx.HTTPError, KeyError, TypeError, ValueError) as error:
-            raise EmbeddingError("The embedding provider did not return valid vectors") from error
+            raise EmbeddingError("嵌入模型未返回有效向量") from error
 
         if len(vectors) != len(texts) or any(
             len(vector) != settings.EMBEDDING_DIMENSIONS for vector in vectors
         ):
             raise EmbeddingError(
-                f"The embedding provider must return {settings.EMBEDDING_DIMENSIONS}-dimension vectors"
+                f"嵌入模型必须返回 {settings.EMBEDDING_DIMENSIONS} 维向量"
             )
         return [[float(value) for value in vector] for vector in vectors]
 

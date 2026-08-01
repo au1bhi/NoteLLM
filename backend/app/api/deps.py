@@ -36,17 +36,17 @@ def get_current_user(session: SessionDep, token: TokenDep) -> User:
     except (InvalidTokenError, ValidationError):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Could not validate credentials",
+            detail="无法验证凭据",
         )
     user = session.get(User, token_data.sub)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
+            detail="用户不存在",
             headers={"WWW-Authenticate": "Bearer"},
         )
     if not user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
+        raise HTTPException(status_code=400, detail="用户已停用")
     return user
 
 
@@ -56,6 +56,6 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 def get_current_active_superuser(current_user: CurrentUser) -> User:
     if not current_user.is_superuser:
         raise HTTPException(
-            status_code=403, detail="The user doesn't have enough privileges"
+            status_code=403, detail="该用户权限不足"
         )
     return current_user

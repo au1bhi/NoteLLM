@@ -47,7 +47,7 @@ def get_conversation_or_404(
         .where(Notebook.owner_id == current_user.id)
     ).first()
     if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+        raise HTTPException(status_code=404, detail="会话不存在")
     return conversation
 
 
@@ -185,7 +185,7 @@ def update_conversation(
     )
     if conversation_in.title is not None:
         if not conversation_in.title.strip():
-            raise HTTPException(status_code=422, detail="Title cannot be empty")
+            raise HTTPException(status_code=422, detail="标题不能为空")
         conversation.title = conversation_in.title.strip()
         conversation.updated_at = get_datetime_utc()
     if conversation_in.is_pinned is not None:
@@ -221,7 +221,7 @@ async def stream_message(
         return
     except Exception as error:
         yield ServerSentEvent(
-            data={"message": f"Unexpected error: {type(error).__name__}"},
+            data={"message": f"意外错误：{type(error).__name__}"},
             event="error",
         )
         yield ServerSentEvent(data={"conversation_id": str(conversation_id)}, event="done")

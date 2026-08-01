@@ -29,6 +29,7 @@ import { LoadingButton } from "@/components/ui/loading-button"
 import { PasswordInput } from "@/components/ui/password-input"
 import useCustomToast from "@/hooks/useCustomToast"
 import { providerSettingsApi } from "@/services/provider-settings"
+import { extractErrorMessage } from "@/utils"
 import { ModelPicker } from "./ModelPicker"
 
 const formSchema = z.object({
@@ -158,7 +159,7 @@ export function ProviderSettings() {
 
   const saveMutation = useMutation({
     mutationFn: providerSettingsApi.update,
-    onError: (error: Error) => showErrorToast(error.message),
+    onError: (error: Error) => showErrorToast(extractErrorMessage(error)),
     onSuccess: () => {
       showSuccessToast("模型配置已保存")
       queryClient.invalidateQueries({ queryKey: ["provider-settings"] })
@@ -166,7 +167,7 @@ export function ProviderSettings() {
   })
   const clearMutation = useMutation({
     mutationFn: providerSettingsApi.clear,
-    onError: (error: Error) => showErrorToast(error.message),
+    onError: (error: Error) => showErrorToast(extractErrorMessage(error)),
     onSuccess: () => {
       setClearOpen(false)
       form.reset(EMPTY_FORM)

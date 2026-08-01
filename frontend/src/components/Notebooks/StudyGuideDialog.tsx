@@ -17,6 +17,7 @@ import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import useCustomToast from "@/hooks/useCustomToast"
 import { cn } from "@/lib/utils"
 import { notebooksApi } from "@/services/notebooks"
+import { extractErrorMessage } from "@/utils"
 import { Markdown } from "./Markdown"
 
 function guideToMarkdown(guide: StudyGuidePublic): string {
@@ -46,7 +47,7 @@ export function StudyGuideDialog({
 
   const mutation = useMutation({
     mutationFn: () => notebooksApi.generateStudyGuide(notebookId),
-    onError: (error: Error) => showErrorToast(error.message),
+    onError: (error: Error) => showErrorToast(extractErrorMessage(error)),
     onSuccess: setGuide,
   })
 
@@ -118,7 +119,9 @@ export function StudyGuideDialog({
           </div>
         ) : null}
         {mutation.error ? (
-          <p className="text-sm text-destructive">{mutation.error.message}</p>
+          <p className="text-sm text-destructive">
+            {extractErrorMessage(mutation.error)}
+          </p>
         ) : null}
         {guide ? (
           <div className="space-y-6">

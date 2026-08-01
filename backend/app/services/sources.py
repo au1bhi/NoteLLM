@@ -49,14 +49,14 @@ def get_upload_path(source: Source) -> Path:
 
 def validate_upload(upload: UploadFile) -> tuple[str, str]:
     if not upload.filename:
-        raise HTTPException(status_code=400, detail="A file name is required")
+        raise HTTPException(status_code=400, detail="文件名不能为空")
 
     suffix = Path(upload.filename).suffix.lower()
     media_type = SUPPORTED_EXTENSIONS.get(suffix)
     if not media_type:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail="Only PDF, TXT, and Markdown files are supported",
+            detail="仅支持 PDF、TXT 和 Markdown 文件",
         )
     accepted_content_types = {"", "application/octet-stream", media_type}
     if suffix == ".md":
@@ -64,7 +64,7 @@ def validate_upload(upload: UploadFile) -> tuple[str, str]:
     if upload.content_type not in accepted_content_types:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail="The file content type does not match its extension",
+            detail="文件内容类型与扩展名不匹配",
         )
     return suffix, media_type
 
@@ -79,7 +79,7 @@ async def save_upload(upload: UploadFile, destination: Path) -> int:
                 if size > settings.MAX_UPLOAD_SIZE_BYTES:
                     raise HTTPException(
                         status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                        detail=f"Files must be at most {settings.MAX_UPLOAD_SIZE_BYTES // 1024 // 1024} MiB",
+                        detail=f"文件大小不能超过 {settings.MAX_UPLOAD_SIZE_BYTES // 1024 // 1024} MiB",
                     )
                 output.write(content)
     except Exception:
@@ -95,13 +95,13 @@ def extract_pages(path: Path, media_type: str) -> list[ExtractedPage]:
         try:
             text = path.read_text(encoding="utf-8-sig")
         except UnicodeDecodeError as error:
-            raise ValueError("Text sources must use UTF-8 encoding") from error
+            raise ValueError("文本文件必须使用 UTF-8 编码") from error
         return [ExtractedPage(text=text, page_number=None)]
 
     try:
         document = fitz.open(path)
     except fitz.FileDataError as error:
-        raise ValueError("The PDF could not be opened") from error
+        raise ValueError("无法打开该 PDF") from error
 
     try:
         pages = [
@@ -163,7 +163,7 @@ def process_source(*, session: Session, source: Source) -> None:
         pages = extract_pages(get_upload_path(source), source.media_type)
         chunks = [chunk for page in pages for chunk in split_page(page)]
         if not chunks:
-            raise ValueError("The source did not contain extractable text")
+            raise ValueError("该资料没有可提取的文本")
         notebook = session.get(Notebook, source.notebook_id)
         user_settings = (
             load_user_provider_settings(session, notebook.owner_id)

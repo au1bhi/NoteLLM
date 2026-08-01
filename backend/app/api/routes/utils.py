@@ -23,7 +23,7 @@ def test_email(email_to: EmailStr) -> Message:
         subject=email_data.subject,
         html_content=email_data.html_content,
     )
-    return Message(message="Test email sent")
+    return Message(message="测试邮件已发送")
 
 
 @router.get("/health-check/")

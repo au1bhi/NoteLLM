@@ -4,6 +4,7 @@ import type { ComponentType } from "react"
 
 import { Skeleton } from "@/components/ui/skeleton"
 import { usageApi } from "@/services/usage"
+import { extractErrorMessage } from "@/utils"
 
 function formatNumber(value: number): string {
   return value.toLocaleString("en-US")
@@ -57,7 +58,7 @@ export function UsageSettings() {
       ) : null}
       {error ? (
         <p className="mt-5 text-sm text-destructive">
-          {(error as Error).message}
+          {extractErrorMessage(error)}
         </p>
       ) : null}
       {data ? (

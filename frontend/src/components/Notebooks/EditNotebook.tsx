@@ -28,6 +28,7 @@ import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
 import useCustomToast from "@/hooks/useCustomToast"
 import { type Notebook, notebooksApi } from "@/services/notebooks"
+import { extractErrorMessage } from "@/utils"
 
 const formSchema = z.object({
   description: z.string().max(1000).optional(),
@@ -67,7 +68,7 @@ export function EditNotebook({
 
   const mutation = useMutation({
     mutationFn: (data: FormData) => notebooksApi.update(notebook.id, data),
-    onError: (error: Error) => showErrorToast(error.message),
+    onError: (error: Error) => showErrorToast(extractErrorMessage(error)),
     onSuccess: () => {
       form.reset()
       setIsOpen(false)

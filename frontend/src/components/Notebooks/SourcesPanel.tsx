@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import useCustomToast from "@/hooks/useCustomToast"
 import { cn } from "@/lib/utils"
 import { notebooksApi, type Source } from "@/services/notebooks"
+import { extractErrorMessage } from "@/utils"
 
 interface SourcesPanelProps {
   notebookId: string
@@ -168,7 +169,7 @@ export function SourcesPanel({
 
   const searchMutation = useMutation({
     mutationFn: (query: string) => notebooksApi.search(notebookId, query),
-    onError: (error: Error) => showErrorToast(error.message),
+    onError: (error: Error) => showErrorToast(extractErrorMessage(error)),
   })
 
   const onFileChange = (event: ChangeEvent<HTMLInputElement>) => {

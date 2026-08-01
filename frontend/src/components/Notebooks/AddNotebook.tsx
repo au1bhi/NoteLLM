@@ -29,6 +29,7 @@ import { LoadingButton } from "@/components/ui/loading-button"
 import useCustomToast from "@/hooks/useCustomToast"
 import { cn } from "@/lib/utils"
 import { notebooksApi } from "@/services/notebooks"
+import { extractErrorMessage } from "@/utils"
 
 const formSchema = z.object({
   description: z.string().max(1000).optional(),
@@ -55,7 +56,7 @@ export function AddNotebook({
   })
   const mutation = useMutation({
     mutationFn: notebooksApi.create,
-    onError: (error: Error) => showErrorToast(error.message),
+    onError: (error: Error) => showErrorToast(extractErrorMessage(error)),
     onSuccess: () => {
       form.reset()
       setIsOpen(false)

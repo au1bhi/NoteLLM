@@ -52,7 +52,7 @@ def get_notebook_or_404(
 ) -> Notebook:
     notebook = session.get(Notebook, notebook_id)
     if not notebook or notebook.owner_id != current_user.id:
-        raise HTTPException(status_code=404, detail="Notebook not found")
+        raise HTTPException(status_code=404, detail="笔记本不存在")
     return notebook
 
 
@@ -61,7 +61,7 @@ def get_source_or_404(
 ) -> Source:
     source = session.get(Source, source_id)
     if not source or source.notebook_id != notebook_id:
-        raise HTTPException(status_code=404, detail="Source not found")
+        raise HTTPException(status_code=404, detail="资料不存在")
     return source
 
 
@@ -138,7 +138,7 @@ def delete_notebook(
     )
     session.delete(notebook)
     session.commit()
-    return {"message": "Notebook deleted successfully"}
+    return {"message": "笔记本删除成功"}
 
 
 @router.get("/{notebook_id}/sources/", response_model=SourcesPublic)
@@ -389,7 +389,7 @@ def remove_source(
     )
     delete_source(session=session, source=source)
     _clear_overview(session, notebook)
-    return {"message": "Source deleted successfully"}
+    return {"message": "资料删除成功"}
 
 
 @router.post("/{notebook_id}/sources/{source_id}/retry", response_model=SourcePublic)

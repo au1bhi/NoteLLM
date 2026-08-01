@@ -74,7 +74,7 @@ def test_update_and_delete_notebook(
         headers=normal_user_token_headers,
     )
     assert response.status_code == 200
-    assert response.json()["message"] == "Notebook deleted successfully"
+    assert response.json()["message"] == "笔记本删除成功"
 
 
 def test_read_notebook_not_found(
