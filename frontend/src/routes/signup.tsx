@@ -143,6 +143,9 @@ function SignUp() {
                       {...field}
                     />
                   </FormControl>
+                  <p className="text-xs text-muted-foreground">
+                    至少 8 个字符，建议混合字母与数字。
+                  </p>
                   <FormMessage />
                 </FormItem>
               )}

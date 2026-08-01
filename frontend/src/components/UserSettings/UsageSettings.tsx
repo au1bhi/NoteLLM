@@ -127,6 +127,12 @@ export function UsageSettings() {
     queryFn: usageApi.get,
   })
 
+  const nearLimit =
+    (typeof data?.chat_quota === "number" &&
+      data.chat_tokens / data.chat_quota >= 0.8) ||
+    (typeof data?.embedding_quota === "number" &&
+      data.embedding_chars / data.embedding_quota >= 0.8)
+
   return (
     <div className="max-w-2xl">
       <div className="flex flex-col gap-2 rounded-lg border border-primary/15 bg-primary/5 px-4 py-3 text-sm text-muted-foreground">
@@ -181,6 +187,20 @@ export function UsageSettings() {
           <Button asChild size="sm" variant="outline" className="shrink-0">
             <Link to="/settings" search={{ tab: "model" }}>
               去配置
+            </Link>
+          </Button>
+        </div>
+      ) : null}
+
+      {nearLimit ? (
+        <div className="mt-5 flex items-center justify-between gap-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+          <p className="text-amber-700 dark:text-amber-400">
+            免费额度即将用完（已用
+            ≥80%），用尽后将暂时无法使用服务端计费的对话或嵌入功能。
+          </p>
+          <Button asChild size="sm" variant="outline" className="shrink-0">
+            <Link to="/settings" search={{ tab: "model" }}>
+              配置自己的 Key
             </Link>
           </Button>
         </div>

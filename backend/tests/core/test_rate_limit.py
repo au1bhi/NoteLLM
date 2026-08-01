@@ -18,3 +18,4 @@ def test_login_endpoint_rate_limited_after_many_attempts(
     response = client.post(url, data=form)
     assert response.status_code == 429
     assert "请求过于频繁" in response.json()["detail"]
+    assert response.headers["Retry-After"] == "60"

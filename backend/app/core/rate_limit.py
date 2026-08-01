@@ -43,6 +43,7 @@ def rate_limit(limit: int, window: int = 60) -> Callable[[Request], None]:
                 raise HTTPException(
                     status_code=429,
                     detail=f"请求过于频繁，请稍后再试（{window} 秒内最多 {limit} 次）",
+                    headers={"Retry-After": str(window)},
                 )
             _buckets[key] = (count + 1, start)
             if len(_buckets) > _MAX_ENTRIES:
