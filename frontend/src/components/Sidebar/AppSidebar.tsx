@@ -19,15 +19,15 @@ import { RecentNotebooks } from "./RecentNotebooks"
 import { User } from "./User"
 
 const baseItems: Item[] = [
-  { icon: Home, title: "Dashboard", path: "/" },
-  { icon: BookOpen, title: "Notebooks", path: "/notebooks" },
+  { icon: Home, title: "首页", path: "/" },
+  { icon: BookOpen, title: "笔记本", path: "/notebooks" },
 ]
 
 export function AppSidebar() {
   const { user: currentUser } = useAuth()
 
   const items = currentUser?.is_superuser
-    ? [...baseItems, { icon: Users, title: "Admin", path: "/admin" }]
+    ? [...baseItems, { icon: Users, title: "管理", path: "/admin" }]
     : baseItems
 
   return (
@@ -41,7 +41,7 @@ export function AppSidebar() {
         </div>
         <SidebarSeparator className="mx-3" />
         <SidebarGroup>
-          <SidebarGroupLabel>Menu</SidebarGroupLabel>
+          <SidebarGroupLabel>菜单</SidebarGroupLabel>
           <SidebarGroupContent>
             <Main items={items} />
           </SidebarGroupContent>

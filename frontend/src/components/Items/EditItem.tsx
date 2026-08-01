@@ -31,7 +31,7 @@ import useCustomToast from "@/hooks/useCustomToast"
 import { handleError } from "@/utils"
 
 const formSchema = z.object({
-  title: z.string().min(1, { message: "Title is required" }),
+  title: z.string().min(1, { message: "请输入标题" }),
   description: z.string().optional(),
 })
 
@@ -61,7 +61,7 @@ const EditItem = ({ item, onSuccess }: EditItemProps) => {
     mutationFn: (data: FormData) =>
       ItemsService.updateItem({ id: item.id, requestBody: data }),
     onSuccess: () => {
-      showSuccessToast("Item updated successfully")
+      showSuccessToast("条目已更新")
       setIsOpen(false)
       onSuccess()
     },
@@ -82,16 +82,14 @@ const EditItem = ({ item, onSuccess }: EditItemProps) => {
         onClick={() => setIsOpen(true)}
       >
         <Pencil />
-        Edit Item
+        编辑条目
       </DropdownMenuItem>
       <DialogContent className="sm:max-w-md">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
             <DialogHeader>
-              <DialogTitle>Edit Item</DialogTitle>
-              <DialogDescription>
-                Update the item details below.
-              </DialogDescription>
+              <DialogTitle>编辑条目</DialogTitle>
+              <DialogDescription>更新下方条目信息。</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <FormField
@@ -100,10 +98,10 @@ const EditItem = ({ item, onSuccess }: EditItemProps) => {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      Title <span className="text-destructive">*</span>
+                      标题 <span className="text-destructive">*</span>
                     </FormLabel>
                     <FormControl>
-                      <Input placeholder="Title" type="text" {...field} />
+                      <Input placeholder="标题" type="text" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -115,9 +113,9 @@ const EditItem = ({ item, onSuccess }: EditItemProps) => {
                 name="description"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Description</FormLabel>
+                    <FormLabel>描述</FormLabel>
                     <FormControl>
-                      <Input placeholder="Description" type="text" {...field} />
+                      <Input placeholder="描述" type="text" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -128,11 +126,11 @@ const EditItem = ({ item, onSuccess }: EditItemProps) => {
             <DialogFooter>
               <DialogClose asChild>
                 <Button variant="outline" disabled={mutation.isPending}>
-                  Cancel
+                  取消
                 </Button>
               </DialogClose>
               <LoadingButton type="submit" loading={mutation.isPending}>
-                Save
+                保存
               </LoadingButton>
             </DialogFooter>
           </form>

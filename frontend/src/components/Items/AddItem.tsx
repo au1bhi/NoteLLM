@@ -31,7 +31,7 @@ import useCustomToast from "@/hooks/useCustomToast"
 import { handleError } from "@/utils"
 
 const formSchema = z.object({
-  title: z.string().min(1, { message: "Title is required" }),
+  title: z.string().min(1, { message: "请输入标题" }),
   description: z.string().optional(),
 })
 
@@ -56,7 +56,7 @@ const AddItem = () => {
     mutationFn: (data: ItemCreate) =>
       ItemsService.createItem({ requestBody: data }),
     onSuccess: () => {
-      showSuccessToast("Item created successfully")
+      showSuccessToast("条目创建成功")
       form.reset()
       setIsOpen(false)
     },
@@ -75,15 +75,13 @@ const AddItem = () => {
       <DialogTrigger asChild>
         <Button className="my-4">
           <Plus className="mr-2" />
-          Add Item
+          添加条目
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Add Item</DialogTitle>
-          <DialogDescription>
-            Fill in the details to add a new item.
-          </DialogDescription>
+          <DialogTitle>添加条目</DialogTitle>
+          <DialogDescription>填写详情以添加新条目。</DialogDescription>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)}>
@@ -94,11 +92,11 @@ const AddItem = () => {
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      Title <span className="text-destructive">*</span>
+                      标题 <span className="text-destructive">*</span>
                     </FormLabel>
                     <FormControl>
                       <Input
-                        placeholder="Title"
+                        placeholder="标题"
                         type="text"
                         {...field}
                         required
@@ -114,9 +112,9 @@ const AddItem = () => {
                 name="description"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Description</FormLabel>
+                    <FormLabel>描述</FormLabel>
                     <FormControl>
-                      <Input placeholder="Description" type="text" {...field} />
+                      <Input placeholder="描述" type="text" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -127,11 +125,11 @@ const AddItem = () => {
             <DialogFooter>
               <DialogClose asChild>
                 <Button variant="outline" disabled={mutation.isPending}>
-                  Cancel
+                  取消
                 </Button>
               </DialogClose>
               <LoadingButton type="submit" loading={mutation.isPending}>
-                Save
+                保存
               </LoadingButton>
             </DialogFooter>
           </form>

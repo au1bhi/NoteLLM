@@ -55,7 +55,7 @@ export const conversationsApi = {
       },
     )
     if (!response.ok || !response.body) {
-      throw new Error("Unable to start the grounded answer stream")
+      throw new Error("无法启动回答流")
     }
 
     const reader = response.body.getReader()
@@ -75,7 +75,7 @@ export const conversationsApi = {
         if (event === "citations" && data.citations) {
           handlers.onCitations(data.citations)
         }
-        if (event === "error") throw new Error(data.message || "Answer failed")
+        if (event === "error") throw new Error(data.message || "回答失败")
       }
     }
 

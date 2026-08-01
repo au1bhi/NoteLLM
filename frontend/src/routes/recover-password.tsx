@@ -42,7 +42,7 @@ export const Route = createFileRoute("/recover-password")({
   head: () => ({
     meta: [
       {
-        title: "Recover Password - NoteLLM",
+        title: "找回密码 - NoteLLM",
       },
     ],
   }),
@@ -66,7 +66,7 @@ function RecoverPassword() {
   const mutation = useMutation({
     mutationFn: recoverPassword,
     onSuccess: () => {
-      showSuccessToast("Password recovery email sent successfully")
+      showSuccessToast("密码找回邮件已发送")
       form.reset()
     },
     onError: handleError.bind(showErrorToast),
@@ -85,9 +85,7 @@ function RecoverPassword() {
           className="flex flex-col gap-6"
         >
           <div className="flex flex-col items-center gap-1.5 text-center">
-            <h1 className="text-2xl font-bold tracking-tight">
-              Password Recovery
-            </h1>
+            <h1 className="text-2xl font-bold tracking-tight">找回密码</h1>
             <p className="text-sm text-muted-foreground">
               输入注册邮箱，我们将发送重置链接
             </p>
@@ -99,7 +97,7 @@ function RecoverPassword() {
               name="email"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Email</FormLabel>
+                  <FormLabel>邮箱</FormLabel>
                   <FormControl>
                     <Input
                       data-testid="email-input"
@@ -118,14 +116,14 @@ function RecoverPassword() {
               className="w-full"
               loading={mutation.isPending}
             >
-              Continue
+              继续
             </LoadingButton>
           </div>
 
           <div className="text-center text-sm">
-            Remember your password?{" "}
+            记得密码？{" "}
             <RouterLink to="/login" className="underline underline-offset-4">
-              Log in
+              登录
             </RouterLink>
           </div>
         </form>

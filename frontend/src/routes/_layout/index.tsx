@@ -25,7 +25,7 @@ import { sortPinnedFirst } from "@/utils"
 export const Route = createFileRoute("/_layout/")({
   component: Dashboard,
   head: () => ({
-    meta: [{ title: "Dashboard - NoteLLM" }],
+    meta: [{ title: "首页 - NoteLLM" }],
   }),
 })
 
@@ -173,7 +173,7 @@ function Dashboard() {
         <div className="relative z-10 max-w-2xl animate-rise">
           <p className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary backdrop-blur-sm dark:bg-white/10 dark:text-white">
             <Sparkles className="size-4" />
-            Welcome back
+            欢迎回来
           </p>
           <h1 className="font-display mt-2 text-3xl font-semibold tracking-tight md:text-4xl">
             你好，{name}

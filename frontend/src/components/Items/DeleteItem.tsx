@@ -37,7 +37,7 @@ const DeleteItem = ({ id, onSuccess }: DeleteItemProps) => {
   const mutation = useMutation({
     mutationFn: deleteItem,
     onSuccess: () => {
-      showSuccessToast("The item was deleted successfully")
+      showSuccessToast("条目已删除")
       setIsOpen(false)
       onSuccess()
     },
@@ -59,22 +59,21 @@ const DeleteItem = ({ id, onSuccess }: DeleteItemProps) => {
         onClick={() => setIsOpen(true)}
       >
         <Trash2 />
-        Delete Item
+        删除条目
       </DropdownMenuItem>
       <DialogContent className="sm:max-w-md">
         <form onSubmit={handleSubmit(onSubmit)}>
           <DialogHeader>
-            <DialogTitle>Delete Item</DialogTitle>
+            <DialogTitle>删除条目</DialogTitle>
             <DialogDescription>
-              This item will be permanently deleted. Are you sure? You will not
-              be able to undo this action.
+              该条目将被永久删除。确定继续吗？此操作无法撤销。
             </DialogDescription>
           </DialogHeader>
 
           <DialogFooter className="mt-4">
             <DialogClose asChild>
               <Button variant="outline" disabled={mutation.isPending}>
-                Cancel
+                取消
               </Button>
             </DialogClose>
             <LoadingButton
@@ -82,7 +81,7 @@ const DeleteItem = ({ id, onSuccess }: DeleteItemProps) => {
               type="submit"
               loading={mutation.isPending}
             >
-              Delete
+              删除
             </LoadingButton>
           </DialogFooter>
         </form>

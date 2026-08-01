@@ -21,7 +21,7 @@ export const Route = createFileRoute("/_layout/items")({
   head: () => ({
     meta: [
       {
-        title: "Items - NoteLLM",
+        title: "条目 - NoteLLM",
       },
     ],
   }),
@@ -36,8 +36,8 @@ function ItemsTableContent() {
         <div className="rounded-full bg-muted p-4 mb-4">
           <Search className="h-8 w-8 text-muted-foreground" />
         </div>
-        <h3 className="text-lg font-semibold">You don't have any items yet</h3>
-        <p className="text-muted-foreground">Add a new item to get started</p>
+        <h3 className="text-lg font-semibold">你还没有任何条目</h3>
+        <p className="text-muted-foreground">添加新条目以开始使用</p>
       </div>
     )
   }
@@ -58,8 +58,8 @@ function Items() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Items</h1>
-          <p className="text-muted-foreground">Create and manage your items</p>
+          <h1 className="text-2xl font-bold tracking-tight">条目</h1>
+          <p className="text-muted-foreground">创建并管理你的条目</p>
         </div>
         <AddItem />
       </div>

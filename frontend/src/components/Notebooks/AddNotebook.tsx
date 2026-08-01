@@ -32,7 +32,7 @@ import { notebooksApi } from "@/services/notebooks"
 
 const formSchema = z.object({
   description: z.string().max(1000).optional(),
-  title: z.string().min(1, "A notebook title is required").max(255),
+  title: z.string().min(1, "请输入笔记本标题").max(255),
 })
 
 type FormData = z.infer<typeof formSchema>
@@ -59,7 +59,7 @@ export function AddNotebook({
     onSuccess: () => {
       form.reset()
       setIsOpen(false)
-      showSuccessToast("Notebook created")
+      showSuccessToast("笔记本已创建")
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: ["notebooks"] }),
   })
@@ -78,15 +78,15 @@ export function AddNotebook({
           <span
             className={cn(compact && "group-data-[collapsible=icon]:hidden")}
           >
-            New notebook
+            新建笔记本
           </span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Create a notebook</DialogTitle>
+          <DialogTitle>创建笔记本</DialogTitle>
           <DialogDescription>
-            Keep related learning materials and conversations together.
+            把相关的学习资料与会话整理在一起。
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -99,13 +99,9 @@ export function AddNotebook({
               name="title"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Title</FormLabel>
+                  <FormLabel>标题</FormLabel>
                   <FormControl>
-                    <Input
-                      autoFocus
-                      placeholder="e.g. Machine learning"
-                      {...field}
-                    />
+                    <Input autoFocus placeholder="例如：机器学习" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -116,9 +112,9 @@ export function AddNotebook({
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Description</FormLabel>
+                  <FormLabel>描述</FormLabel>
                   <FormControl>
-                    <Input placeholder="Optional context" {...field} />
+                    <Input placeholder="可选说明" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -127,11 +123,11 @@ export function AddNotebook({
             <DialogFooter>
               <DialogClose asChild>
                 <Button variant="outline" disabled={mutation.isPending}>
-                  Cancel
+                  取消
                 </Button>
               </DialogClose>
               <LoadingButton type="submit" loading={mutation.isPending}>
-                Create
+                创建
               </LoadingButton>
             </DialogFooter>
           </form>

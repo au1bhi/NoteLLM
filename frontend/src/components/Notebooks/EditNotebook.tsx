@@ -71,7 +71,7 @@ export function EditNotebook({
     onSuccess: () => {
       form.reset()
       setIsOpen(false)
-      showSuccessToast("Notebook updated")
+      showSuccessToast("笔记本已更新")
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["notebooks"] })

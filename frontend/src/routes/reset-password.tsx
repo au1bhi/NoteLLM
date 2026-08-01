@@ -33,14 +33,12 @@ const formSchema = z
   .object({
     new_password: z
       .string()
-      .min(1, { message: "Password is required" })
-      .min(8, { message: "Password must be at least 8 characters" }),
-    confirm_password: z
-      .string()
-      .min(1, { message: "Password confirmation is required" }),
+      .min(1, { message: "请输入密码" })
+      .min(8, { message: "密码至少需要 8 个字符" }),
+    confirm_password: z.string().min(1, { message: "请确认密码" }),
   })
   .refine((data) => data.new_password === data.confirm_password, {
-    message: "The passwords don't match",
+    message: "两次输入的密码不一致",
     path: ["confirm_password"],
   })
 
@@ -60,7 +58,7 @@ export const Route = createFileRoute("/reset-password")({
   head: () => ({
     meta: [
       {
-        title: "Reset Password - NoteLLM",
+        title: "重置密码 - NoteLLM",
       },
     ],
   }),
@@ -85,7 +83,7 @@ function ResetPassword() {
     mutationFn: (data: { new_password: string; token: string }) =>
       LoginService.resetPassword({ requestBody: data }),
     onSuccess: () => {
-      showSuccessToast("Password updated successfully")
+      showSuccessToast("密码已更新")
       form.reset()
       navigate({ to: "/login" })
     },
@@ -104,9 +102,7 @@ function ResetPassword() {
           className="flex flex-col gap-6"
         >
           <div className="flex flex-col items-center gap-1.5 text-center">
-            <h1 className="text-2xl font-bold tracking-tight">
-              Reset Password
-            </h1>
+            <h1 className="text-2xl font-bold tracking-tight">重置密码</h1>
             <p className="text-sm text-muted-foreground">设置一个新密码</p>
           </div>
 
@@ -116,11 +112,11 @@ function ResetPassword() {
               name="new_password"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>New Password</FormLabel>
+                  <FormLabel>新密码</FormLabel>
                   <FormControl>
                     <PasswordInput
                       data-testid="new-password-input"
-                      placeholder="New Password"
+                      placeholder="新密码"
                       {...field}
                     />
                   </FormControl>
@@ -134,11 +130,11 @@ function ResetPassword() {
               name="confirm_password"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Confirm Password</FormLabel>
+                  <FormLabel>确认密码</FormLabel>
                   <FormControl>
                     <PasswordInput
                       data-testid="confirm-password-input"
-                      placeholder="Confirm Password"
+                      placeholder="确认密码"
                       {...field}
                     />
                   </FormControl>
@@ -152,14 +148,14 @@ function ResetPassword() {
               className="w-full"
               loading={mutation.isPending}
             >
-              Reset Password
+              重置密码
             </LoadingButton>
           </div>
 
           <div className="text-center text-sm">
-            Remember your password?{" "}
+            记得密码？{" "}
             <RouterLink to="/login" className="underline underline-offset-4">
-              Log in
+              登录
             </RouterLink>
           </div>
         </form>

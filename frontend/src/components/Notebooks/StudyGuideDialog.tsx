@@ -24,7 +24,7 @@ function guideToMarkdown(guide: StudyGuidePublic): string {
     .map((section) => `## ${section.title}\n\n${section.content}`)
     .join("\n\n")
   const faqs = guide.faqs
-    .map((faq) => `### Q: ${faq.question}\n\n${faq.answer}`)
+    .map((faq) => `### 问：${faq.question}\n\n答：${faq.answer}`)
     .join("\n\n")
   return [sections, faqs ? `## 常见问题\n\n${faqs}` : ""]
     .filter(Boolean)
@@ -143,9 +143,9 @@ export function StudyGuideDialog({
                       key={faq.question}
                       className="rounded-lg border bg-muted/40 p-3"
                     >
-                      <p className="text-sm font-medium">Q: {faq.question}</p>
+                      <p className="text-sm font-medium">问：{faq.question}</p>
                       <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
-                        A: {faq.answer}
+                        答：{faq.answer}
                       </p>
                     </div>
                   ))}

@@ -34,7 +34,7 @@ import { notebooksApi } from "@/services/notebooks"
 
 export const Route = createFileRoute("/_layout/notebooks/$notebookId")({
   component: NotebookWorkspace,
-  head: () => ({ meta: [{ title: "Notebook - NoteLLM" }] }),
+  head: () => ({ meta: [{ title: "笔记本 - NoteLLM" }] }),
 })
 
 function NotebookWorkspace() {
@@ -106,11 +106,11 @@ function NotebookWorkspace() {
     onError: (error: Error) => showErrorToast(error.message),
     onSuccess: (source) => {
       if (source.status === "ready") {
-        showSuccessToast("Source processed successfully")
+        showSuccessToast("资料处理完成")
       } else if (source.status === "processing") {
-        showSuccessToast("Source uploaded, processing…")
+        showSuccessToast("资料已上传，正在处理…")
       } else {
-        showErrorToast(source.error_message || "Source could not be processed")
+        showErrorToast(source.error_message || "资料处理失败")
       }
     },
     onSettled: () => {
@@ -126,7 +126,7 @@ function NotebookWorkspace() {
     mutationFn: (sourceId: string) =>
       notebooksApi.deleteSource(notebookId, sourceId),
     onError: (error: Error) => showErrorToast(error.message),
-    onSuccess: () => showSuccessToast("Source deleted"),
+    onSuccess: () => showSuccessToast("资料已删除"),
     onSettled: () => {
       queryClient.invalidateQueries({
         queryKey: ["notebooks", notebookId, "sources"],
@@ -142,11 +142,11 @@ function NotebookWorkspace() {
     onError: (error: Error) => showErrorToast(error.message),
     onSuccess: (source) => {
       if (source.status === "ready") {
-        showSuccessToast("Source processed successfully")
+        showSuccessToast("资料处理完成")
       } else if (source.status === "processing") {
-        showSuccessToast("Source is processing…")
+        showSuccessToast("资料正在处理…")
       } else {
-        showErrorToast(source.error_message || "Source could not be processed")
+        showErrorToast(source.error_message || "资料处理失败")
       }
     },
     onSettled: () => {
@@ -225,7 +225,7 @@ function NotebookWorkspace() {
         queryKey: ["notebooks", notebookId, "conversations"],
       })
     } catch (error) {
-      showErrorToast(error instanceof Error ? error.message : "Answer failed")
+      showErrorToast(error instanceof Error ? error.message : "回答失败")
       await queryClient.invalidateQueries({
         queryKey: ["conversations", conversationId],
       })

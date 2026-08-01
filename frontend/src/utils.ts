@@ -10,7 +10,7 @@ function extractErrorMessage(err: ApiError): string {
   if (Array.isArray(errDetail) && errDetail.length > 0) {
     return errDetail[0].msg
   }
-  return errDetail || "Something went wrong."
+  return errDetail || "出了点问题。"
 }
 
 export const handleError = function (
@@ -31,25 +31,25 @@ export const getInitials = (name: string): string => {
 }
 
 const TIME_INTERVALS = [
-  { label: "year", seconds: 31536000 },
-  { label: "month", seconds: 2592000 },
-  { label: "week", seconds: 604800 },
-  { label: "day", seconds: 86400 },
-  { label: "hour", seconds: 3600 },
-  { label: "minute", seconds: 60 },
+  { label: "年", seconds: 31536000 },
+  { label: "个月", seconds: 2592000 },
+  { label: "周", seconds: 604800 },
+  { label: "天", seconds: 86400 },
+  { label: "小时", seconds: 3600 },
+  { label: "分钟", seconds: 60 },
 ] as const
 
 export function timeAgo(dateInput: string | Date): string {
   const date = typeof dateInput === "string" ? new Date(dateInput) : dateInput
   const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
-  if (seconds < 60) return "just now"
+  if (seconds < 60) return "刚刚"
   for (const { label, seconds: interval } of TIME_INTERVALS) {
     const count = Math.floor(seconds / interval)
     if (count >= 1) {
-      return `${count} ${label}${count > 1 ? "s" : ""} ago`
+      return `${count}${label}前`
     }
   }
-  return "just now"
+  return "刚刚"
 }
 
 export function sortPinnedFirst<T extends { is_pinned?: boolean }>(

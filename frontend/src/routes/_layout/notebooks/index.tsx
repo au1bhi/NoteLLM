@@ -10,7 +10,7 @@ import { sortPinnedFirst } from "@/utils"
 
 export const Route = createFileRoute("/_layout/notebooks/")({
   component: Notebooks,
-  head: () => ({ meta: [{ title: "Notebooks - NoteLLM" }] }),
+  head: () => ({ meta: [{ title: "笔记本 - NoteLLM" }] }),
 })
 
 function Notebooks() {

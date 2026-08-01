@@ -23,17 +23,15 @@ import useAuth, { isLoggedIn } from "@/hooks/useAuth"
 const formSchema = z
   .object({
     email: z.email(),
-    full_name: z.string().min(1, { message: "Full Name is required" }),
+    full_name: z.string().min(1, { message: "请输入姓名" }),
     password: z
       .string()
-      .min(1, { message: "Password is required" })
-      .min(8, { message: "Password must be at least 8 characters" }),
-    confirm_password: z
-      .string()
-      .min(1, { message: "Password confirmation is required" }),
+      .min(1, { message: "请输入密码" })
+      .min(8, { message: "密码至少需要 8 个字符" }),
+    confirm_password: z.string().min(1, { message: "请确认密码" }),
   })
   .refine((data) => data.password === data.confirm_password, {
-    message: "The passwords don't match",
+    message: "两次输入的密码不一致",
     path: ["confirm_password"],
   })
 
@@ -51,7 +49,7 @@ export const Route = createFileRoute("/signup")({
   head: () => ({
     meta: [
       {
-        title: "Sign Up - NoteLLM",
+        title: "注册 - NoteLLM",
       },
     ],
   }),
@@ -87,9 +85,7 @@ function SignUp() {
           className="flex flex-col gap-6"
         >
           <div className="flex flex-col items-center gap-1.5 text-center">
-            <h1 className="text-2xl font-bold tracking-tight">
-              Create an account
-            </h1>
+            <h1 className="text-2xl font-bold tracking-tight">创建账户</h1>
             <p className="text-sm text-muted-foreground">
               开始整理你的学习与研究资料
             </p>
@@ -101,11 +97,11 @@ function SignUp() {
               name="full_name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Full Name</FormLabel>
+                  <FormLabel>姓名</FormLabel>
                   <FormControl>
                     <Input
                       data-testid="full-name-input"
-                      placeholder="User"
+                      placeholder="姓名"
                       type="text"
                       {...field}
                     />
@@ -120,7 +116,7 @@ function SignUp() {
               name="email"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Email</FormLabel>
+                  <FormLabel>邮箱</FormLabel>
                   <FormControl>
                     <Input
                       data-testid="email-input"
@@ -139,11 +135,11 @@ function SignUp() {
               name="password"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Password</FormLabel>
+                  <FormLabel>密码</FormLabel>
                   <FormControl>
                     <PasswordInput
                       data-testid="password-input"
-                      placeholder="Password"
+                      placeholder="密码"
                       {...field}
                     />
                   </FormControl>
@@ -157,11 +153,11 @@ function SignUp() {
               name="confirm_password"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Confirm Password</FormLabel>
+                  <FormLabel>确认密码</FormLabel>
                   <FormControl>
                     <PasswordInput
                       data-testid="confirm-password-input"
-                      placeholder="Confirm Password"
+                      placeholder="确认密码"
                       {...field}
                     />
                   </FormControl>
@@ -175,14 +171,14 @@ function SignUp() {
               className="w-full"
               loading={signUpMutation.isPending}
             >
-              Sign Up
+              注册
             </LoadingButton>
           </div>
 
           <div className="text-center text-sm">
-            Already have an account?{" "}
+            已有账户？{" "}
             <RouterLink to="/login" className="underline underline-offset-4">
-              Log in
+              登录
             </RouterLink>
           </div>
         </form>
