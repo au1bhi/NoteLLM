@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { KeyRound, RotateCcw } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { type Control, useForm } from "react-hook-form"
 import { z } from "zod"
 
@@ -129,6 +129,7 @@ export function ProviderSettings() {
   const { showErrorToast, showSuccessToast } = useCustomToast()
   const queryClient = useQueryClient()
   const [clearOpen, setClearOpen] = useState(false)
+  const hasLoadedRef = useRef(false)
 
   const { data } = useQuery({
     queryKey: ["provider-settings"],
@@ -141,7 +142,10 @@ export function ProviderSettings() {
   })
 
   useEffect(() => {
-    if (!data) return
+    // Only seed the form from the server once. Refetches after save/clear must
+    // not wipe edits the user made while a mutation was in flight.
+    if (!data || hasLoadedRef.current) return
+    hasLoadedRef.current = true
     form.reset({
       chat_base_url: data.chat_base_url ?? "",
       chat_api_key: "",
@@ -172,7 +176,12 @@ export function ProviderSettings() {
   })
 
   const onSubmit = (values: FormData) => {
-    saveMutation.mutate(values)
+    const trimmed: FormData = {}
+    for (const [key, value] of Object.entries(values)) {
+      trimmed[key as keyof FormData] =
+        typeof value === "string" ? value.trim() : value
+    }
+    saveMutation.mutate(trimmed)
   }
 
   return (

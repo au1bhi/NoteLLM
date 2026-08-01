@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query"
 import { ChevronsUpDown, Loader2, RefreshCw, Search, Wand2 } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -19,6 +19,9 @@ interface ModelPickerProps {
   baseUrl: string
   apiKey: string
   onValueChange: (value: string) => void
+  id?: string
+  "aria-describedby"?: string
+  "aria-invalid"?: boolean
 }
 
 export function ModelPicker({
@@ -26,14 +29,26 @@ export function ModelPicker({
   baseUrl,
   apiKey,
   onValueChange,
+  id,
+  "aria-describedby": ariaDescribedby,
+  "aria-invalid": ariaInvalid,
 }: ModelPickerProps) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const [manual, setManual] = useState(false)
+  const [manualValue, setManualValue] = useState(value)
 
   const fetchMutation = useMutation({
-    mutationFn: () => providerSettingsApi.fetchModels(baseUrl, apiKey),
+    mutationFn: () =>
+      providerSettingsApi.fetchModels(baseUrl.trim(), apiKey.trim()),
   })
+
+  // Discard models fetched for a previous (baseUrl, apiKey) as soon as the
+  // endpoint the user is pointing at changes.
+  useEffect(() => {
+    fetchMutation.reset()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only reacts to endpoint inputs
+  }, [fetchMutation.reset])
 
   const models = fetchMutation.data?.map((model) => model.id) ?? []
   const filtered = models.filter((model) =>
@@ -41,12 +56,28 @@ export function ModelPicker({
   )
   const canFetch = Boolean(baseUrl.trim() && apiKey.trim())
 
+  const openManual = () => {
+    setManualValue(value)
+    setManual(true)
+  }
+
+  const commitManual = () => {
+    const trimmed = manualValue.trim()
+    if (trimmed) {
+      onValueChange(trimmed)
+    }
+    setOpen(false)
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button
           type="button"
           variant="outline"
+          id={id}
+          aria-describedby={ariaDescribedby}
+          aria-invalid={ariaInvalid}
           className="w-full justify-between font-normal"
         >
           <span className={value ? "truncate" : "text-muted-foreground"}>
@@ -116,41 +147,51 @@ export function ModelPicker({
               </button>
             ))}
           </div>
-        ) : null}
-
-        {!filtered.length && !fetchMutation.isPending ? (
-          <div className="space-y-2 rounded-lg border border-dashed p-4 text-center">
-            <p className="text-sm text-muted-foreground">没有可用模型</p>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setManual(true)}
-            >
-              <Wand2 className="size-3.5" />
-              手动输入模型名
-            </Button>
-          </div>
+        ) : !fetchMutation.isPending ? (
+          <p className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+            没有可用模型
+          </p>
         ) : null}
 
         {manual ? (
           <div className="space-y-2">
             <Input
-              value={value}
-              onChange={(event) => onValueChange(event.target.value)}
+              value={manualValue}
+              onChange={(event) => setManualValue(event.target.value)}
               placeholder="例如 gpt-4o-mini"
               autoFocus
             />
-            <Button
-              type="button"
-              size="sm"
-              className="w-full"
-              onClick={() => setOpen(false)}
-            >
-              确定
-            </Button>
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setManual(false)}
+              >
+                取消
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={commitManual}
+                disabled={!manualValue.trim()}
+              >
+                确定
+              </Button>
+            </div>
           </div>
-        ) : null}
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={openManual}
+          >
+            <Wand2 className="size-3.5" />
+            手动输入自定义模型
+          </Button>
+        )}
       </DialogContent>
     </Dialog>
   )
