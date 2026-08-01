@@ -1,7 +1,8 @@
 import uuid
 from collections.abc import AsyncIterable
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from sqlmodel import Session, col, select
 from starlette.concurrency import run_in_threadpool
@@ -34,9 +35,9 @@ from app.services.provider_settings import (
 )
 from app.services.usage import (
     QuotaError,
-    check_chat_quota,
-    check_embedding_quota,
-    record_usage,
+    estimate_chat_reserve,
+    reserve_usage,
+    settle_usage,
 )
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
@@ -130,12 +131,19 @@ def persist_answer(
             if notebook
             else None
         )
+        chat_reserved = 0
+        embedding_reserved = 0
+        embedding_reserve = len(question) if mode != "knowledge" else 0
         if notebook:
-            # Block before spending any model call when the server-billed
-            # free allowance for this month is already exhausted.
-            check_chat_quota(session, notebook.owner_id, user_settings)
-            if mode != "knowledge":
-                check_embedding_quota(session, notebook.owner_id, user_settings)
+            # Reserve server-billed allowance atomically before spending any
+            # model call; concurrent requests cannot both pass the quota.
+            chat_reserved, embedding_reserved = reserve_usage(
+                session=session,
+                user_id=notebook.owner_id,
+                user_settings=user_settings,
+                chat_tokens=estimate_chat_reserve(question),
+                embedding_chars=embedding_reserve,
+            )
         answer = answer_question(
             session=session,
             notebook_id=conversation.notebook_id,
@@ -148,11 +156,17 @@ def persist_answer(
             source_ids=source_ids,
         )
         if notebook:
-            record_usage(
+            settle_usage(
                 session=session,
                 user_id=notebook.owner_id,
-                chat_tokens=answer.tokens_used,
-                embedding_chars=len(question) if mode != "knowledge" else 0,
+                chat_tokens=(
+                    answer.tokens_used - chat_reserved if chat_reserved else 0
+                ),
+                embedding_chars=(
+                    embedding_reserve - embedding_reserved
+                    if embedding_reserved
+                    else 0
+                ),
             )
         assistant_message = ConversationMessage(
             conversation_id=conversation.id,
@@ -227,16 +241,28 @@ def delete_conversation(
     return {"message": "会话删除成功"}
 
 
-@router.post("/{conversation_id}/messages/stream", response_class=EventSourceResponse)
-async def stream_message(
+def get_owned_conversation_or_404(
     conversation_id: uuid.UUID,
-    message_in: ConversationMessageCreate,
     session: SessionDep,
     current_user: CurrentUser,
-) -> AsyncIterable[ServerSentEvent]:
-    get_conversation_or_404(
+) -> Conversation:
+    """Resolve a conversation the current user owns (raises 404 otherwise).
+
+    Used as a FastAPI dependency so ownership is enforced *before* the response
+    is committed — an async generator cannot raise HTTPException cleanly after
+    it has started streaming.
+    """
+    return get_conversation_or_404(
         session=session, current_user=current_user, conversation_id=conversation_id
     )
+
+
+@router.post("/{conversation_id}/messages/stream", response_class=EventSourceResponse)
+async def stream_message(
+    conversation: Annotated[Conversation, Depends(get_owned_conversation_or_404)],
+    message_in: ConversationMessageCreate,
+) -> AsyncIterable[ServerSentEvent]:
+    conversation_id = conversation.id
     try:
         answer = await run_in_threadpool(
             lambda: persist_answer(

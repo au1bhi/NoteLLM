@@ -44,9 +44,10 @@ from app.services.sources import (
 from app.services.study_guide import generate_study_guide
 from app.services.usage import (
     QuotaError,
-    check_chat_quota,
     check_embedding_quota,
-    record_usage,
+    estimate_chat_reserve,
+    reserve_usage,
+    settle_usage,
 )
 
 router = APIRouter(prefix="/notebooks", tags=["notebooks"])
@@ -234,7 +235,13 @@ def search_notebook(
     )
     try:
         user_settings = load_user_provider_settings(session, current_user.id)
-        check_embedding_quota(session, current_user.id, user_settings)
+        # Reserve the exact query length atomically before embedding it.
+        reserve_usage(
+            session=session,
+            user_id=current_user.id,
+            user_settings=user_settings,
+            embedding_chars=len(search_in.query),
+        )
         retrieved = retrieve_chunks(
             session=session,
             embedding_provider=get_embedding_provider(
@@ -248,11 +255,6 @@ def search_notebook(
         raise HTTPException(status_code=503, detail=str(error)) from error
     except QuotaError as error:
         raise HTTPException(status_code=429, detail=str(error)) from error
-    record_usage(
-        session=session,
-        user_id=current_user.id,
-        embedding_chars=len(search_in.query),
-    )
     return RetrievedChunksPublic(
         data=[
             RetrievedChunkPublic(
@@ -281,8 +283,14 @@ def _generate_and_store_overview(
 ) -> None:
     user_settings = load_user_provider_settings(session, current_user.id)
     chat_provider = get_chat_provider(effective_chat_config(user_settings))
+    chat_reserved = 0
     try:
-        check_chat_quota(session, current_user.id, user_settings)
+        chat_reserved, _ = reserve_usage(
+            session=session,
+            user_id=current_user.id,
+            user_settings=user_settings,
+            chat_tokens=estimate_chat_reserve(notebook.title or ""),
+        )
         overview = generate_overview(
             session=session, notebook_id=notebook.id, chat_provider=chat_provider
         )
@@ -290,11 +298,13 @@ def _generate_and_store_overview(
         status_code = 429 if isinstance(error, QuotaError) else 503
         raise HTTPException(status_code=status_code, detail=str(error)) from error
     store_overview(session=session, notebook=notebook, overview=overview)
-    record_usage(
-        session=session,
-        user_id=current_user.id,
-        chat_tokens=getattr(chat_provider, "total_tokens_used", 0),
-    )
+    if chat_reserved:
+        settle_usage(
+            session=session,
+            user_id=current_user.id,
+            chat_tokens=getattr(chat_provider, "total_tokens_used", 0)
+            - chat_reserved,
+        )
 
 
 @router.get("/{notebook_id}/overview", response_model=NotebookOverviewPublic)
@@ -351,19 +361,27 @@ def generate_notebook_study_guide(
     )
     user_settings = load_user_provider_settings(session, current_user.id)
     chat_provider = get_chat_provider(effective_chat_config(user_settings))
+    chat_reserved = 0
     try:
-        check_chat_quota(session, current_user.id, user_settings)
+        chat_reserved, _ = reserve_usage(
+            session=session,
+            user_id=current_user.id,
+            user_settings=user_settings,
+            chat_tokens=estimate_chat_reserve("学习指南"),
+        )
         guide = generate_study_guide(
             session=session, notebook_id=notebook_id, chat_provider=chat_provider
         )
     except (ChatError, QuotaError) as error:
         status_code = 429 if isinstance(error, QuotaError) else 503
         raise HTTPException(status_code=status_code, detail=str(error)) from error
-    record_usage(
-        session=session,
-        user_id=current_user.id,
-        chat_tokens=getattr(chat_provider, "total_tokens_used", 0),
-    )
+    if chat_reserved:
+        settle_usage(
+            session=session,
+            user_id=current_user.id,
+            chat_tokens=getattr(chat_provider, "total_tokens_used", 0)
+            - chat_reserved,
+        )
     return StudyGuidePublic(
         sections=[
             StudySectionPublic(title=section.title, content=section.content)

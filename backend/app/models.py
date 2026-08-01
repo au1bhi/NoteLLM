@@ -60,8 +60,8 @@ class User(UserBase, table=True):
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),  # type: ignore
     )
-    items: list[Item] = Relationship(back_populates="owner", cascade_delete=True)
-    notebooks: list[Notebook] = Relationship(
+    items: list["Item"] = Relationship(back_populates="owner", cascade_delete=True)
+    notebooks: list["Notebook"] = Relationship(
         back_populates="owner", cascade_delete=True
     )
 
@@ -113,7 +113,8 @@ class UserProviderSettings(UserProviderSettingsCreate, table=True):
     # server default; drives the switch-back cooldown. None means no switch
     # has happened yet (or they have no own key).
     provider_changed_at: datetime | None = Field(
-        default=None, sa_type=DateTime(timezone=True)  # type: ignore
+        default=None,
+        sa_type=DateTime(timezone=True),  # type: ignore
     )
 
 
@@ -261,8 +262,8 @@ class Notebook(NotebookBase, table=True):
         sa_type=DateTime(timezone=True),  # type: ignore
     )
     owner: User | None = Relationship(back_populates="notebooks")
-    sources: list[Source] = Relationship(back_populates="notebook", cascade_delete=True)
-    conversations: list[Conversation] = Relationship(
+    sources: list["Source"] = Relationship(back_populates="notebook", cascade_delete=True)
+    conversations: list["Conversation"] = Relationship(
         back_populates="notebook", cascade_delete=True
     )
     overview: str | None = Field(default=None)
@@ -333,7 +334,7 @@ class Source(SourceBase, table=True):
         sa_type=DateTime(timezone=True),  # type: ignore
     )
     notebook: Notebook | None = Relationship(back_populates="sources")
-    chunks: list[Chunk] = Relationship(back_populates="source", cascade_delete=True)
+    chunks: list["Chunk"] = Relationship(back_populates="source", cascade_delete=True)
 
 
 class SourcePublic(SourceBase):
@@ -395,7 +396,7 @@ class Conversation(SQLModel, table=True):
         sa_type=DateTime(timezone=True),  # type: ignore
     )
     notebook: Notebook | None = Relationship(back_populates="conversations")
-    messages: list[ConversationMessage] = Relationship(
+    messages: list["ConversationMessage"] = Relationship(
         back_populates="conversation", cascade_delete=True
     )
 
@@ -438,7 +439,7 @@ class ConversationMessage(SQLModel, table=True):
         sa_type=DateTime(timezone=True),  # type: ignore
     )
     conversation: Conversation | None = Relationship(back_populates="messages")
-    citations: list[Citation] = Relationship(
+    citations: list["Citation"] = Relationship(
         back_populates="message", cascade_delete=True
     )
 

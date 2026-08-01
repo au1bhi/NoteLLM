@@ -127,11 +127,20 @@ export function UsageSettings() {
     queryFn: usageApi.get,
   })
 
-  const nearLimit =
-    (typeof data?.chat_quota === "number" &&
-      data.chat_tokens / data.chat_quota >= 0.8) ||
-    (typeof data?.embedding_quota === "number" &&
-      data.embedding_chars / data.embedding_quota >= 0.8)
+  const nearDimensions: string[] = []
+  if (
+    typeof data?.chat_quota === "number" &&
+    data.chat_tokens / data.chat_quota >= 0.8
+  ) {
+    nearDimensions.push("对话额度")
+  }
+  if (
+    typeof data?.embedding_quota === "number" &&
+    data.embedding_chars / data.embedding_quota >= 0.8
+  ) {
+    nearDimensions.push("嵌入额度")
+  }
+  const nearLimit = nearDimensions.length > 0
 
   return (
     <div className="max-w-2xl">
@@ -195,8 +204,8 @@ export function UsageSettings() {
       {nearLimit ? (
         <div className="mt-5 flex items-center justify-between gap-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
           <p className="text-amber-700 dark:text-amber-400">
-            免费额度即将用完（已用
-            ≥80%），用尽后将暂时无法使用服务端计费的对话或嵌入功能。
+            {nearDimensions.join("、")}即将用完（已用
+            ≥80%），用尽后将暂时无法使用服务端计费的相关功能。
           </p>
           <Button asChild size="sm" variant="outline" className="shrink-0">
             <Link to="/settings" search={{ tab: "model" }}>

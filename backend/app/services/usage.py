@@ -3,10 +3,12 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
 
+from sqlalchemy import text as sql_text
 from sqlmodel import Session, select
 
 from app.core.config import settings
 from app.models import UserProviderSettings, UserUsage
+from app.services.chat import estimate_tokens
 from app.services.provider_settings import (
     has_own_chat_key,
     has_own_embedding_key,
@@ -170,3 +172,166 @@ def check_embedding_quota(
             "或等待下月额度刷新。"
         )
     return status
+
+
+# Reserve `:ct`/`:ec` atomically against the allowance. The `WHERE` guard runs
+# under the row lock of the upsert, so concurrent reservations cannot both
+# pass; returning no row means a concurrent request consumed the last of the
+# allowance. A row from a previous period rolls its counters to the new period.
+_RESERVE_SQL = sql_text(
+    """
+    INSERT INTO userusage (id, user_id, chat_tokens, embedding_chars, period_start, updated_at)
+    VALUES (:id, :user_id, :ct, :ec, :period, :now)
+    ON CONFLICT (user_id) DO UPDATE SET
+      chat_tokens = CASE WHEN userusage.period_start IS DISTINCT FROM :period
+                         THEN :ct ELSE userusage.chat_tokens + :ct END,
+      embedding_chars = CASE WHEN userusage.period_start IS DISTINCT FROM :period
+                             THEN :ec ELSE userusage.embedding_chars + :ec END,
+      period_start = CASE WHEN userusage.period_start IS DISTINCT FROM :period
+                          THEN :period ELSE userusage.period_start END,
+      updated_at = :now
+    WHERE (:ct = 0 OR CASE WHEN userusage.period_start IS DISTINCT FROM :period
+                           THEN :ct ELSE userusage.chat_tokens + :ct END <= :chat_limit)
+      AND (:ec = 0 OR CASE WHEN userusage.period_start IS DISTINCT FROM :period
+                           THEN :ec ELSE userusage.embedding_chars + :ec END <= :emb_limit)
+    RETURNING userusage.user_id
+    """
+)
+
+_SETTLE_SQL = sql_text(
+    """
+    UPDATE userusage SET
+      chat_tokens = GREATEST(0, chat_tokens + :chat_delta),
+      embedding_chars = GREATEST(0, embedding_chars + :embedding_delta),
+      updated_at = :now
+    WHERE user_id = :user_id
+    """
+)
+
+#: Effective upper bound for dimensions that are not server-billed (unlimited).
+_MAX_LIMIT = 2**63 - 1
+#: Extra tokens reserved above the question estimate to bound concurrent spend.
+CHAT_RESERVE_MARGIN = 2048
+
+
+def estimate_chat_reserve(question: str) -> int:
+    """Conservative chat-token reservation for a question before answering."""
+    return estimate_tokens(question) + CHAT_RESERVE_MARGIN
+
+
+def _quota_error_for(
+    status: QuotaStatus,
+    chat_extra: int = 0,
+    embedding_extra: int = 0,
+) -> QuotaError | None:
+    """Return the QuotaError for an over-limit dimension, or None if within bounds."""
+    if (
+        status.chat_quota is not None
+        and status.chat_tokens + chat_extra > status.chat_quota
+    ):
+        return QuotaError(
+            "本月的免费对话额度已用完（"
+            f"{_fmt(status.chat_tokens + chat_extra)} / "
+            f"{_fmt(status.chat_quota)} token）。"
+            "你可以在“设置 → 模型配置”中填入自己的 API Key 继续使用，"
+            "或等待下月额度刷新。"
+        )
+    if (
+        status.embedding_quota is not None
+        and status.embedding_chars + embedding_extra > status.embedding_quota
+    ):
+        return QuotaError(
+            "本月的免费嵌入额度已用完（"
+            f"{_fmt(status.embedding_chars + embedding_extra)} / "
+            f"{_fmt(status.embedding_quota)} 字符）。"
+            "你可以在“设置 → 模型配置”中填入自己的 API Key 继续使用，"
+            "或等待下月额度刷新。"
+        )
+    return None
+
+
+def reserve_usage(
+    *,
+    session: Session,
+    user_id: uuid.UUID,
+    user_settings: UserProviderSettings | None = None,
+    chat_tokens: int = 0,
+    embedding_chars: int = 0,
+) -> tuple[int, int]:
+    """Atomically reserve free-allowance capacity before a model call.
+
+    Only server-billed dimensions are counted (BYOK or unconfigured dimensions
+    pass through with a zero reservation). Concurrent requests serialize on the
+    guarded upsert, so two racing checks cannot both pass; raises QuotaError
+    when a server-billed dimension would exceed its allowance.
+
+    Returns the (chat, embedding) amounts actually reserved so the caller can
+    reconcile the real cost afterwards with `settle_usage`.
+    """
+    status = quota_status(session, user_id, user_settings)
+    if status.chat_quota is None:
+        chat_tokens = 0
+    if status.embedding_quota is None:
+        embedding_chars = 0
+    if not chat_tokens and not embedding_chars:
+        return 0, 0
+    # Fast-path guard (also protects the brand-new-row INSERT path, which has
+    # no existing row for the atomic WHERE to check).
+    error = _quota_error_for(status, chat_tokens, embedding_chars)
+    if error is not None:
+        raise error
+    result = session.execute(
+        _RESERVE_SQL,
+        {
+            "id": uuid.uuid4(),
+            "user_id": user_id,
+            "ct": chat_tokens,
+            "ec": embedding_chars,
+            "period": current_period(),
+            "now": datetime.now(UTC),
+            "chat_limit": (
+                status.chat_quota if status.chat_quota is not None else _MAX_LIMIT
+            ),
+            "emb_limit": (
+                status.embedding_quota
+                if status.embedding_quota is not None
+                else _MAX_LIMIT
+            ),
+        },
+    )
+    if result.first() is None:
+        # A concurrent request reserved the last of the allowance first.
+        session.rollback()
+        error = _quota_error_for(quota_status(session, user_id, user_settings))
+        if error is not None:
+            raise error
+        raise QuotaError("本月的免费额度已用完")
+    session.commit()
+    return chat_tokens, embedding_chars
+
+
+def settle_usage(
+    *,
+    session: Session,
+    user_id: uuid.UUID,
+    chat_tokens: int = 0,
+    embedding_chars: int = 0,
+) -> None:
+    """Reconcile a previous reservation with the real cost.
+
+    Deltas are (actual − reserved) and may be negative (refund the unused
+    reservation). Counters are clamped at zero. Call only for dimensions that
+    were actually reserved.
+    """
+    if not chat_tokens and not embedding_chars:
+        return
+    session.execute(
+        _SETTLE_SQL,
+        {
+            "user_id": user_id,
+            "chat_delta": chat_tokens,
+            "embedding_delta": embedding_chars,
+            "now": datetime.now(UTC),
+        },
+    )
+    session.commit()

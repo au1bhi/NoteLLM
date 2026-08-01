@@ -41,6 +41,7 @@ class OpenAICompatibleEmbeddingProvider:
                     "dimensions": settings.EMBEDDING_DIMENSIONS,
                 },
                 timeout=30.0,
+                trust_env=False,
             )
             response.raise_for_status()
             data = response.json()["data"]

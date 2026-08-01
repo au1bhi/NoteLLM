@@ -1,3 +1,5 @@
+import socket
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
@@ -11,6 +13,19 @@ from app.services.provider_settings import (
 )
 from app.services.usage import current_period
 from tests.utils.user import authentication_token_from_email, create_random_user
+
+
+def _public_dns(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Resolve every hostname to a public IP so URL validation does not depend
+    on the network (and is not fooled by sandbox DNS that maps test domains to
+    internal/benchmark addresses). Patching the SSRF resolver only keeps the
+    real `socket.getaddrinfo` available for database connections."""
+
+    def fake_resolve(_host: str) -> list[tuple]:
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0))]
+
+    monkeypatch.setattr("app.core.ssrf._resolve", fake_resolve)
+
 
 
 def _auth(client: TestClient, db: Session):
@@ -118,6 +133,7 @@ def test_provider_settings_are_user_isolated(client: TestClient, db: Session) ->
 def test_custom_base_url_without_key_does_not_leak_server_key(
     client: TestClient, db: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _public_dns(monkeypatch)
     monkeypatch.setattr(settings, "LLM_API_KEY", "server-secret-key")
     monkeypatch.setattr(settings, "LLM_BASE_URL", "https://api.example.com/v1")
     _, headers = _auth(client, db)
@@ -287,9 +303,7 @@ def test_switch_back_allowed_after_cooldown_expires(
     assert cleared.json()["message"] == "已清除模型配置"
 
 
-def test_clear_without_own_key_has_no_cooldown(
-    client: TestClient, db: Session
-) -> None:
+def test_clear_without_own_key_has_no_cooldown(client: TestClient, db: Session) -> None:
     _, headers = _auth(client, db)
     cleared = client.delete(_url(), headers=headers)
     assert cleared.status_code == 200
@@ -300,9 +314,7 @@ def test_provider_settings_returns_cooldown_until(
     client: TestClient, db: Session
 ) -> None:
     _, headers = _auth(client, db)
-    client.put(
-        _url(), headers=headers, json={"embedding_api_key": "embed-own-key-123"}
-    )
+    client.put(_url(), headers=headers, json={"embedding_api_key": "embed-own-key-123"})
     response = client.get(_url(), headers=headers)
     assert response.status_code == 200
     assert response.json()["cooldown_until"] is not None
@@ -340,6 +352,7 @@ def test_put_stores_api_format(client: TestClient, db: Session) -> None:
 def test_fetch_models_uses_openai_v1_format(
     client: TestClient, db: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _public_dns(monkeypatch)
     calls: list[str] = []
 
     def fake_get(url: str, **_kwargs):
@@ -373,6 +386,7 @@ def test_fetch_models_uses_openai_v1_format(
 def test_fetch_models_falls_back_to_v1(
     client: TestClient, db: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _public_dns(monkeypatch)
     calls: list[str] = []
 
     def fake_get(url: str, **_kwargs):
@@ -400,3 +414,36 @@ def test_fetch_models_falls_back_to_v1(
     assert response.status_code == 200
     assert calls == ["https://new.28.al/models", "https://new.28.al/v1/models"]
     assert response.json() == [{"id": "deepseek-v4-flash"}]
+
+
+def test_fetch_models_uses_stored_key_when_key_empty(
+    client: TestClient, db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _public_dns(monkeypatch)
+    user, headers = _auth(client, db)
+    client.put(
+        _url(), headers=headers, json={"chat_api_key": "sk-stored-key-123456"}
+    )
+    auth_headers: list[str] = []
+
+    def fake_get(_url: str, **_kwargs):
+        auth_headers.append(str(_kwargs.get("headers", {}).get("Authorization", "")))
+
+        class Response:
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self):
+                return {"data": [{"id": "model-x"}]}
+
+        return Response()
+
+    monkeypatch.setattr("app.api.routes.users.httpx.get", fake_get)
+    response = client.post(
+        _url() + "/models",
+        headers=headers,
+        json={"base_url": "https://new.28.al"},  # no key → use stored
+    )
+    assert response.status_code == 200
+    assert response.json() == [{"id": "model-x"}]
+    assert any("sk-stored-key-123456" in header for header in auth_headers)

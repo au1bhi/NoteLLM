@@ -71,3 +71,15 @@ Use short imperative commits, optionally matching existing emoji prefixes. Commi
 ## Security & Data Handling
 
 Never commit secrets or uploaded documents. Validate uploads, isolate each user's data, and delete derived chunks/indexes with their source. Treat source text as untrusted prompt input; it must not override system instructions.
+
+## Recent Iterations (2026-08)
+
+Feature work landed after the original scaffold. Keep these invariants intact when changing code:
+
+- **Free-tier quota**: `FREE_QUOTA_CHAT_TOKENS` (100k) and `FREE_QUOTA_EMBEDDING_CHARS` (300k) apply **only to server-billed usage**. Users who configure their own API key (`user_provider_settings.chat_api_key` / `embedding_api_key`) are unlimited for that dimension. Quota is enforced *before* any model call in `app/services/usage.py` (`check_chat_quota` / `check_embedding_quota`, raise `QuotaError`) at: chat stream, notebook search, source upload/process, overview, and study guide. Counters roll over by calendar month (`period_start` on `user_usage`, lazy reset in `ensure_period`). Usage + quota + billing source is returned by `GET /users/me/usage`.
+- **Switch-back cooldown**: after configuring an own key, clearing provider settings (reverting to server default) is blocked for `PROVIDER_SWITCH_COOLDOWN_HOURS` (24). Gated by `provider_changed_at`; `GET /users/me/provider-settings` returns `cooldown_until`; DELETE returns 429 while locked.
+- **API format**: per-provider `chat_api_format` / `embedding_api_format` in `user_provider_settings`, values `"openai"` (base URL already has a version path) or `"openai_v1"` (root domain, auto-append `/v1`). `resolve_api_base(base_url, api_format)` in `app/services/provider_settings.py`; used by chat, embeddings, and the model-fetch endpoint. Model fetch also probes `/v1` as a fallback for root-domain URLs.
+- **Auth rate limiting**: in-process fixed-window limiter in `app/core/rate_limit.py` (`rate_limit(limit, window)`), applied to login, signup, password recovery/reset, and password change. 429 responses carry `Retry-After`. Tests reset buckets via the autouse `_reset_rate_limits` fixture in `tests/conftest.py`.
+- **New-user onboarding**: `frontend/src/components/Common/OnboardingChecklist.tsx` on the home page steps a new user through model config → notebook → source → first question; dismissible via `localStorage`. Settings page deep-links via `?tab=model`.
+- **Conversation delete**: `DELETE /api/v1/conversations/{id}` cascades messages/citations; per-chip delete button in the chat panel header with a confirm dialog.
+- **UI localization & theme**: all user-facing copy is Chinese (keep it that way); kraft/ink OKLCH theme, no blue. `--font-display` must resolve to a static CJK serif (e.g. `Noto Serif CJK SC`); do not reintroduce variable CJK fonts — they rasterize brokenly at fractional zoom (e.g. 110%).

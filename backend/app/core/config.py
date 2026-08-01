@@ -131,6 +131,16 @@ class Settings(BaseSettings):
         self._check_default_secret(
             "FIRST_SUPERUSER_PASSWORD", self.FIRST_SUPERUSER_PASSWORD
         )
+        if len(self.SECRET_KEY or "") < 32:
+            message = (
+                "SECRET_KEY must be at least 32 characters — it signs JWTs and "
+                "derives the key that encrypts stored API keys. Generate one "
+                "with e.g. `python -c \"import secrets; print(secrets.token_urlsafe(48))\"`."
+            )
+            if self.ENVIRONMENT == "local":
+                warnings.warn(message, stacklevel=1)
+            else:
+                raise ValueError(message)
 
         return self
 

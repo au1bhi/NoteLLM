@@ -20,6 +20,19 @@ NoteLLM 是一个参考 Google NotebookLM 核心体验实现的毕业设计原�
 | 流式会话 | 通过 Server-Sent Events（SSE）流式呈现答案、引用与完成事件；消息和引用会持久化，刷新后仍可恢复。 |
 | 安全删除 | 删除来源时同步删除上传文件、分块和向量；删除笔记本时级联清理其来源与会话。 |
 | 演示体验 | 工作区提供会话历史、来源处理状态、错误提示和始终可见的退出登录按钮。 |
+| 新手引导 | 首页“快速上手”四步引导（配置模型 → 创建笔记本 → 上传资料 → 提问），完成状态实时打勾、可关闭；设置页支持 `?tab=model` 深链。 |
+| 自备密钥（BYOK） | 每个用户可在“设置 → 模型配置”填入自己的对话/嵌入 API Key（OpenAI 兼容），加密存储、只回传掩码；支持选择 API 格式（已含路径 / 根域名自动补 `/v1`），模型列表可自动探测 `/v1`。 |
+| 免费额度 | 服务端计费用量按自然月统计：对话 10 万 token、嵌入 30 万字符；自备 Key 的维度不限额。额度以原子化“预留—结算”拦截并发与单次超大上传，超额返回友好提示。 |
+| 会话管理 | 会话支持重命名、置顶与删除（删除带确认框，级联清理消息与引用）。 |
+
+## 安全加固
+
+- 认证接口（登录/注册/找回与重置密码/改密）按 IP 限流，429 响应携带 `Retry-After`。
+- 用户提供的模型 Base URL 会解析 DNS 并拦截解析到私有、回环、链路本地、保留、组播或云元数据地址的域名（含十进制/十六进制/简写 IP 等绕过形式）；出站模型请求不读取代理环境变量。
+- `SECRET_KEY` 生产环境强制 ≥32 字符（它既签 JWT 又派生加密用户密钥的 Fernet key）；`.env` 不允许提交。
+- 密钥只在后端读取与加密存储；自定义端点永不携带服务端密钥。
+- 已移除模板遗留的未鉴权 `/private` 用户创建路由；SSE 会话越权改为请求前依赖校验，返回干净的 404。
+- 前端生产部署（nginx）附带 CSP 与 `X-Content-Type-Options` / `X-Frame-Options` 等安全响应头；提示词模板加入“不得复述系统指令”约束，上传资料被视为不可信输入。
 
 ## 用户流程
 
@@ -66,7 +79,7 @@ flowchart TB
 ## 技术栈
 
 - 前端：React 19、TypeScript、Vite、TanStack Router/Query、Tailwind CSS、shadcn/ui
-- 后端：FastAPI、SQLModel、Pydantic、Alembic、PyMuPDF
+- 后端：Python ≥ 3.12、FastAPI、SQLModel、Pydantic、Alembic、PyMuPDF
 - 数据库与检索：PostgreSQL 18、pgvector、余弦距离 Top-K
 - 模型：可独立配置的 OpenAI-compatible chat provider 与 embedding provider
 - 工程化：Docker Compose、Bun、uv、pytest、Ruff、mypy、ty
@@ -83,7 +96,7 @@ cp .env.example .env
 
 编辑本机 `.env`，至少填写：
 
-- 数据库与安全配置：`SECRET_KEY`、`FIRST_SUPERUSER_PASSWORD`、`POSTGRES_PASSWORD`
+- 数据库与安全配置：`SECRET_KEY`（**≥32 字符**，可用 `python -c "import secrets; print(secrets.token_urlsafe(48))"` 生成）、`FIRST_SUPERUSER_PASSWORD`、`POSTGRES_PASSWORD`
 - 聊天模型：`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`
 - 嵌入模型：`EMBEDDING_BASE_URL`、`EMBEDDING_API_KEY`、`EMBEDDING_MODEL`
 

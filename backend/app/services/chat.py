@@ -65,6 +65,7 @@ class OpenAICompatibleChatProvider:
                     "temperature": 0,
                 },
                 timeout=60.0,
+                trust_env=False,
             )
             response.raise_for_status()
             payload = response.json()

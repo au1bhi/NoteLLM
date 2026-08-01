@@ -111,6 +111,12 @@ def test_process_source_uses_user_embedding_key(
     monkeypatch: MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    import socket
+
+    def fake_resolve(_host: str) -> list[tuple]:
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0))]
+
+    monkeypatch.setattr("app.core.ssrf._resolve", fake_resolve)
     user = create_random_user(db)
     headers = authentication_token_from_email(client=client, email=user.email, db=db)
     db.add(

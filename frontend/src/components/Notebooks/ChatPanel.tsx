@@ -298,7 +298,10 @@ export function ChatPanel({
             variant="outline"
             size="sm"
             className="ml-auto shrink-0"
-            disabled={onCreatePending || isStreaming}
+            disabled={onCreatePending || isStreaming || !hasReadySources}
+            title={
+              hasReadySources ? undefined : "至少上传一份资料并处理完成后再提问"
+            }
             onClick={onNewConversation}
           >
             {onCreatePending ? (
@@ -429,13 +432,16 @@ export function ChatPanel({
             rows={1}
             value={question}
             disabled={!activeConversationId || isStreaming}
+            aria-label="输入问题"
             onChange={(event) => setQuestion(event.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={
               activeConversationId
                 ? isStreaming
                   ? "正在生成回答…"
-                  : "基于当前笔记本的资料提问…"
+                  : hasReadySources
+                    ? "基于当前笔记本的资料提问…"
+                    : "资料处理完成后即可提问…"
                 : "先选择或新建一个会话"
             }
             className={cn(
@@ -453,7 +459,7 @@ export function ChatPanel({
             <Send className="size-4" />
           </Button>
         </div>
-        <p className="mt-2 text-center text-[11px] text-muted-foreground">
+        <p className="mt-2 text-center text-xs text-muted-foreground">
           {activeMode?.hint}
         </p>
       </div>

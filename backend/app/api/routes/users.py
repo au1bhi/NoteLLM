@@ -310,9 +310,7 @@ def delete_user_provider_settings(
     settings_row = load_user_provider_settings(session, current_user.id)
     cooldown_until = _cooldown_until(settings_row)
     if cooldown_until is not None:
-        raise HTTPException(
-            status_code=429, detail=_cooldown_detail(cooldown_until)
-        )
+        raise HTTPException(status_code=429, detail=_cooldown_detail(cooldown_until))
     if settings_row is not None:
         session.delete(settings_row)
         session.commit()
@@ -324,6 +322,7 @@ def _fetch_models_payload(root: str, api_key: str) -> object:
         f"{root}/models",
         headers={"Authorization": f"Bearer {api_key}"},
         timeout=30.0,
+        trust_env=False,
     )
     response.raise_for_status()
     return response.json()
@@ -335,7 +334,8 @@ def _fetch_models_payload(root: str, api_key: str) -> object:
 )
 def fetch_available_models(
     body: ModelFetchRequest,
-    _current_user: CurrentUser,
+    session: SessionDep,
+    current_user: CurrentUser,
 ) -> list[ModelInfoPublic]:
     """
     Fetch the model IDs available on an OpenAI-compatible endpoint. Empty
@@ -348,11 +348,17 @@ def fetch_available_models(
     user_base = body.base_url.strip()
     user_key = body.api_key.strip()
     if user_base and not user_key:
-        # Never send the server's key to a custom endpoint the user controls.
-        raise HTTPException(
-            status_code=422,
-            detail="自定义 Base URL 需要同时提供 API Key",
-        )
+        # The form masks stored keys, so an empty key here may just mean "use
+        # the one I saved" — fall back to it. Never send the *server's* key to
+        # an endpoint the user controls.
+        stored = load_user_provider_settings(session, current_user.id)
+        if stored and stored.chat_api_key:
+            user_key = decrypt_secret(stored.chat_api_key) or ""
+        if not user_key:
+            raise HTTPException(
+                status_code=422,
+                detail="自定义 Base URL 需要同时提供 API Key",
+            )
     base_url = user_base or server_base
     api_key = user_key or server_key
     if user_base:

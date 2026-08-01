@@ -45,11 +45,11 @@ export function ModelPicker({
       providerSettingsApi.fetchModels(baseUrl.trim(), apiKey.trim(), apiFormat),
   })
 
-  // Discard models fetched for a previous (baseUrl, apiKey) as soon as the
-  // endpoint the user is pointing at changes.
+  // Discard models fetched for a previous endpoint as soon as the user points
+  // the form at a different (baseUrl, apiKey, apiFormat).
   useEffect(() => {
     fetchMutation.reset()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only reacts to endpoint inputs
+    // biome-ignore lint/correctness/useExhaustiveDependencies: reset only reacts to endpoint inputs
   }, [fetchMutation.reset])
 
   const models = fetchMutation.data?.map((model) => model.id) ?? []
@@ -98,6 +98,7 @@ export function ModelPicker({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="搜索模型…"
+            aria-label="搜索模型"
             className="h-9 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
@@ -156,11 +157,15 @@ export function ModelPicker({
               </button>
             ))}
           </div>
-        ) : !fetchMutation.isPending ? (
+        ) : fetchMutation.isPending ? null : fetchMutation.isSuccess ? (
           <p className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
             没有可用模型
           </p>
-        ) : null}
+        ) : (
+          <p className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+            点击“获取模型”加载可用模型
+          </p>
+        )}
 
         {manual ? (
           <div className="space-y-2">

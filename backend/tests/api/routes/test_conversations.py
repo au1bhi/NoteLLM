@@ -256,3 +256,29 @@ def test_user_cannot_delete_another_users_conversation(
         headers=other_headers,
     )
     assert response.status_code == 404
+
+
+def test_user_cannot_stream_another_users_conversation(
+    client: TestClient, db: Session
+) -> None:
+    owner = create_random_user(db)
+    notebook = create_random_notebook(db=db, owner_id=owner.id)
+    owner_headers = authentication_token_from_email(
+        client=client, email=owner.email, db=db
+    )
+    conversation = client.post(
+        f"{settings.API_V1_STR}/notebooks/{notebook.id}/conversations/",
+        headers=owner_headers,
+        json={},
+    ).json()
+    other_user = create_random_user(db)
+    other_headers = authentication_token_from_email(
+        client=client, email=other_user.email, db=db
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/conversations/{conversation['id']}/messages/stream",
+        headers=other_headers,
+        json={"content": "hi"},
+    )
+    assert response.status_code == 404

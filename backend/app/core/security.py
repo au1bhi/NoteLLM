@@ -35,7 +35,7 @@ def decrypt_secret(value: str) -> str | None:
     """Decrypt a stored secret; returns None if the value cannot be decrypted."""
     try:
         return _fernet().decrypt(value.encode()).decode()
-    except InvalidToken, ValueError:
+    except (InvalidToken, ValueError):
         return None
 
 

@@ -173,8 +173,8 @@ export function SourcesPanel({
   })
 
   const onFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const [file] = Array.from(event.target.files ?? [])
-    if (file) onUploadFile(file)
+    const files = Array.from(event.target.files ?? [])
+    for (const file of files) onUploadFile(file)
     event.target.value = ""
   }
 
@@ -213,6 +213,7 @@ export function SourcesPanel({
         <input
           ref={fileInputRef}
           type="file"
+          multiple
           accept=".pdf,.txt,.md,application/pdf,text/plain,text/markdown"
           className="hidden"
           onChange={onFileChange}
@@ -237,6 +238,7 @@ export function SourcesPanel({
           <input
             value={searchQuery}
             placeholder="在资料中检索…"
+            aria-label="在资料中检索"
             onChange={(event) => setSearchQuery(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") submitSearch()

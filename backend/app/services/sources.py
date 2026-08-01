@@ -14,7 +14,7 @@ from app.services.provider_settings import (
     effective_embedding_config,
     load_user_provider_settings,
 )
-from app.services.usage import QuotaError, check_embedding_quota, record_usage
+from app.services.usage import QuotaError, reserve_usage
 
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 150
@@ -171,7 +171,15 @@ def process_source(*, session: Session, source: Source) -> None:
             else None
         )
         if notebook:
-            check_embedding_quota(session, notebook.owner_id, user_settings)
+            # Reserve the exact embedding char count atomically before calling
+            # the provider, so a single oversized upload cannot blow past the
+            # monthly allowance and concurrent uploads serialize correctly.
+            reserve_usage(
+                session=session,
+                user_id=notebook.owner_id,
+                user_settings=user_settings,
+                embedding_chars=sum(len(chunk.content) for chunk in chunks),
+            )
         embedding_provider = get_embedding_provider(
             effective_embedding_config(user_settings)
         )
@@ -185,12 +193,6 @@ def process_source(*, session: Session, source: Source) -> None:
                 ]
             )
         ]
-        if notebook:
-            record_usage(
-                session=session,
-                user_id=notebook.owner_id,
-                embedding_chars=sum(len(chunk.content) for chunk in chunks),
-            )
         for ordinal, chunk in enumerate(chunks):
             session.add(
                 Chunk(
