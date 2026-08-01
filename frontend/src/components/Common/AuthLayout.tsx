@@ -3,6 +3,7 @@ import { Quote, Search, ShieldCheck } from "lucide-react"
 import { Appearance } from "@/components/Common/Appearance"
 import { Logo } from "@/components/Common/Logo"
 import { Footer } from "./Footer"
+import { InkMountains } from "./InkMountains"
 
 interface AuthLayoutProps {
   children: React.ReactNode
@@ -32,24 +33,21 @@ export function AuthLayout({ children }: AuthLayoutProps) {
       <div className="relative hidden overflow-hidden bg-brand-gradient text-white lg:flex lg:flex-col lg:justify-between lg:p-12">
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -left-24 -top-24 size-96 rounded-full bg-white/10 blur-3xl"
+          className="pointer-events-none absolute inset-0 bg-paper-grain opacity-40"
         />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -bottom-32 right-0 size-96 rounded-full bg-white/10 blur-3xl"
-        />
-        <div className="relative z-10">
+        <InkMountains className="pointer-events-none absolute inset-x-0 bottom-0 h-3/5 w-full opacity-80" />
+        <div className="relative z-10 animate-rise">
           <Logo variant="full" monochrome asLink={false} />
         </div>
 
-        <div className="relative z-10 max-w-md">
-          <h2 className="text-3xl font-semibold tracking-tight">
+        <div className="relative z-10 max-w-md animate-rise">
+          <h2 className="font-display text-3xl font-semibold tracking-tight">
             把资料变成带可追溯引用的问答
           </h2>
           <ul className="mt-9 space-y-5">
             {FEATURES.map((feature) => (
               <li key={feature.title} className="flex gap-3.5">
-                <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-white/15">
+                <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-white/15 ring-1 ring-white/20 backdrop-blur-sm">
                   <feature.icon className="size-4" />
                 </span>
                 <div>

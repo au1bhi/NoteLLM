@@ -11,6 +11,7 @@ import {
   Upload,
 } from "lucide-react"
 import type { ComponentType } from "react"
+import { InkMountains } from "@/components/Common/InkMountains"
 import { AddNotebook } from "@/components/Notebooks/AddNotebook"
 import { NotebookCard } from "@/components/Notebooks/NotebookCard"
 import { Button } from "@/components/ui/button"
@@ -159,18 +160,15 @@ function Dashboard() {
       <section className="relative isolate overflow-hidden rounded-2xl bg-brand-gradient p-6 text-white shadow-card md:p-10">
         <div
           aria-hidden="true"
-          className="pointer-events-none absolute -right-16 -top-24 size-72 rounded-full bg-white/10 blur-2xl"
+          className="pointer-events-none absolute inset-0 bg-paper-grain opacity-40"
         />
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -bottom-28 right-32 size-64 rounded-full bg-white/10 blur-3xl"
-        />
-        <div className="relative z-10 max-w-2xl">
+        <InkMountains className="pointer-events-none absolute inset-x-0 bottom-0 h-3/5 w-full opacity-70" />
+        <div className="relative z-10 max-w-2xl animate-rise">
           <p className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-sm font-medium text-white backdrop-blur-sm">
             <Sparkles className="size-4" />
             Welcome back
           </p>
-          <h1 className="mt-2 text-3xl font-semibold tracking-tight md:text-4xl">
+          <h1 className="font-display mt-2 text-3xl font-semibold tracking-tight md:text-4xl">
             你好，{name}
           </h1>
           <p className="mt-3 max-w-xl text-white/85">

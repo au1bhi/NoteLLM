@@ -23,7 +23,9 @@ function Notebooks() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">笔记本</h1>
+          <h1 className="font-display text-2xl font-bold tracking-tight">
+            笔记本
+          </h1>
           <p className="mt-1 text-muted-foreground">
             组织资料并开启带引用的问答会话。
           </p>

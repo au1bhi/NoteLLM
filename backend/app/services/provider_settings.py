@@ -5,6 +5,7 @@ from sqlmodel import Session, select
 
 from app.core.config import settings
 from app.core.security import decrypt_secret
+from app.core.ssrf import validate_outbound_url
 from app.models import UserProviderSettings
 
 
@@ -69,8 +70,13 @@ def effective_chat_config(
 ) -> ProviderConfig:
     server_base_url = str(settings.LLM_BASE_URL) if settings.LLM_BASE_URL else ""
     user_base_url = user_settings.chat_base_url if user_settings else None
+    base_url = _first(user_base_url, server_base_url)
+    # Only the user-supplied endpoint is untrusted; validate it so the server
+    # never calls internal/private targets.
+    if user_base_url:
+        base_url = validate_outbound_url(base_url)
     return ProviderConfig(
-        base_url=_first(user_base_url, server_base_url),
+        base_url=base_url,
         api_key=_resolve_key(
             user_settings.chat_api_key if user_settings else None,
             settings.LLM_API_KEY,
@@ -91,8 +97,11 @@ def effective_embedding_config(
         str(settings.EMBEDDING_BASE_URL) if settings.EMBEDDING_BASE_URL else ""
     )
     user_base_url = user_settings.embedding_base_url if user_settings else None
+    base_url = _first(user_base_url, server_base_url)
+    if user_base_url:
+        base_url = validate_outbound_url(base_url)
     return ProviderConfig(
-        base_url=_first(user_base_url, server_base_url),
+        base_url=base_url,
         api_key=_resolve_key(
             user_settings.embedding_api_key if user_settings else None,
             settings.EMBEDDING_API_KEY,

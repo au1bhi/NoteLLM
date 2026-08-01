@@ -299,7 +299,7 @@ function NotebookWorkspace() {
             </Link>
           </Button>
           <div className="mt-2 flex items-center gap-1.5">
-            <h1 className="flex min-w-0 items-center gap-2.5 text-2xl font-bold tracking-tight">
+            <h1 className="font-display flex min-w-0 items-center gap-2.5 text-2xl font-bold tracking-tight">
               <span className="inline-flex size-8 shrink-0 items-center justify-center rounded-lg bg-brand-gradient-soft text-primary">
                 <NotebookPen className="size-4" />
               </span>

@@ -12,6 +12,7 @@ import { ThemeProvider } from "./components/theme-provider"
 import { Toaster } from "./components/ui/sonner"
 import "@fontsource-variable/geist"
 import "@fontsource-variable/geist-mono"
+import "@fontsource-variable/noto-serif-sc"
 import "./index.css"
 import { routeTree } from "./routeTree.gen"
 

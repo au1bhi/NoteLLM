@@ -278,15 +278,23 @@ def fetch_available_models(
     """
     server_base = str(settings.LLM_BASE_URL) if settings.LLM_BASE_URL else ""
     server_key = settings.LLM_API_KEY or ""
-    base_url = body.base_url.strip() or server_base
-    api_key = body.api_key.strip() or server_key
+    user_base = body.base_url.strip()
+    user_key = body.api_key.strip()
+    if user_base and not user_key:
+        # Never send the server's key to a custom endpoint the user controls.
+        raise HTTPException(
+            status_code=422,
+            detail="自定义 Base URL 需要同时提供 API Key",
+        )
+    base_url = user_base or server_base
+    api_key = user_key or server_key
+    if user_base:
+        base_url = validate_outbound_url(base_url)
     if not base_url or not api_key:
         raise HTTPException(
             status_code=422,
             detail="Configure an API key first, or set one on the server",
         )
-    if body.base_url.strip():
-        base_url = validate_outbound_url(base_url)
     try:
         response = httpx.get(
             f"{base_url.rstrip('/')}/models",

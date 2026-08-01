@@ -215,3 +215,27 @@ def test_fetch_models_requires_auth(client: TestClient) -> None:
         json={"base_url": "https://api.example.com/v1", "api_key": "x"},
     )
     assert response.status_code == 401
+
+
+def test_fetch_models_custom_base_url_requires_key(client: TestClient, db: Session) -> None:
+    _, headers = _auth(client, db)
+    response = client.post(
+        _url() + "/models",
+        headers=headers,
+        json={"base_url": "https://evil.example.com/v1", "api_key": ""},
+    )
+    assert response.status_code == 422
+
+
+def test_fetch_models_server_key_not_sent_to_custom_endpoint(
+    client: TestClient, db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "LLM_API_KEY", "server-secret-key")
+    monkeypatch.setattr(settings, "LLM_BASE_URL", "https://api.example.com/v1")
+    _, headers = _auth(client, db)
+    response = client.post(
+        _url() + "/models",
+        headers=headers,
+        json={"base_url": "https://evil.example.com/v1", "api_key": ""},
+    )
+    assert response.status_code == 422
