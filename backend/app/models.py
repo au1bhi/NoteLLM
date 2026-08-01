@@ -118,6 +118,29 @@ class UserProviderSettingsPublic(SQLModel):
     embedding_model: str | None = None
 
 
+class UserUsage(SQLModel, table=True):
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(
+        foreign_key="user.id",
+        nullable=False,
+        ondelete="CASCADE",
+        index=True,
+        unique=True,
+    )
+    chat_tokens: int = Field(default=0, ge=0)
+    embedding_chars: int = Field(default=0, ge=0)
+    updated_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+
+
+class UserUsagePublic(SQLModel):
+    chat_tokens: int
+    embedding_chars: int
+    updated_at: datetime | None = None
+
+
 # Shared properties
 class ItemBase(SQLModel):
     title: str = Field(min_length=1, max_length=255)

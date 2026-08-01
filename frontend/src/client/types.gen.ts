@@ -273,6 +273,12 @@ export type UserUpdateMe = {
     email?: (string | null);
 };
 
+export type UserUsagePublic = {
+    chat_tokens: number;
+    embedding_chars: number;
+    updated_at?: (string | null);
+};
+
 export type ValidationError = {
     loc: Array<(string | number)>;
     msg: string;
@@ -500,6 +506,8 @@ export type UsersUpdatePasswordMeData = {
 };
 
 export type UsersUpdatePasswordMeResponse = (Message);
+
+export type UsersReadUserUsageResponse = (UserUsagePublic);
 
 export type UsersReadUserProviderSettingsResponse = (UserProviderSettingsPublic);
 

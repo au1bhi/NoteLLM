@@ -28,6 +28,7 @@ class GroundedAnswer:
     citations: list[AnswerCitation]
     content: str
     suggestions: list[str] = field(default_factory=list)
+    tokens_used: int = 0
 
 
 def build_evidence(retrieved: list[RetrievedChunk]) -> str:
@@ -138,7 +139,11 @@ def answer_question(
         model_answer = chat_provider.answer(
             prompt=build_prompt(question=query, retrieved=[], mode=mode)
         )
-        return GroundedAnswer(citations=[], content=model_answer.content)
+        return GroundedAnswer(
+            citations=[],
+            content=model_answer.content,
+            tokens_used=getattr(chat_provider, "total_tokens_used", 0),
+        )
 
     retrieved = retrieve_chunks(
         session=session,
@@ -152,8 +157,16 @@ def answer_question(
             model_answer = chat_provider.answer(
                 prompt=build_prompt(question=query, retrieved=[], mode=mode)
             )
-            return GroundedAnswer(citations=[], content=model_answer.content)
-        return GroundedAnswer(citations=[], content=INSUFFICIENT_EVIDENCE_ANSWER)
+            return GroundedAnswer(
+                citations=[],
+                content=model_answer.content,
+                tokens_used=getattr(chat_provider, "total_tokens_used", 0),
+            )
+        return GroundedAnswer(
+            citations=[],
+            content=INSUFFICIENT_EVIDENCE_ANSWER,
+            tokens_used=getattr(chat_provider, "total_tokens_used", 0),
+        )
 
     answer_prompt = build_prompt(question=query, retrieved=retrieved, mode=mode)
     pool = ThreadPoolExecutor(max_workers=2)
@@ -175,6 +188,7 @@ def answer_question(
         # If the answer failed, do not block waiting for the suggestions call.
         pool.shutdown(wait=False, cancel_futures=True)
 
+    tokens_used = getattr(chat_provider, "total_tokens_used", 0)
     retrieved_by_id = {str(result.chunk.id): result for result in retrieved}
     cited_ids = list(dict.fromkeys(model_answer.citation_chunk_ids))[:MAX_CITATIONS]
     citations = [
@@ -190,9 +204,19 @@ def answer_question(
     if not citations:
         if mode == "hybrid":
             return GroundedAnswer(
-                citations=[], content=model_answer.content, suggestions=suggestions
+                citations=[],
+                content=model_answer.content,
+                suggestions=suggestions,
+                tokens_used=tokens_used,
             )
-        return GroundedAnswer(citations=[], content=INSUFFICIENT_EVIDENCE_ANSWER)
+        return GroundedAnswer(
+            citations=[],
+            content=INSUFFICIENT_EVIDENCE_ANSWER,
+            tokens_used=tokens_used,
+        )
     return GroundedAnswer(
-        citations=citations, content=model_answer.content, suggestions=suggestions
+        citations=citations,
+        content=model_answer.content,
+        suggestions=suggestions,
+        tokens_used=tokens_used,
     )

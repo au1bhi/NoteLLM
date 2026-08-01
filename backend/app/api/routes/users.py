@@ -31,12 +31,14 @@ from app.models import (
     UsersPublic,
     UserUpdate,
     UserUpdateMe,
+    UserUsagePublic,
     get_datetime_utc,
 )
 from app.services.provider_settings import (
     load_user_provider_settings,
     mask_secret,
 )
+from app.services.usage import get_usage
 from app.utils import generate_new_account_email, send_email
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -140,6 +142,21 @@ def read_user_me(current_user: CurrentUser) -> Any:
     Get current user.
     """
     return current_user
+
+
+@router.get("/me/usage", response_model=UserUsagePublic)
+def read_user_usage(session: SessionDep, current_user: CurrentUser) -> UserUsagePublic:
+    """
+    Get the current user's accumulated model usage (chat tokens, embedding chars).
+    """
+    usage = get_usage(session, current_user.id)
+    if usage is None:
+        return UserUsagePublic(chat_tokens=0, embedding_chars=0)
+    return UserUsagePublic(
+        chat_tokens=usage.chat_tokens,
+        embedding_chars=usage.embedding_chars,
+        updated_at=usage.updated_at,
+    )
 
 
 @router.delete("/me", response_model=Message)

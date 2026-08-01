@@ -14,6 +14,7 @@ from app.services.provider_settings import (
     effective_embedding_config,
     load_user_provider_settings,
 )
+from app.services.usage import record_usage
 
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 150
@@ -179,6 +180,12 @@ def process_source(*, session: Session, source: Source) -> None:
                 [chunk.content for chunk in chunks[start : start + EMBEDDING_BATCH_SIZE]]
             )
         ]
+        if notebook:
+            record_usage(
+                session=session,
+                user_id=notebook.owner_id,
+                embedding_chars=sum(len(chunk.content) for chunk in chunks),
+            )
         for ordinal, chunk in enumerate(chunks):
             session.add(
                 Chunk(

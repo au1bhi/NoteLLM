@@ -26,6 +26,7 @@ class ChatProvider(Protocol):
 class OpenAICompatibleChatProvider:
     def __init__(self, config: ProviderConfig) -> None:
         self.config = config
+        self.total_tokens_used = 0
 
     def _chat(self, *, prompt: str) -> str:
         if (
@@ -52,9 +53,15 @@ class OpenAICompatibleChatProvider:
                 timeout=60.0,
             )
             response.raise_for_status()
-            content = response.json()["choices"][0]["message"]["content"]
+            payload = response.json()
+            content = payload["choices"][0]["message"]["content"]
             if not isinstance(content, str):
                 raise ChatError("The chat provider did not return a valid response")
+            usage = payload.get("usage")
+            if isinstance(usage, dict):
+                tokens = usage.get("total_tokens")
+                if isinstance(tokens, (int, float)):
+                    self.total_tokens_used += int(tokens)
         except (httpx.HTTPError, KeyError, TypeError, ValueError, IndexError) as error:
             raise ChatError("The chat provider did not return a valid response") from error
         return content

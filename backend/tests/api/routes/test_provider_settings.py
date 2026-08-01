@@ -4,7 +4,7 @@ from sqlmodel import Session, select
 
 from app.core.config import settings
 from app.core.security import decrypt_secret, encrypt_secret
-from app.models import UserProviderSettings
+from app.models import UserProviderSettings, UserUsage
 from app.services.provider_settings import (
     effective_chat_config,
     load_user_provider_settings,
@@ -161,3 +161,29 @@ def _current_user_id(client: TestClient, headers: dict[str, str]) -> str:
     return client.get(
         f"{settings.API_V1_STR}/users/me", headers=headers
     ).json()["id"]
+
+
+def test_user_usage_returns_accumulated_totals(client: TestClient, db: Session) -> None:
+    user, headers = _auth(client, db)
+    db.add(
+        UserUsage(user_id=user.id, chat_tokens=1234, embedding_chars=5678)
+    )
+    db.commit()
+
+    response = client.get(
+        f"{settings.API_V1_STR}/users/me/usage", headers=headers
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["chat_tokens"] == 1234
+    assert body["embedding_chars"] == 5678
+
+
+def test_user_usage_defaults_to_zero(client: TestClient, db: Session) -> None:
+    _, headers = _auth(client, db)
+    response = client.get(
+        f"{settings.API_V1_STR}/users/me/usage", headers=headers
+    )
+    assert response.status_code == 200
+    assert response.json()["chat_tokens"] == 0
+    assert response.json()["embedding_chars"] == 0

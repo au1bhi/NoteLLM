@@ -32,6 +32,7 @@ from app.services.provider_settings import (
     effective_embedding_config,
     load_user_provider_settings,
 )
+from app.services.usage import record_usage
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -129,6 +130,13 @@ def persist_answer(
             mode=mode,
             source_ids=source_ids,
         )
+        if notebook:
+            record_usage(
+                session=session,
+                user_id=notebook.owner_id,
+                chat_tokens=answer.tokens_used,
+                embedding_chars=len(question),
+            )
         assistant_message = ConversationMessage(
             conversation_id=conversation.id,
             role="assistant",

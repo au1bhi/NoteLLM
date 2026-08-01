@@ -42,6 +42,7 @@ from app.services.sources import (
     process_source,
 )
 from app.services.study_guide import generate_study_guide
+from app.services.usage import record_usage
 
 router = APIRouter(prefix="/notebooks", tags=["notebooks"])
 
@@ -230,6 +231,11 @@ def search_notebook(
         )
     except EmbeddingError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
+    record_usage(
+        session=session,
+        user_id=current_user.id,
+        embedding_chars=len(search_in.query),
+    )
     return RetrievedChunksPublic(
         data=[
             RetrievedChunkPublic(

@@ -1341,6 +1341,34 @@ export const UserUpdateMeSchema = {
     title: 'UserUpdateMe'
 } as const;
 
+export const UserUsagePublicSchema = {
+    properties: {
+        chat_tokens: {
+            type: 'integer',
+            title: 'Chat Tokens'
+        },
+        embedding_chars: {
+            type: 'integer',
+            title: 'Embedding Chars'
+        },
+        updated_at: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Updated At'
+        }
+    },
+    type: 'object',
+    required: ['chat_tokens', 'embedding_chars'],
+    title: 'UserUsagePublic'
+} as const;
+
 export const UsersPublicSchema = {
     properties: {
         data: {
