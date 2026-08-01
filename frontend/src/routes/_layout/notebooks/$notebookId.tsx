@@ -165,7 +165,7 @@ function NotebookWorkspace() {
     }: {
       conversationId: string
       title: string
-    }) => conversationsApi.update(conversationId, title),
+    }) => conversationsApi.update(conversationId, { title }),
     onError: (error: Error) => showErrorToast(error.message),
     onSuccess: (_, variables) => {
       showSuccessToast("会话已重命名")
@@ -176,6 +176,20 @@ function NotebookWorkspace() {
         queryKey: ["notebooks", notebookId, "conversations"],
       })
     },
+  })
+  const pinConversationMutation = useMutation({
+    mutationFn: ({
+      conversationId,
+      isPinned,
+    }: {
+      conversationId: string
+      isPinned: boolean
+    }) => conversationsApi.update(conversationId, { is_pinned: isPinned }),
+    onError: (error: Error) => showErrorToast(error.message),
+    onSettled: () =>
+      queryClient.invalidateQueries({
+        queryKey: ["notebooks", notebookId, "conversations"],
+      }),
   })
 
   const sendQuestion = async (
@@ -354,6 +368,9 @@ function NotebookWorkspace() {
           onSelectConversation={setConversationId}
           onRenameConversation={(conversationId, title) =>
             renameConversationMutation.mutate({ conversationId, title })
+          }
+          onPinConversation={(conversationId, isPinned) =>
+            pinConversationMutation.mutate({ conversationId, isPinned })
           }
           onSend={(content, mode) => void sendQuestion(content, mode)}
         />

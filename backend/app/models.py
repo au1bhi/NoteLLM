@@ -172,6 +172,7 @@ class NotebookCreate(NotebookBase):
 class NotebookUpdate(SQLModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=1000)
+    is_pinned: bool | None = None
 
 
 class Notebook(NotebookBase, table=True):
@@ -197,6 +198,7 @@ class Notebook(NotebookBase, table=True):
     overview_updated_at: datetime | None = Field(
         default=None, sa_type=DateTime(timezone=True)  # type: ignore
     )
+    is_pinned: bool = False
 
 
 class NotebookPublic(NotebookBase):
@@ -204,6 +206,7 @@ class NotebookPublic(NotebookBase):
     owner_id: uuid.UUID
     created_at: datetime
     updated_at: datetime
+    is_pinned: bool = False
 
 
 class NotebookOverviewPublic(SQLModel):
@@ -298,12 +301,18 @@ class ConversationCreate(SQLModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
 
 
+class ConversationUpdate(SQLModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    is_pinned: bool | None = None
+
+
 class Conversation(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     notebook_id: uuid.UUID = Field(
         foreign_key="notebook.id", nullable=False, ondelete="CASCADE", index=True
     )
     title: str = Field(max_length=255)
+    is_pinned: bool = False
     created_at: datetime = Field(
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),  # type: ignore
@@ -322,6 +331,7 @@ class ConversationPublic(SQLModel):
     id: uuid.UUID
     notebook_id: uuid.UUID
     title: str
+    is_pinned: bool = False
     created_at: datetime
     updated_at: datetime
 

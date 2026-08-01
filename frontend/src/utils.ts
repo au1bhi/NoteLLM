@@ -51,3 +51,11 @@ export function timeAgo(dateInput: string | Date): string {
   }
   return "just now"
 }
+
+export function sortPinnedFirst<T extends { is_pinned?: boolean }>(
+  items: T[],
+): T[] {
+  return [...items].sort(
+    (a, b) => Number(Boolean(b.is_pinned)) - Number(Boolean(a.is_pinned)),
+  )
+}

@@ -14,12 +14,12 @@ from app.models import (
     Citation,
     CitationPublic,
     Conversation,
-    ConversationCreate,
     ConversationDetailPublic,
     ConversationMessage,
     ConversationMessageCreate,
     ConversationMessagePublic,
     ConversationPublic,
+    ConversationUpdate,
     Notebook,
     Source,
     get_datetime_utc,
@@ -167,16 +167,19 @@ def read_conversation(
 @router.patch("/{conversation_id}", response_model=ConversationPublic)
 def update_conversation(
     conversation_id: uuid.UUID,
-    conversation_in: ConversationCreate,
+    conversation_in: ConversationUpdate,
     session: SessionDep,
     current_user: CurrentUser,
 ) -> ConversationPublic:
     conversation = get_conversation_or_404(
         session=session, current_user=current_user, conversation_id=conversation_id
     )
-    if not conversation_in.title or not conversation_in.title.strip():
-        raise HTTPException(status_code=422, detail="Title cannot be empty")
-    conversation.title = conversation_in.title.strip()
+    if conversation_in.title is not None:
+        if not conversation_in.title.strip():
+            raise HTTPException(status_code=422, detail="Title cannot be empty")
+        conversation.title = conversation_in.title.strip()
+    if conversation_in.is_pinned is not None:
+        conversation.is_pinned = conversation_in.is_pinned
     conversation.updated_at = get_datetime_utc()
     session.add(conversation)
     session.commit()

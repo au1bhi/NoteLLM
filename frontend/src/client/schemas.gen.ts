@@ -142,6 +142,11 @@ export const ConversationDetailPublicSchema = {
             type: 'string',
             title: 'Title'
         },
+        is_pinned: {
+            type: 'boolean',
+            title: 'Is Pinned',
+            default: false
+        },
         created_at: {
             type: 'string',
             format: 'date-time',
@@ -258,6 +263,11 @@ export const ConversationPublicSchema = {
             type: 'string',
             title: 'Title'
         },
+        is_pinned: {
+            type: 'boolean',
+            title: 'Is Pinned',
+            default: false
+        },
         created_at: {
             type: 'string',
             format: 'date-time',
@@ -272,6 +282,37 @@ export const ConversationPublicSchema = {
     type: 'object',
     required: ['id', 'notebook_id', 'title', 'created_at', 'updated_at'],
     title: 'ConversationPublic'
+} as const;
+
+export const ConversationUpdateSchema = {
+    properties: {
+        title: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 255,
+                    minLength: 1
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Title'
+        },
+        is_pinned: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Is Pinned'
+        }
+    },
+    type: 'object',
+    title: 'ConversationUpdate'
 } as const;
 
 export const ConversationsPublicSchema = {
@@ -558,6 +599,11 @@ export const NotebookPublicSchema = {
             type: 'string',
             format: 'date-time',
             title: 'Updated At'
+        },
+        is_pinned: {
+            type: 'boolean',
+            title: 'Is Pinned',
+            default: false
         }
     },
     type: 'object',
@@ -591,6 +637,17 @@ export const NotebookUpdateSchema = {
                 }
             ],
             title: 'Description'
+        },
+        is_pinned: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Is Pinned'
         }
     },
     type: 'object',

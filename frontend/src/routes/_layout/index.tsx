@@ -19,6 +19,7 @@ import useAuth from "@/hooks/useAuth"
 import { cn } from "@/lib/utils"
 import { conversationsApi } from "@/services/conversations"
 import { notebooksApi } from "@/services/notebooks"
+import { sortPinnedFirst } from "@/utils"
 
 export const Route = createFileRoute("/_layout/")({
   component: Dashboard,
@@ -216,9 +217,11 @@ function Dashboard() {
           ) : null}
           {notebooks.data?.data.length ? (
             <div className="grid gap-4 sm:grid-cols-2">
-              {notebooks.data.data.slice(0, 6).map((notebook) => (
-                <NotebookCard key={notebook.id} notebook={notebook} />
-              ))}
+              {sortPinnedFirst(notebooks.data.data)
+                .slice(0, 6)
+                .map((notebook) => (
+                  <NotebookCard key={notebook.id} notebook={notebook} />
+                ))}
             </div>
           ) : null}
           {!notebooks.isLoading && notebooks.data?.data.length === 0 ? (

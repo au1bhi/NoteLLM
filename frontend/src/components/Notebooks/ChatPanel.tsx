@@ -22,8 +22,10 @@ import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import type { AnswerMode } from "@/services/conversations"
+import { sortPinnedFirst } from "@/utils"
 import { Citations } from "./Citations"
 import { Markdown } from "./Markdown"
+import { PinButton } from "./PinButton"
 
 const ANSWER_MODES: { value: AnswerMode; label: string; hint: string }[] = [
   {
@@ -82,6 +84,7 @@ interface ChatPanelProps {
   onNewConversation: () => void
   onSelectConversation: (id: string) => void
   onRenameConversation: (conversationId: string, title: string) => void
+  onPinConversation: (conversationId: string, isPinned: boolean) => void
   onSend: (content: string, mode: AnswerMode) => void
 }
 
@@ -177,6 +180,7 @@ export function ChatPanel({
   onNewConversation,
   onSelectConversation,
   onRenameConversation,
+  onPinConversation,
   onSend,
 }: ChatPanelProps) {
   const [question, setQuestion] = useState("")
@@ -267,6 +271,18 @@ export function ChatPanel({
               <Pencil className="size-3.5" />
             </Button>
           ) : null}
+          {activeConversation ? (
+            <PinButton
+              pinned={Boolean(activeConversation.is_pinned)}
+              className="size-7 shrink-0 rounded-md text-muted-foreground hover:text-foreground"
+              onToggle={() =>
+                onPinConversation(
+                  activeConversation.id,
+                  !activeConversation.is_pinned,
+                )
+              }
+            />
+          ) : null}
           <Button
             variant="outline"
             size="sm"
@@ -284,7 +300,7 @@ export function ChatPanel({
         </div>
         {conversations.length ? (
           <div className="mt-3 flex gap-2 overflow-x-auto pb-0.5">
-            {conversations.map((conversation) => (
+            {sortPinnedFirst(conversations).map((conversation) => (
               <Button
                 key={conversation.id}
                 size="sm"

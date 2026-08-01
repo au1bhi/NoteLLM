@@ -6,6 +6,7 @@ import { AddNotebook } from "@/components/Notebooks/AddNotebook"
 import { NotebookCard } from "@/components/Notebooks/NotebookCard"
 import { Skeleton } from "@/components/ui/skeleton"
 import { notebooksApi } from "@/services/notebooks"
+import { sortPinnedFirst } from "@/utils"
 
 export const Route = createFileRoute("/_layout/notebooks/")({
   component: Notebooks,
@@ -45,7 +46,7 @@ function Notebooks() {
 
       {!isLoading && !error && data?.data.length ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {data.data.map((notebook) => (
+          {sortPinnedFirst(data.data).map((notebook) => (
             <NotebookCard key={notebook.id} notebook={notebook} />
           ))}
         </div>

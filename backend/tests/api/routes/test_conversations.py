@@ -179,3 +179,28 @@ def test_user_cannot_rename_another_users_conversation(
         json={"title": "Nope"},
     )
     assert response.status_code == 404
+
+
+def test_pin_conversation(client: TestClient, db: Session) -> None:
+    user = create_random_user(db)
+    notebook = create_random_notebook(db=db, owner_id=user.id)
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+    conversation = client.post(
+        f"{settings.API_V1_STR}/notebooks/{notebook.id}/conversations/",
+        headers=headers,
+        json={},
+    ).json()
+
+    pinned = client.patch(
+        f"{settings.API_V1_STR}/conversations/{conversation['id']}",
+        headers=headers,
+        json={"is_pinned": True},
+    )
+    assert pinned.status_code == 200
+    assert pinned.json()["is_pinned"] is True
+
+    listed = client.get(
+        f"{settings.API_V1_STR}/notebooks/{notebook.id}/conversations/",
+        headers=headers,
+    )
+    assert listed.json()["data"][0]["is_pinned"] is True

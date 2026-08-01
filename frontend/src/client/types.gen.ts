@@ -29,6 +29,7 @@ export type ConversationDetailPublic = {
     id: string;
     notebook_id: string;
     title: string;
+    is_pinned?: boolean;
     created_at: string;
     updated_at: string;
     messages: Array<ConversationMessagePublic>;
@@ -55,6 +56,7 @@ export type ConversationPublic = {
     id: string;
     notebook_id: string;
     title: string;
+    is_pinned?: boolean;
     created_at: string;
     updated_at: string;
 };
@@ -62,6 +64,11 @@ export type ConversationPublic = {
 export type ConversationsPublic = {
     data: Array<ConversationPublic>;
     count: number;
+};
+
+export type ConversationUpdate = {
+    title?: (string | null);
+    is_pinned?: (boolean | null);
 };
 
 export type HTTPValidationError = {
@@ -118,6 +125,7 @@ export type NotebookPublic = {
     owner_id: string;
     created_at: string;
     updated_at: string;
+    is_pinned?: boolean;
 };
 
 export type NotebooksPublic = {
@@ -128,6 +136,7 @@ export type NotebooksPublic = {
 export type NotebookUpdate = {
     title?: (string | null);
     description?: (string | null);
+    is_pinned?: (boolean | null);
 };
 
 export type PrivateUserCreate = {
@@ -282,7 +291,7 @@ export type ConversationsReadConversationResponse = (ConversationDetailPublic);
 
 export type ConversationsUpdateConversationData = {
     conversationId: string;
-    requestBody: ConversationCreate;
+    requestBody: ConversationUpdate;
 };
 
 export type ConversationsUpdateConversationResponse = (ConversationPublic);

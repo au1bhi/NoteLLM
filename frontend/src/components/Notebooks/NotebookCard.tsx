@@ -1,19 +1,38 @@
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { BookOpen } from "lucide-react"
 
-import type { Notebook } from "@/services/notebooks"
+import { type Notebook, notebooksApi } from "@/services/notebooks"
 import { timeAgo } from "@/utils"
 import { DeleteNotebook } from "./DeleteNotebook"
 import { EditNotebook } from "./EditNotebook"
+import { PinButton } from "./PinButton"
 
 interface NotebookCardProps {
   notebook: Notebook
 }
 
 export function NotebookCard({ notebook }: NotebookCardProps) {
+  const queryClient = useQueryClient()
+
+  const pinMutation = useMutation({
+    mutationFn: (isPinned: boolean) =>
+      notebooksApi.update(notebook.id, { is_pinned: isPinned }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["notebooks"] })
+      queryClient.invalidateQueries({ queryKey: ["notebooks", notebook.id] })
+    },
+  })
+
   return (
     <div className="group relative isolate">
       <div className="absolute right-3 top-3 z-10 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 max-sm:opacity-100">
+        <PinButton
+          pinned={Boolean(notebook.is_pinned)}
+          disabled={pinMutation.isPending}
+          className="size-8 rounded-lg text-muted-foreground hover:text-foreground"
+          onToggle={() => pinMutation.mutate(!notebook.is_pinned)}
+        />
         <EditNotebook
           notebook={notebook}
           triggerClassName="size-8 rounded-lg text-muted-foreground hover:text-foreground"

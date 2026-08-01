@@ -3,6 +3,7 @@ import {
   type ConversationDetailPublic,
   type ConversationPublic,
   ConversationsService,
+  type ConversationUpdate,
   NotebooksService,
   OpenAPI,
 } from "@/client"
@@ -26,10 +27,10 @@ export const conversationsApi = {
     ConversationsService.readConversation({ conversationId }),
   list: (notebookId: string) =>
     NotebooksService.readConversations({ notebookId }),
-  update: (conversationId: string, title: string) =>
+  update: (conversationId: string, input: ConversationUpdate) =>
     ConversationsService.updateConversation({
       conversationId,
-      requestBody: { title },
+      requestBody: input,
     }),
   stream: async (
     conversationId: string,

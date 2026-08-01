@@ -12,6 +12,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 import { notebooksApi } from "@/services/notebooks"
+import { sortPinnedFirst } from "@/utils"
 
 export function RecentNotebooks() {
   const { isMobile, setOpenMobile } = useSidebar()
@@ -22,9 +23,9 @@ export function RecentNotebooks() {
   })
 
   const notebooks = data?.data ?? []
-  const recent = [...notebooks]
-    .sort((a, b) => b.updated_at.localeCompare(a.updated_at))
-    .slice(0, 5)
+  const recent = sortPinnedFirst(
+    [...notebooks].sort((a, b) => b.updated_at.localeCompare(a.updated_at)),
+  ).slice(0, 5)
 
   if (recent.length === 0) return null
 
