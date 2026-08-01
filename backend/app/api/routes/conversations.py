@@ -92,6 +92,7 @@ def conversation_detail(*, session: Session, conversation: Conversation) -> Conv
         id=conversation.id,
         notebook_id=conversation.notebook_id,
         title=conversation.title,
+        is_pinned=conversation.is_pinned,
         created_at=conversation.created_at,
         updated_at=conversation.updated_at,
         messages=message_public,
@@ -186,9 +187,9 @@ def update_conversation(
         if not conversation_in.title.strip():
             raise HTTPException(status_code=422, detail="Title cannot be empty")
         conversation.title = conversation_in.title.strip()
+        conversation.updated_at = get_datetime_utc()
     if conversation_in.is_pinned is not None:
         conversation.is_pinned = conversation_in.is_pinned
-    conversation.updated_at = get_datetime_utc()
     session.add(conversation)
     session.commit()
     session.refresh(conversation)

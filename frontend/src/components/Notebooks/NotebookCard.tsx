@@ -26,7 +26,7 @@ export function NotebookCard({ notebook }: NotebookCardProps) {
 
   return (
     <div className="group relative isolate">
-      <div className="absolute right-3 top-3 z-10 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100 max-sm:opacity-100">
+      <div className="absolute right-3 top-3 z-10 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto focus-within:pointer-events-auto max-sm:pointer-events-auto max-sm:opacity-100 pointer-events-none">
         <PinButton
           pinned={Boolean(notebook.is_pinned)}
           disabled={pinMutation.isPending}

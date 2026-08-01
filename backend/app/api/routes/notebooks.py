@@ -117,8 +117,12 @@ def update_notebook(
     notebook = get_notebook_or_404(
         session=session, current_user=current_user, notebook_id=notebook_id
     )
-    notebook.sqlmodel_update(notebook_in.model_dump(exclude_unset=True))
-    notebook.updated_at = get_datetime_utc()
+    data = notebook_in.model_dump(exclude_unset=True)
+    # Only touch updated_at when the content actually changed; a pin toggle
+    # should not rewrite the "last updated" timestamp that drives recency.
+    if "title" in data or "description" in data:
+        notebook.updated_at = get_datetime_utc()
+    notebook.sqlmodel_update(data)
     session.add(notebook)
     session.commit()
     session.refresh(notebook)

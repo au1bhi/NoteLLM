@@ -79,6 +79,7 @@ interface ChatPanelProps {
   hasReadySources: boolean
   onCreatePending: boolean
   isRenaming: boolean
+  pinPending?: boolean
   sourceScope?: string
   className?: string
   onNewConversation: () => void
@@ -175,6 +176,7 @@ export function ChatPanel({
   hasReadySources,
   onCreatePending,
   isRenaming,
+  pinPending,
   sourceScope,
   className,
   onNewConversation,
@@ -274,6 +276,7 @@ export function ChatPanel({
           {activeConversation ? (
             <PinButton
               pinned={Boolean(activeConversation.is_pinned)}
+              disabled={pinPending}
               className="size-7 shrink-0 rounded-md text-muted-foreground hover:text-foreground"
               onToggle={() =>
                 onPinConversation(

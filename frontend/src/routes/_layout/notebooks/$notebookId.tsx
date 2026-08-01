@@ -358,6 +358,7 @@ function NotebookWorkspace() {
           hasReadySources={hasReadySources}
           onCreatePending={createConversationMutation.isPending}
           isRenaming={renameConversationMutation.isPending}
+          pinPending={pinConversationMutation.isPending}
           sourceScope={
             selectedSourceIds.size === 0
               ? "全部资料"
