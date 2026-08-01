@@ -25,7 +25,7 @@ import useCustomToast from "@/hooks/useCustomToast"
 import { handleError } from "@/utils"
 
 const formSchema = z.object({
-  email: z.email(),
+  email: z.email({ message: "邮箱地址无效" }),
 })
 
 type FormData = z.infer<typeof formSchema>

@@ -22,7 +22,7 @@ import useAuth, { isLoggedIn } from "@/hooks/useAuth"
 
 const formSchema = z
   .object({
-    email: z.email(),
+    email: z.email({ message: "邮箱地址无效" }),
     full_name: z.string().min(1, { message: "请输入姓名" }),
     password: z
       .string()
