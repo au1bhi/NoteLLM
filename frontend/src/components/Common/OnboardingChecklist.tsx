@@ -183,9 +183,20 @@ export function OnboardingChecklist({
           step={STEPS[2]}
           done={stepStates.source}
           cta={
-            <Button asChild size="sm" variant="outline">
-              <Link to="/notebooks">去上传</Link>
-            </Button>
+            firstNotebookId ? (
+              <Button asChild size="sm" variant="outline">
+                <Link
+                  to="/notebooks/$notebookId"
+                  params={{ notebookId: firstNotebookId }}
+                >
+                  去上传
+                </Link>
+              </Button>
+            ) : (
+              <Button asChild size="sm" variant="outline">
+                <Link to="/notebooks">去上传</Link>
+              </Button>
+            )
           }
         />
         <StepRow
