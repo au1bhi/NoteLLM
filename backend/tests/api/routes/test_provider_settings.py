@@ -38,9 +38,11 @@ def test_get_provider_settings_defaults_empty(client: TestClient, db: Session) -
         "chat_base_url": None,
         "chat_api_key": "",
         "chat_model": None,
+        "chat_api_format": None,
         "embedding_base_url": None,
         "embedding_api_key": "",
         "embedding_model": None,
+        "embedding_api_format": None,
         "cooldown_until": None,
     }
 
@@ -304,3 +306,97 @@ def test_provider_settings_returns_cooldown_until(
     response = client.get(_url(), headers=headers)
     assert response.status_code == 200
     assert response.json()["cooldown_until"] is not None
+
+
+def test_resolve_api_base_formats() -> None:
+    from app.services.provider_settings import resolve_api_base
+
+    assert resolve_api_base("https://new.28.al", "openai") == "https://new.28.al"
+    assert resolve_api_base("https://new.28.al", "openai_v1") == "https://new.28.al/v1"
+    assert (
+        resolve_api_base("https://api.openai.com/v1", "openai_v1")
+        == "https://api.openai.com/v1"
+    )
+    assert (
+        resolve_api_base("https://open.bigmodel.cn/api/paas/v4", "openai")
+        == "https://open.bigmodel.cn/api/paas/v4"
+    )
+
+
+def test_put_stores_api_format(client: TestClient, db: Session) -> None:
+    user, headers = _auth(client, db)
+    response = client.put(
+        _url(), headers=headers, json={"chat_api_format": "openai_v1"}
+    )
+    assert response.status_code == 200
+    assert response.json()["chat_api_format"] == "openai_v1"
+
+    row = db.exec(
+        select(UserProviderSettings).where(UserProviderSettings.user_id == user.id)
+    ).one()
+    assert row.chat_api_format == "openai_v1"
+
+
+def test_fetch_models_uses_openai_v1_format(
+    client: TestClient, db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[str] = []
+
+    def fake_get(url: str, **_kwargs):
+        calls.append(url)
+
+        class Response:
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self):
+                return {"data": [{"id": "deepseek-v4-flash"}]}
+
+        return Response()
+
+    monkeypatch.setattr("app.api.routes.users.httpx.get", fake_get)
+    _, headers = _auth(client, db)
+    response = client.post(
+        _url() + "/models",
+        headers=headers,
+        json={
+            "base_url": "https://new.28.al",
+            "api_key": "sk-probe-123456",
+            "api_format": "openai_v1",
+        },
+    )
+    assert response.status_code == 200
+    assert calls == ["https://new.28.al/v1/models"]
+    assert response.json() == [{"id": "deepseek-v4-flash"}]
+
+
+def test_fetch_models_falls_back_to_v1(
+    client: TestClient, db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    calls: list[str] = []
+
+    def fake_get(url: str, **_kwargs):
+        calls.append(url)
+
+        class Response:
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self):
+                if url.endswith("/v1/models"):
+                    return {"data": [{"id": "deepseek-v4-flash"}]}
+                # Root path returns the site's HTML page, not JSON.
+                raise ValueError("not json")
+
+        return Response()
+
+    monkeypatch.setattr("app.api.routes.users.httpx.get", fake_get)
+    _, headers = _auth(client, db)
+    response = client.post(
+        _url() + "/models",
+        headers=headers,
+        json={"base_url": "https://new.28.al", "api_key": "sk-probe-123456"},
+    )
+    assert response.status_code == 200
+    assert calls == ["https://new.28.al/models", "https://new.28.al/v1/models"]
+    assert response.json() == [{"id": "deepseek-v4-flash"}]

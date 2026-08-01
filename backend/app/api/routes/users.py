@@ -43,6 +43,7 @@ from app.models import (
 from app.services.provider_settings import (
     load_user_provider_settings,
     mask_secret,
+    resolve_api_base,
 )
 from app.services.usage import quota_status
 from app.utils import generate_new_account_email, send_email
@@ -229,9 +230,11 @@ def _provider_settings_public(
         chat_base_url=settings_row.chat_base_url,
         chat_api_key=masked("chat_api_key"),
         chat_model=settings_row.chat_model,
+        chat_api_format=settings_row.chat_api_format,
         embedding_base_url=settings_row.embedding_base_url,
         embedding_api_key=masked("embedding_api_key"),
         embedding_model=settings_row.embedding_model,
+        embedding_api_format=settings_row.embedding_api_format,
         cooldown_until=_cooldown_until(settings_row),
     )
 
@@ -277,9 +280,17 @@ def upsert_user_provider_settings(
         "chat_model",
         "embedding_base_url",
         "embedding_model",
+        "chat_api_format",
+        "embedding_api_format",
     ):
         if field in data and not data[field]:
             data[field] = None
+    for field in ("chat_api_format", "embedding_api_format"):
+        if field in data and data[field] not in {"openai", "openai_v1"}:
+            raise HTTPException(
+                status_code=422,
+                detail="API 格式仅支持 openai 或 openai_v1",
+            )
     settings_row.sqlmodel_update(data)
     settings_row.updated_at = get_datetime_utc()
     session.add(settings_row)
@@ -306,6 +317,16 @@ def delete_user_provider_settings(
         session.delete(settings_row)
         session.commit()
     return Message(message="已清除模型配置")
+
+
+def _fetch_models_payload(root: str, api_key: str) -> object:
+    response = httpx.get(
+        f"{root}/models",
+        headers={"Authorization": f"Bearer {api_key}"},
+        timeout=30.0,
+    )
+    response.raise_for_status()
+    return response.json()
 
 
 @router.post(
@@ -341,19 +362,30 @@ def fetch_available_models(
             status_code=422,
             detail="请先配置 API Key，或使用服务端默认配置",
         )
+    root = resolve_api_base(base_url, body.api_format)
+    # When the base URL has no version path, the service may still serve the
+    # OpenAI API under /v1 (common for aggregator gateways) — probe it.
+    fallback_root: str | None = resolve_api_base(base_url, "openai_v1")
+    if body.api_format == "openai_v1" or fallback_root == root:
+        fallback_root = None
     try:
-        response = httpx.get(
-            f"{base_url.rstrip('/')}/models",
-            headers={"Authorization": f"Bearer {api_key}"},
-            timeout=30.0,
-        )
-        response.raise_for_status()
-        payload = response.json()
+        payload = _fetch_models_payload(root, api_key)
     except (httpx.HTTPError, ValueError, TypeError) as error:
-        raise HTTPException(
-            status_code=503,
-            detail="无法获取模型，请检查 Base URL 与 API Key 是否正确",
-        ) from error
+        if fallback_root is None:
+            raise HTTPException(
+                status_code=503,
+                detail="无法获取模型，请检查 Base URL 与 API Key 是否正确",
+            ) from error
+        try:
+            payload = _fetch_models_payload(fallback_root, api_key)
+        except (httpx.HTTPError, ValueError, TypeError) as fallback_error:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "无法获取模型。若 Base URL 是根域名（如 https://host），"
+                    "请在“API 格式”中选择“根域名，自动加 /v1”后重试。"
+                ),
+            ) from fallback_error
     data = payload.get("data", []) if isinstance(payload, dict) else None
     if not isinstance(data, list):
         raise HTTPException(status_code=502, detail="模型提供方返回了异常数据")

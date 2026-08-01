@@ -18,6 +18,7 @@ interface ModelPickerProps {
   value: string
   baseUrl: string
   apiKey: string
+  apiFormat?: string
   onValueChange: (value: string) => void
   id?: string
   "aria-describedby"?: string
@@ -28,6 +29,7 @@ export function ModelPicker({
   value,
   baseUrl,
   apiKey,
+  apiFormat = "openai",
   onValueChange,
   id,
   "aria-describedby": ariaDescribedby,
@@ -40,7 +42,7 @@ export function ModelPicker({
 
   const fetchMutation = useMutation({
     mutationFn: () =>
-      providerSettingsApi.fetchModels(baseUrl.trim(), apiKey.trim()),
+      providerSettingsApi.fetchModels(baseUrl.trim(), apiKey.trim(), apiFormat),
   })
 
   // Discard models fetched for a previous (baseUrl, apiKey) as soon as the

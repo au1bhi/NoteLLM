@@ -6,7 +6,7 @@ from typing import Protocol
 import httpx
 
 from app.core.config import settings
-from app.services.provider_settings import ProviderConfig
+from app.services.provider_settings import ProviderConfig, resolve_api_base
 
 
 class ChatError(Exception):
@@ -50,7 +50,10 @@ class OpenAICompatibleChatProvider:
                 "LLM_BASE_URL, LLM_API_KEY, and LLM_MODEL on the server."
             )
 
-        endpoint = f"{self.config.base_url.rstrip('/')}/chat/completions"
+        endpoint = (
+            f"{resolve_api_base(self.config.base_url, self.config.api_format)}"
+            "/chat/completions"
+        )
         try:
             response = httpx.post(
                 endpoint,

@@ -83,9 +83,13 @@ class UserProviderSettingsCreate(SQLModel):
     chat_base_url: str | None = Field(default=None, max_length=1000)
     chat_api_key: str | None = Field(default=None, max_length=1000)
     chat_model: str | None = Field(default=None, max_length=255)
+    # API format: "openai" (base URL already contains the version path) or
+    # "openai_v1" (root domain, append /v1 automatically). None keeps stored.
+    chat_api_format: str | None = Field(default=None, max_length=32)
     embedding_base_url: str | None = Field(default=None, max_length=1000)
     embedding_api_key: str | None = Field(default=None, max_length=1000)
     embedding_model: str | None = Field(default=None, max_length=255)
+    embedding_api_format: str | None = Field(default=None, max_length=32)
 
 
 class UserProviderSettings(UserProviderSettingsCreate, table=True):
@@ -124,9 +128,11 @@ class UserProviderSettingsPublic(SQLModel):
     chat_base_url: str | None = None
     chat_api_key: str = ""
     chat_model: str | None = None
+    chat_api_format: str | None = None
     embedding_base_url: str | None = None
     embedding_api_key: str = ""
     embedding_model: str | None = None
+    embedding_api_format: str | None = None
     cooldown_until: datetime | None = None
 
 
@@ -172,10 +178,12 @@ class UserUsagePublic(SQLModel):
 
 class ModelFetchRequest(SQLModel):
     """Fetch available model IDs from an OpenAI-compatible /models endpoint.
-    Empty base_url/api_key fall back to the server's configured provider."""
+    Empty base_url/api_key fall back to the server's configured provider.
+    `api_format` follows the ProviderConfig convention ("openai" | "openai_v1")."""
 
     base_url: str = Field(default="", max_length=1000)
     api_key: str = Field(default="", max_length=1000)
+    api_format: str = Field(default="openai", max_length=32)
 
 
 class ModelInfoPublic(SQLModel):

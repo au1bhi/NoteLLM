@@ -4,7 +4,7 @@ from typing import Protocol
 import httpx
 
 from app.core.config import settings
-from app.services.provider_settings import ProviderConfig
+from app.services.provider_settings import ProviderConfig, resolve_api_base
 
 
 class EmbeddingError(Exception):
@@ -27,7 +27,10 @@ class OpenAICompatibleEmbeddingProvider:
                 "on the server."
             )
 
-        endpoint = f"{self.config.base_url.rstrip('/')}/embeddings"
+        endpoint = (
+            f"{resolve_api_base(self.config.base_url, self.config.api_format)}"
+            "/embeddings"
+        )
         try:
             response = httpx.post(
                 endpoint,

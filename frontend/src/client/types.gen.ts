@@ -105,10 +105,12 @@ export type Message = {
 /**
  * Fetch available model IDs from an OpenAI-compatible /models endpoint.
  * Empty base_url/api_key fall back to the server's configured provider.
+ * `api_format` follows the ProviderConfig convention ("openai" | "openai_v1").
  */
 export type ModelFetchRequest = {
     base_url?: string;
     api_key?: string;
+    api_format?: string;
 };
 
 export type ModelInfoPublic = {
@@ -236,9 +238,11 @@ export type UserProviderSettingsCreate = {
     chat_base_url?: (string | null);
     chat_api_key?: (string | null);
     chat_model?: (string | null);
+    chat_api_format?: (string | null);
     embedding_base_url?: (string | null);
     embedding_api_key?: (string | null);
     embedding_model?: (string | null);
+    embedding_api_format?: (string | null);
 };
 
 /**
@@ -252,9 +256,11 @@ export type UserProviderSettingsPublic = {
     chat_base_url?: (string | null);
     chat_api_key?: string;
     chat_model?: (string | null);
+    chat_api_format?: (string | null);
     embedding_base_url?: (string | null);
     embedding_api_key?: string;
     embedding_model?: (string | null);
+    embedding_api_format?: (string | null);
     cooldown_until?: (string | null);
 };
 

@@ -498,12 +498,19 @@ export const ModelFetchRequestSchema = {
             maxLength: 1000,
             title: 'Api Key',
             default: ''
+        },
+        api_format: {
+            type: 'string',
+            maxLength: 32,
+            title: 'Api Format',
+            default: 'openai'
         }
     },
     type: 'object',
     title: 'ModelFetchRequest',
     description: `Fetch available model IDs from an OpenAI-compatible /models endpoint.
-Empty base_url/api_key fall back to the server's configured provider.`
+Empty base_url/api_key fall back to the server's configured provider.
+\`api_format\` follows the ProviderConfig convention ("openai" | "openai_v1").`
 } as const;
 
 export const ModelInfoPublicSchema = {
@@ -1086,6 +1093,18 @@ export const UserProviderSettingsCreateSchema = {
             ],
             title: 'Chat Model'
         },
+        chat_api_format: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 32
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Chat Api Format'
+        },
         embedding_base_url: {
             anyOf: [
                 {
@@ -1121,6 +1140,18 @@ export const UserProviderSettingsCreateSchema = {
                 }
             ],
             title: 'Embedding Model'
+        },
+        embedding_api_format: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 32
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Embedding Api Format'
         }
     },
     type: 'object',
@@ -1157,6 +1188,17 @@ export const UserProviderSettingsPublicSchema = {
             ],
             title: 'Chat Model'
         },
+        chat_api_format: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Chat Api Format'
+        },
         embedding_base_url: {
             anyOf: [
                 {
@@ -1183,6 +1225,17 @@ export const UserProviderSettingsPublicSchema = {
                 }
             ],
             title: 'Embedding Model'
+        },
+        embedding_api_format: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Embedding Api Format'
         },
         cooldown_until: {
             anyOf: [

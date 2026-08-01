@@ -1,3 +1,4 @@
+import re
 import uuid
 from dataclasses import dataclass
 
@@ -8,12 +9,31 @@ from app.core.security import decrypt_secret
 from app.core.ssrf import validate_outbound_url
 from app.models import UserProviderSettings
 
+#: Trailing version path segment such as `/v1` or `/v4`.
+_VERSION_PATH = re.compile(r"/v\d+$")
+
+ApiFormat = str  # "openai" | "openai_v1"
+
 
 @dataclass(frozen=True)
 class ProviderConfig:
     base_url: str
     api_key: str
     model: str
+    # How to interpret base_url when building endpoint paths.
+    #   "openai"     — base already contains the version path (e.g. .../v1).
+    #   "openai_v1"  — base is a root domain; ensure a trailing /v1.
+    api_format: str = "openai"
+
+
+def resolve_api_base(base_url: str, api_format: str) -> str:
+    """Return the API root the endpoints are appended to, honouring format."""
+    base = base_url.rstrip("/")
+    if not base:
+        return ""
+    if api_format == "openai_v1" and not _VERSION_PATH.search(base):
+        return f"{base}/v1"
+    return base
 
 
 def mask_secret(value: str | None) -> str:
@@ -99,6 +119,11 @@ def effective_chat_config(
             user_settings.chat_model if user_settings else None,
             settings.LLM_MODEL,
         ),
+        api_format=(
+            user_settings.chat_api_format
+            if user_settings and user_settings.chat_api_format
+            else "openai"
+        ),
     )
 
 
@@ -123,5 +148,10 @@ def effective_embedding_config(
         model=_first(
             user_settings.embedding_model if user_settings else None,
             settings.EMBEDDING_MODEL,
+        ),
+        api_format=(
+            user_settings.embedding_api_format
+            if user_settings and user_settings.embedding_api_format
+            else "openai"
         ),
     )

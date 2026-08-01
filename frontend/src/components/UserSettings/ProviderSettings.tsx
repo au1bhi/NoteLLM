@@ -27,19 +27,33 @@ import {
 import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { PasswordInput } from "@/components/ui/password-input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import useCustomToast from "@/hooks/useCustomToast"
 import { providerSettingsApi } from "@/services/provider-settings"
 import { usageApi } from "@/services/usage"
 import { extractErrorMessage } from "@/utils"
 import { ModelPicker } from "./ModelPicker"
 
+const API_FORMATS = [
+  { value: "openai", label: "OpenAI 兼容（Base URL 已含路径）" },
+  { value: "openai_v1", label: "根域名，自动加 /v1" },
+] as const
+
 const formSchema = z.object({
   chat_base_url: z.string().max(1000).optional().or(z.literal("")),
   chat_api_key: z.string().max(1000).optional().or(z.literal("")),
   chat_model: z.string().max(255).optional().or(z.literal("")),
+  chat_api_format: z.enum(["openai", "openai_v1"]).optional(),
   embedding_base_url: z.string().max(1000).optional().or(z.literal("")),
   embedding_api_key: z.string().max(1000).optional().or(z.literal("")),
   embedding_model: z.string().max(255).optional().or(z.literal("")),
+  embedding_api_format: z.enum(["openai", "openai_v1"]).optional(),
 })
 
 type FormData = z.infer<typeof formSchema>
@@ -48,9 +62,11 @@ const EMPTY_FORM: FormData = {
   chat_base_url: "",
   chat_api_key: "",
   chat_model: "",
+  chat_api_format: "openai",
   embedding_base_url: "",
   embedding_api_key: "",
   embedding_model: "",
+  embedding_api_format: "openai",
 }
 
 interface SectionConfig {
@@ -59,6 +75,7 @@ interface SectionConfig {
   baseUrl: keyof FormData
   apiKey: keyof FormData
   model: keyof FormData
+  apiFormat: "chat_api_format" | "embedding_api_format"
   maskedKey: "chat_api_key" | "embedding_api_key"
 }
 
@@ -69,6 +86,7 @@ const SECTIONS: SectionConfig[] = [
     baseUrl: "chat_base_url",
     apiKey: "chat_api_key",
     model: "chat_model",
+    apiFormat: "chat_api_format",
     maskedKey: "chat_api_key",
   },
   {
@@ -77,6 +95,7 @@ const SECTIONS: SectionConfig[] = [
     baseUrl: "embedding_base_url",
     apiKey: "embedding_api_key",
     model: "embedding_model",
+    apiFormat: "embedding_api_format",
     maskedKey: "embedding_api_key",
   },
 ]
@@ -199,9 +218,15 @@ export function ProviderSettings() {
       chat_base_url: data.chat_base_url ?? "",
       chat_api_key: "",
       chat_model: data.chat_model ?? "",
+      chat_api_format: (data.chat_api_format ?? "openai") as
+        | "openai"
+        | "openai_v1",
       embedding_base_url: data.embedding_base_url ?? "",
       embedding_api_key: "",
       embedding_model: data.embedding_model ?? "",
+      embedding_api_format: (data.embedding_api_format ?? "openai") as
+        | "openai"
+        | "openai_v1",
     })
   }, [data, form])
 
@@ -225,12 +250,12 @@ export function ProviderSettings() {
   })
 
   const onSubmit = (values: FormData) => {
-    const trimmed: FormData = {}
+    const trimmed: Record<string, string | undefined> = {}
     for (const [key, value] of Object.entries(values)) {
-      trimmed[key as keyof FormData] =
-        typeof value === "string" ? value.trim() : value
+      trimmed[key] =
+        typeof value === "string" ? value.trim() : (value ?? undefined)
     }
-    saveMutation.mutate(trimmed)
+    saveMutation.mutate(trimmed as FormData)
   }
 
   return (
@@ -285,6 +310,46 @@ export function ProviderSettings() {
                 />
                 <FormField
                   control={form.control}
+                  name={section.apiFormat}
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>API 格式</FormLabel>
+                      <FormControl>
+                        <Select
+                          value={field.value ?? "openai"}
+                          onValueChange={(value) =>
+                            field.onChange(value as "openai" | "openai_v1")
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="选择 API 格式" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {API_FORMATS.map((format) => (
+                              <SelectItem
+                                key={format.value}
+                                value={format.value}
+                              >
+                                {format.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormControl>
+                      <p className="text-xs text-muted-foreground">
+                        Base URL 为根域名（如{" "}
+                        <code className="rounded bg-muted px-1">
+                          https://host
+                        </code>
+                        ）时选择“根域名，自动加 /v1”；若已含 /v1、/v4
+                        等路径则保持默认。
+                      </p>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
                   name={section.model}
                   render={({ field }) => (
                     <FormItem>
@@ -294,6 +359,7 @@ export function ProviderSettings() {
                           value={field.value ?? ""}
                           baseUrl={form.watch(section.baseUrl) ?? ""}
                           apiKey={form.watch(section.apiKey) ?? ""}
+                          apiFormat={form.watch(section.apiFormat) ?? "openai"}
                           onValueChange={field.onChange}
                         />
                       </FormControl>
