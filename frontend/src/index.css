@@ -99,9 +99,9 @@
 
   --brand-gradient: linear-gradient(
     135deg,
-    oklch(0.3 0.02 45),
-    oklch(0.48 0.09 34) 55%,
-    oklch(0.57 0.17 30)
+    oklch(0.45 0.05 42),
+    oklch(0.55 0.13 34) 55%,
+    oklch(0.6 0.15 30)
   );
   --brand-gradient-soft: linear-gradient(
     135deg,
@@ -113,19 +113,19 @@
 }
 
 .dark {
-  --background: oklch(0.16 0.012 50);
+  --background: oklch(0.215 0.015 52);
   --foreground: oklch(0.93 0.012 70);
-  --card: oklch(0.2 0.012 50);
+  --card: oklch(0.255 0.015 52);
   --card-foreground: oklch(0.93 0.012 70);
-  --popover: oklch(0.2 0.012 50);
+  --popover: oklch(0.255 0.015 52);
   --popover-foreground: oklch(0.93 0.012 70);
-  --primary: oklch(0.66 0.17 32);
-  --primary-foreground: oklch(0.16 0.012 50);
-  --secondary: oklch(0.26 0.014 50);
+  --primary: oklch(0.68 0.16 32);
+  --primary-foreground: oklch(0.19 0.012 52);
+  --secondary: oklch(0.3 0.015 52);
   --secondary-foreground: oklch(0.93 0.012 70);
-  --muted: oklch(0.26 0.014 50);
+  --muted: oklch(0.3 0.015 52);
   --muted-foreground: oklch(0.72 0.015 60);
-  --accent: oklch(0.3 0.015 55);
+  --accent: oklch(0.33 0.015 52);
   --accent-foreground: oklch(0.95 0.012 70);
   --destructive: oklch(0.66 0.18 28);
   --border: oklch(1 0 0 / 12%);
@@ -136,20 +136,20 @@
   --chart-3: oklch(0.6 0.09 45);
   --chart-4: oklch(0.74 0.13 150);
   --chart-5: oklch(0.78 0.13 45);
-  --sidebar: oklch(0.185 0.012 50);
+  --sidebar: oklch(0.235 0.015 52);
   --sidebar-foreground: oklch(0.93 0.012 70);
-  --sidebar-primary: oklch(0.66 0.17 32);
-  --sidebar-primary-foreground: oklch(0.16 0.012 50);
-  --sidebar-accent: oklch(0.3 0.015 55);
+  --sidebar-primary: oklch(0.68 0.16 32);
+  --sidebar-primary-foreground: oklch(0.19 0.012 52);
+  --sidebar-accent: oklch(0.3 0.015 52);
   --sidebar-accent-foreground: oklch(0.95 0.012 70);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.66 0.17 32);
 
   --brand-gradient: linear-gradient(
     135deg,
-    oklch(0.42 0.03 45),
-    oklch(0.56 0.11 34) 55%,
-    oklch(0.66 0.17 32)
+    oklch(0.5 0.06 45),
+    oklch(0.62 0.11 34) 55%,
+    oklch(0.7 0.14 32)
   );
   --brand-gradient-soft: linear-gradient(
     135deg,
@@ -228,7 +228,7 @@
     animation: caret 1s steps(2) infinite;
   }
   .animate-rise {
-    animation: rise 0.5s ease-out both;
+    animation: rise 0.65s ease-out both;
   }
   /* A subtle paper-grain texture for kraft surfaces. */
   .bg-paper-grain {
@@ -293,7 +293,7 @@
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;

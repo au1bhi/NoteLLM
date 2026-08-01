@@ -427,7 +427,7 @@ export function ChatPanel({
           />
           <Button
             size="icon"
-            className="size-9 shrink-0 rounded-xl bg-brand-gradient text-white shadow-soft hover:opacity-95"
+            className="size-9 shrink-0 rounded-xl bg-primary text-primary-foreground shadow-soft hover:opacity-95"
             disabled={!canSend}
             aria-label="发送问题"
             onClick={handleSend}

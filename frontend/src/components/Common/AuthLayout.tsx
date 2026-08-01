@@ -30,14 +30,27 @@ const FEATURES = [
 export function AuthLayout({ children }: AuthLayoutProps) {
   return (
     <div className="grid min-h-svh lg:grid-cols-2">
-      <div className="relative hidden overflow-hidden bg-brand-gradient text-white lg:flex lg:flex-col lg:justify-between lg:p-12">
+      <div className="relative hidden overflow-hidden bg-[oklch(0.975_0.015_80)] lg:flex lg:flex-col lg:justify-between lg:p-12 dark:bg-brand-gradient">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 bg-paper-grain opacity-40"
         />
-        <InkMountains className="pointer-events-none absolute inset-x-0 bottom-0 h-3/5 w-full opacity-80" />
+        <InkMountains
+          tone="paper"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-3/5 w-full opacity-90 dark:hidden"
+        />
+        <InkMountains
+          tone="ink"
+          className="pointer-events-none absolute inset-x-0 bottom-0 hidden h-3/5 w-full opacity-80 dark:block"
+        />
         <div className="relative z-10 animate-rise">
-          <Logo variant="full" monochrome asLink={false} />
+          <Logo variant="full" asLink={false} className="dark:hidden" />
+          <Logo
+            variant="full"
+            monochrome
+            asLink={false}
+            className="hidden dark:flex"
+          />
         </div>
 
         <div className="relative z-10 max-w-md animate-rise">
@@ -47,12 +60,12 @@ export function AuthLayout({ children }: AuthLayoutProps) {
           <ul className="mt-9 space-y-5">
             {FEATURES.map((feature) => (
               <li key={feature.title} className="flex gap-3.5">
-                <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-white/15 ring-1 ring-white/20 backdrop-blur-sm">
+                <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/10 backdrop-blur-sm dark:bg-white/15 dark:text-white dark:ring-white/20">
                   <feature.icon className="size-4" />
                 </span>
                 <div>
                   <p className="font-medium">{feature.title}</p>
-                  <p className="mt-0.5 text-sm text-white/75">
+                  <p className="mt-0.5 text-sm text-muted-foreground dark:text-white/75">
                     {feature.description}
                   </p>
                 </div>
@@ -61,7 +74,7 @@ export function AuthLayout({ children }: AuthLayoutProps) {
           </ul>
         </div>
 
-        <p className="relative z-10 text-sm text-white/70">
+        <p className="relative z-10 text-sm text-muted-foreground dark:text-white/70">
           NoteLLM — 面向个人学习与研究的文档问答系统
         </p>
       </div>

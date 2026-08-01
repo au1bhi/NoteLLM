@@ -129,7 +129,7 @@ function SearchResults({
           </div>
           <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
             <div
-              className="h-full rounded-full bg-brand-gradient"
+              className="h-full rounded-full bg-primary"
               style={{
                 width: `${Math.max(4, Math.round(result.score * 100))}%`,
               }}

@@ -53,7 +53,7 @@ export function Citations({ citations }: CitationsProps) {
                   className="group flex w-full items-baseline gap-2 rounded-md px-1 py-0.5 text-left text-xs transition-colors hover:bg-muted/50"
                   aria-expanded={isOpen}
                 >
-                  <span className="inline-flex size-4 shrink-0 translate-y-[2px] items-center justify-center rounded-full bg-brand-gradient text-[9px] font-semibold text-white">
+                  <span className="inline-flex size-4 shrink-0 translate-y-[2px] items-center justify-center rounded-full bg-primary text-[9px] font-semibold text-white">
                     {citation.ordinal}
                   </span>
                   <span className="min-w-0">
