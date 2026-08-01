@@ -286,11 +286,26 @@ export type UserUpdateMe = {
     email?: (string | null);
 };
 
+/**
+ * Usage counters plus the free allowance that applies to each dimension.
+ *
+ * `chat_quota`/`embedding_quota` are None when the user brings their own API
+ * key (unlimited) or when nothing is configured (cannot be used at all).
+ * `*_source` tells the client who is billed: "server", "user" or "none".
+ */
 export type UserUsagePublic = {
     chat_tokens: number;
+    chat_quota?: (number | null);
+    chat_source?: 'server' | 'user' | 'none';
     embedding_chars: number;
-    updated_at?: (string | null);
+    embedding_quota?: (number | null);
+    embedding_source?: 'server' | 'user' | 'none';
+    period_start?: (string | null);
 };
+
+export type chat_source = 'server' | 'user' | 'none';
+
+export type embedding_source = 'server' | 'user' | 'none';
 
 export type ValidationError = {
     loc: Array<(string | number)>;

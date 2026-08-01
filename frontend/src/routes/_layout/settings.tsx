@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router"
+import { createFileRoute, useNavigate } from "@tanstack/react-router"
+import { z } from "zod"
 
 import ChangePassword from "@/components/UserSettings/ChangePassword"
 import DeleteAccount from "@/components/UserSettings/DeleteAccount"
@@ -8,16 +9,21 @@ import UserInformation from "@/components/UserSettings/UserInformation"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import useAuth from "@/hooks/useAuth"
 
-const tabsConfig = [
-  { value: "my-profile", title: "个人资料", component: UserInformation },
-  { value: "password", title: "密码", component: ChangePassword },
-  { value: "usage", title: "用量", component: UsageSettings },
-  { value: "model", title: "模型配置", component: ProviderSettings },
-  { value: "danger-zone", title: "危险操作", component: DeleteAccount },
-]
+const tabSchema = z.enum([
+  "my-profile",
+  "password",
+  "usage",
+  "model",
+  "danger-zone",
+])
+const searchSchema = z.object({
+  tab: tabSchema.optional().catch(undefined),
+})
+type TabValue = z.infer<typeof tabSchema>
 
 export const Route = createFileRoute("/_layout/settings")({
   component: UserSettings,
+  validateSearch: searchSchema,
   head: () => ({
     meta: [
       {
@@ -27,8 +33,18 @@ export const Route = createFileRoute("/_layout/settings")({
   }),
 })
 
+const tabsConfig = [
+  { value: "my-profile", title: "个人资料", component: UserInformation },
+  { value: "password", title: "密码", component: ChangePassword },
+  { value: "usage", title: "用量", component: UsageSettings },
+  { value: "model", title: "模型配置", component: ProviderSettings },
+  { value: "danger-zone", title: "危险操作", component: DeleteAccount },
+]
+
 function UserSettings() {
   const { user: currentUser } = useAuth()
+  const { tab } = Route.useSearch()
+  const navigate = useNavigate()
 
   if (!currentUser) {
     return null
@@ -43,17 +59,28 @@ function UserSettings() {
         <p className="text-muted-foreground">管理你的账户设置与偏好</p>
       </div>
 
-      <Tabs defaultValue="my-profile">
+      <Tabs
+        value={tab ?? "my-profile"}
+        onValueChange={(value) =>
+          navigate({
+            to: "/settings",
+            search: {
+              tab: value === "my-profile" ? undefined : (value as TabValue),
+            },
+            replace: true,
+          })
+        }
+      >
         <TabsList>
-          {tabsConfig.map((tab) => (
-            <TabsTrigger key={tab.value} value={tab.value}>
-              {tab.title}
+          {tabsConfig.map((item) => (
+            <TabsTrigger key={item.value} value={item.value}>
+              {item.title}
             </TabsTrigger>
           ))}
         </TabsList>
-        {tabsConfig.map((tab) => (
-          <TabsContent key={tab.value} value={tab.value}>
-            <tab.component />
+        {tabsConfig.map((item) => (
+          <TabsContent key={item.value} value={item.value}>
+            <item.component />
           </TabsContent>
         ))}
       </Tabs>

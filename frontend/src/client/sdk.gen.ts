@@ -748,7 +748,9 @@ export class UsersService {
     
     /**
      * Read User Usage
-     * Get the current user's accumulated model usage (chat tokens, embedding chars).
+     * Get the current user's usage plus the free allowance that applies to each
+     * dimension. `chat_quota`/`embedding_quota` are None when the user brings
+     * their own API key or when nothing is configured.
      * @returns UserUsagePublic Successful Response
      * @throws ApiError
      */

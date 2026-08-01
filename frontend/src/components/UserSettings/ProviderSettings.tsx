@@ -4,7 +4,7 @@ import { KeyRound, RotateCcw } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { type Control, useForm } from "react-hook-form"
 import { z } from "zod"
-
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -29,6 +29,7 @@ import { LoadingButton } from "@/components/ui/loading-button"
 import { PasswordInput } from "@/components/ui/password-input"
 import useCustomToast from "@/hooks/useCustomToast"
 import { providerSettingsApi } from "@/services/provider-settings"
+import { usageApi } from "@/services/usage"
 import { extractErrorMessage } from "@/utils"
 import { ModelPicker } from "./ModelPicker"
 
@@ -126,11 +127,46 @@ function SectionField({
   )
 }
 
+type BillingSource = "server" | "user" | "none"
+
+function ModelStatusChip({
+  label,
+  source,
+}: {
+  label: string
+  source?: BillingSource
+}) {
+  const state = {
+    server: {
+      text: "使用服务端默认",
+      cls: "border-primary/30 bg-primary/10 text-primary",
+    },
+    user: {
+      text: "使用自己的 Key",
+      cls: "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-400",
+    },
+    none: {
+      text: "未配置",
+      cls: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-400",
+    },
+  }[source ?? "none"]
+  return (
+    <Badge variant="outline" className={state.cls}>
+      {label}：{state.text}
+    </Badge>
+  )
+}
+
 export function ProviderSettings() {
   const { showErrorToast, showSuccessToast } = useCustomToast()
   const queryClient = useQueryClient()
   const [clearOpen, setClearOpen] = useState(false)
   const hasLoadedRef = useRef(false)
+
+  const { data: usage } = useQuery({
+    queryKey: ["user-usage"],
+    queryFn: usageApi.get,
+  })
 
   const { data } = useQuery({
     queryKey: ["provider-settings"],
@@ -191,6 +227,13 @@ export function ProviderSettings() {
         在这里配置你自己的模型 API 密钥。留空的字段会回退到服务端默认配置；
         密钥只会加密保存在后端，前端永远看不到明文。
       </div>
+
+      {usage ? (
+        <div className="mt-3 flex flex-wrap gap-2">
+          <ModelStatusChip label="对话模型" source={usage.chat_source} />
+          <ModelStatusChip label="嵌入模型" source={usage.embedding_source} />
+        </div>
+      ) : null}
 
       <Form {...form}>
         <form

@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 import type { ComponentType } from "react"
 import { InkMountains } from "@/components/Common/InkMountains"
+import { OnboardingChecklist } from "@/components/Common/OnboardingChecklist"
 import { AddNotebook } from "@/components/Notebooks/AddNotebook"
 import { NotebookCard } from "@/components/Notebooks/NotebookCard"
 import { Button } from "@/components/ui/button"
@@ -126,6 +127,16 @@ function Dashboard() {
     0,
   )
 
+  const sourcesByNotebook = new Map(
+    ids.map((id, index) => [id, sources[index]?.data?.data ?? []]),
+  )
+  const firstNotebookId =
+    notebooks.data?.data.find((notebook) =>
+      (sourcesByNotebook.get(notebook.id) ?? []).some(
+        (source) => source.status === "ready",
+      ),
+    )?.id ?? notebooks.data?.data[0]?.id
+
   const stats = [
     {
       label: "笔记本",
@@ -196,6 +207,13 @@ function Dashboard() {
           </div>
         </div>
       </section>
+
+      <OnboardingChecklist
+        notebooksCount={notebooks.data?.data.length ?? 0}
+        readySourcesCount={readyCount}
+        conversationsCount={conversationCount}
+        firstNotebookId={firstNotebookId}
+      />
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (

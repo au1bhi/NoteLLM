@@ -1380,11 +1380,45 @@ export const UserUsagePublicSchema = {
             type: 'integer',
             title: 'Chat Tokens'
         },
+        chat_quota: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Chat Quota'
+        },
+        chat_source: {
+            type: 'string',
+            enum: ['server', 'user', 'none'],
+            title: 'Chat Source',
+            default: 'none'
+        },
         embedding_chars: {
             type: 'integer',
             title: 'Embedding Chars'
         },
-        updated_at: {
+        embedding_quota: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Embedding Quota'
+        },
+        embedding_source: {
+            type: 'string',
+            enum: ['server', 'user', 'none'],
+            title: 'Embedding Source',
+            default: 'none'
+        },
+        period_start: {
             anyOf: [
                 {
                     type: 'string',
@@ -1394,12 +1428,17 @@ export const UserUsagePublicSchema = {
                     type: 'null'
                 }
             ],
-            title: 'Updated At'
+            title: 'Period Start'
         }
     },
     type: 'object',
     required: ['chat_tokens', 'embedding_chars'],
-    title: 'UserUsagePublic'
+    title: 'UserUsagePublic',
+    description: `Usage counters plus the free allowance that applies to each dimension.
+
+\`chat_quota\`/\`embedding_quota\` are None when the user brings their own API
+key (unlimited) or when nothing is configured (cannot be used at all).
+\`*_source\` tells the client who is billed: "server", "user" or "none".`
 } as const;
 
 export const UsersPublicSchema = {
