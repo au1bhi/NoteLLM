@@ -275,6 +275,11 @@ def _generate_and_store_overview(
     except ChatError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     store_overview(session=session, notebook=notebook, overview=overview)
+    record_usage(
+        session=session,
+        user_id=current_user.id,
+        chat_tokens=getattr(chat_provider, "total_tokens_used", 0),
+    )
 
 
 @router.get("/{notebook_id}/overview", response_model=NotebookOverviewPublic)
@@ -335,6 +340,11 @@ def generate_notebook_study_guide(
         )
     except ChatError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
+    record_usage(
+        session=session,
+        user_id=current_user.id,
+        chat_tokens=getattr(chat_provider, "total_tokens_used", 0),
+    )
     return StudyGuidePublic(
         sections=[
             StudySectionPublic(title=section.title, content=section.content)

@@ -136,7 +136,7 @@ def persist_answer(
                 session=session,
                 user_id=notebook.owner_id,
                 chat_tokens=answer.tokens_used,
-                embedding_chars=len(question),
+                embedding_chars=len(question) if mode != "knowledge" else 0,
             )
         assistant_message = ConversationMessage(
             conversation_id=conversation.id,
