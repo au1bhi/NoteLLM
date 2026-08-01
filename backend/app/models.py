@@ -142,10 +142,11 @@ class UserUsagePublic(SQLModel):
 
 
 class ModelFetchRequest(SQLModel):
-    """Fetch available model IDs from an OpenAI-compatible /models endpoint."""
+    """Fetch available model IDs from an OpenAI-compatible /models endpoint.
+    Empty base_url/api_key fall back to the server's configured provider."""
 
-    base_url: str = Field(min_length=1, max_length=1000)
-    api_key: str = Field(min_length=1, max_length=1000)
+    base_url: str = Field(default="", max_length=1000)
+    api_key: str = Field(default="", max_length=1000)
 
 
 class ModelInfoPublic(SQLModel):

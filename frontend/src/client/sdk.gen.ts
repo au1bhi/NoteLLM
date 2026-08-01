@@ -808,8 +808,10 @@ export class UsersService {
     
     /**
      * Fetch Available Models
-     * Fetch the model IDs available on the user's OpenAI-compatible endpoint.
-     * The key is used once for this request and is not stored.
+     * Fetch the model IDs available on an OpenAI-compatible endpoint. Empty
+     * base_url/api_key fall back to the server's configured LLM provider; a
+     * user-supplied base_url is validated against internal-network targets.
+     * Keys are used once for this request and are never stored.
      * @param data The data for the request.
      * @param data.requestBody
      * @returns ModelInfoPublic Successful Response

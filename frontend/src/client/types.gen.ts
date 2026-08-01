@@ -104,10 +104,11 @@ export type Message = {
 
 /**
  * Fetch available model IDs from an OpenAI-compatible /models endpoint.
+ * Empty base_url/api_key fall back to the server's configured provider.
  */
 export type ModelFetchRequest = {
-    base_url: string;
-    api_key: string;
+    base_url?: string;
+    api_key?: string;
 };
 
 export type ModelInfoPublic = {

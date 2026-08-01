@@ -271,21 +271,34 @@ def fetch_available_models(
     _current_user: CurrentUser,
 ) -> list[ModelInfoPublic]:
     """
-    Fetch the model IDs available on the user's OpenAI-compatible endpoint.
-    The key is used once for this request and is not stored.
+    Fetch the model IDs available on an OpenAI-compatible endpoint. Empty
+    base_url/api_key fall back to the server's configured LLM provider; a
+    user-supplied base_url is validated against internal-network targets.
+    Keys are used once for this request and are never stored.
     """
-    endpoint = f"{validate_outbound_url(body.base_url)}/models"
+    server_base = str(settings.LLM_BASE_URL) if settings.LLM_BASE_URL else ""
+    server_key = settings.LLM_API_KEY or ""
+    base_url = body.base_url.strip() or server_base
+    api_key = body.api_key.strip() or server_key
+    if not base_url or not api_key:
+        raise HTTPException(
+            status_code=422,
+            detail="Configure an API key first, or set one on the server",
+        )
+    if body.base_url.strip():
+        base_url = validate_outbound_url(base_url)
     try:
         response = httpx.get(
-            endpoint,
-            headers={"Authorization": f"Bearer {body.api_key.strip()}"},
+            f"{base_url.rstrip('/')}/models",
+            headers={"Authorization": f"Bearer {api_key}"},
             timeout=30.0,
         )
         response.raise_for_status()
         payload = response.json()
     except (httpx.HTTPError, ValueError, TypeError) as error:
         raise HTTPException(
-            status_code=503, detail="Failed to fetch models from the provider"
+            status_code=503,
+            detail="无法获取模型，请检查 Base URL 与 API Key 是否正确",
         ) from error
     data = payload.get("data", []) if isinstance(payload, dict) else None
     if not isinstance(data, list):

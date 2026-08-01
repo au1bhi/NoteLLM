@@ -490,20 +490,20 @@ export const ModelFetchRequestSchema = {
         base_url: {
             type: 'string',
             maxLength: 1000,
-            minLength: 1,
-            title: 'Base Url'
+            title: 'Base Url',
+            default: ''
         },
         api_key: {
             type: 'string',
             maxLength: 1000,
-            minLength: 1,
-            title: 'Api Key'
+            title: 'Api Key',
+            default: ''
         }
     },
     type: 'object',
-    required: ['base_url', 'api_key'],
     title: 'ModelFetchRequest',
-    description: 'Fetch available model IDs from an OpenAI-compatible /models endpoint.'
+    description: `Fetch available model IDs from an OpenAI-compatible /models endpoint.
+Empty base_url/api_key fall back to the server's configured provider.`
 } as const;
 
 export const ModelInfoPublicSchema = {

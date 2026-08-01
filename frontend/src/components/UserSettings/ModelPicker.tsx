@@ -54,7 +54,6 @@ export function ModelPicker({
   const filtered = models.filter((model) =>
     model.toLowerCase().includes(query.toLowerCase()),
   )
-  const canFetch = Boolean(baseUrl.trim() && apiKey.trim())
 
   const openManual = () => {
     setManualValue(value)
@@ -105,13 +104,13 @@ export function ModelPicker({
           <p className="text-xs text-muted-foreground">
             {models.length
               ? `已获取 ${models.length} 个模型`
-              : "填入 Base URL 与 API Key 后即可获取"}
+              : "留空则使用服务端默认配置"}
           </p>
           <Button
             type="button"
             variant="outline"
             size="sm"
-            disabled={!canFetch || fetchMutation.isPending}
+            disabled={fetchMutation.isPending}
             onClick={() => fetchMutation.mutate()}
           >
             {fetchMutation.isPending ? (
