@@ -18,6 +18,7 @@ from app.core.security import (
     get_password_hash,
     verify_password,
 )
+from app.core.ssrf import validate_outbound_url
 from app.models import (
     Item,
     Message,
@@ -273,19 +274,20 @@ def fetch_available_models(
     Fetch the model IDs available on the user's OpenAI-compatible endpoint.
     The key is used once for this request and is not stored.
     """
-    endpoint = f"{body.base_url.rstrip('/')}/models"
+    endpoint = f"{validate_outbound_url(body.base_url)}/models"
     try:
         response = httpx.get(
             endpoint,
-            headers={"Authorization": f"Bearer {body.api_key}"},
+            headers={"Authorization": f"Bearer {body.api_key.strip()}"},
             timeout=30.0,
         )
         response.raise_for_status()
-        data = response.json().get("data", [])
-    except (httpx.HTTPError, KeyError, TypeError, ValueError) as error:
+        payload = response.json()
+    except (httpx.HTTPError, ValueError, TypeError) as error:
         raise HTTPException(
-            status_code=503, detail=f"Failed to fetch models: {error}"
+            status_code=503, detail="Failed to fetch models from the provider"
         ) from error
+    data = payload.get("data", []) if isinstance(payload, dict) else None
     if not isinstance(data, list):
         raise HTTPException(
             status_code=502, detail="The provider returned an unexpected models payload"
@@ -294,7 +296,7 @@ def fetch_available_models(
         item.get("id")
         for item in data
         if isinstance(item, dict) and isinstance(item.get("id"), str)
-    ]
+    ][:100]
     if not model_ids:
         raise HTTPException(status_code=502, detail="The provider returned no models")
     return [ModelInfoPublic(id=model_id) for model_id in model_ids]

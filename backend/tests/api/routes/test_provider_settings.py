@@ -187,3 +187,31 @@ def test_user_usage_defaults_to_zero(client: TestClient, db: Session) -> None:
     assert response.status_code == 200
     assert response.json()["chat_tokens"] == 0
     assert response.json()["embedding_chars"] == 0
+
+
+def test_fetch_models_rejects_private_url(client: TestClient, db: Session) -> None:
+    _, headers = _auth(client, db)
+    response = client.post(
+        _url() + "/models",
+        headers=headers,
+        json={"base_url": "http://127.0.0.1:8000/v1", "api_key": "x"},
+    )
+    assert response.status_code == 422
+
+
+def test_fetch_models_rejects_missing_scheme(client: TestClient, db: Session) -> None:
+    _, headers = _auth(client, db)
+    response = client.post(
+        _url() + "/models",
+        headers=headers,
+        json={"base_url": "api.example.com/v1", "api_key": "x"},
+    )
+    assert response.status_code == 422
+
+
+def test_fetch_models_requires_auth(client: TestClient) -> None:
+    response = client.post(
+        _url() + "/models",
+        json={"base_url": "https://api.example.com/v1", "api_key": "x"},
+    )
+    assert response.status_code == 401
