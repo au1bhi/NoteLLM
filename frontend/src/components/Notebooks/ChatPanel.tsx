@@ -405,7 +405,7 @@ export function ChatPanel({
             </span>
           ) : null}
         </div>
-        <div className="flex items-end gap-2">
+        <div className="flex items-end gap-1.5 rounded-2xl border bg-background p-1.5 pl-3.5 shadow-soft transition-all focus-within:border-ring focus-within:ring-2 focus-within:ring-ring/25">
           <textarea
             ref={textareaRef}
             rows={1}
@@ -421,13 +421,13 @@ export function ChatPanel({
                 : "先选择或新建一个会话"
             }
             className={cn(
-              "max-h-48 min-h-10 flex-1 resize-none rounded-xl border bg-background px-3.5 py-2.5 text-sm outline-none transition-shadow placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring",
+              "max-h-48 min-h-10 flex-1 resize-none border-0 bg-transparent px-0 py-2.5 text-sm outline-none placeholder:text-muted-foreground",
               isStreaming && "opacity-60",
             )}
           />
           <Button
             size="icon"
-            className="size-10 shrink-0 rounded-xl"
+            className="size-9 shrink-0 rounded-xl bg-brand-gradient text-white shadow-soft hover:opacity-95"
             disabled={!canSend}
             aria-label="发送问题"
             onClick={handleSend}

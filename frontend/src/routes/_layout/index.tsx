@@ -62,7 +62,7 @@ function StatCard({
   loading: boolean
 }) {
   return (
-    <div className="flex items-center gap-4 rounded-xl border bg-card p-5 shadow-soft">
+    <div className="flex items-center gap-4 rounded-xl border bg-card p-5 shadow-soft transition-shadow hover:shadow-card">
       <span
         className={cn(
           "inline-flex size-11 shrink-0 items-center justify-center rounded-xl",
@@ -166,7 +166,7 @@ function Dashboard() {
           className="pointer-events-none absolute -bottom-28 right-32 size-64 rounded-full bg-white/10 blur-3xl"
         />
         <div className="relative z-10 max-w-2xl">
-          <p className="inline-flex items-center gap-1.5 text-sm font-medium text-white/80">
+          <p className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 text-sm font-medium text-white backdrop-blur-sm">
             <Sparkles className="size-4" />
             Welcome back
           </p>
@@ -177,7 +177,7 @@ function Dashboard() {
             把课程讲义、研究资料和笔记放进笔记本，在限定资料范围内提问，获得带可追溯引用的答案。
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
-            <AddNotebook triggerClassName="bg-white text-primary shadow-soft hover:bg-white/90" />
+            <AddNotebook triggerClassName="bg-white text-primary shadow-lifted transition-transform duration-200 hover:-translate-y-0.5 hover:bg-white" />
             <Button
               variant="ghost"
               asChild

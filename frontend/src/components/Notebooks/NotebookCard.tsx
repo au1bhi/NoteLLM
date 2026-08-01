@@ -26,7 +26,7 @@ export function NotebookCard({ notebook }: NotebookCardProps) {
 
   return (
     <div className="group relative isolate">
-      <div className="absolute right-3 top-3 z-10 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto focus-within:pointer-events-auto max-sm:pointer-events-auto max-sm:opacity-100 pointer-events-none">
+      <div className="absolute right-3 top-3 z-10 flex translate-x-1 items-center gap-0.5 opacity-0 transition-all duration-200 group-hover:translate-x-0 group-hover:opacity-100 group-hover:pointer-events-auto focus-within:pointer-events-auto max-sm:pointer-events-auto max-sm:translate-x-0 max-sm:opacity-100 pointer-events-none">
         <PinButton
           pinned={Boolean(notebook.is_pinned)}
           disabled={pinMutation.isPending}
@@ -47,7 +47,7 @@ export function NotebookCard({ notebook }: NotebookCardProps) {
         params={{ notebookId: notebook.id }}
         className="flex flex-col gap-3 rounded-xl border bg-card p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-card"
       >
-        <span className="inline-flex size-10 items-center justify-center rounded-lg bg-brand-gradient-soft text-primary transition-colors group-hover:text-foreground">
+        <span className="inline-flex size-10 items-center justify-center rounded-lg bg-brand-gradient-soft text-primary transition-all duration-300 group-hover:bg-brand-gradient group-hover:text-white">
           <BookOpen className="size-5" />
         </span>
         <div>

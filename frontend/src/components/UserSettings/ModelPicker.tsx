@@ -123,7 +123,15 @@ export function ModelPicker({
         </div>
         {fetchMutation.isError ? (
           <p className="text-xs text-destructive">
-            {fetchMutation.error.message}
+            {(() => {
+              const err = fetchMutation.error as
+                | (Error & { body?: { detail?: unknown } })
+                | null
+              const detail = err?.body?.detail
+              return typeof detail === "string"
+                ? detail
+                : "无法获取模型，请检查 Base URL 与 API Key，或留空使用服务端默认配置"
+            })()}
           </p>
         ) : null}
 

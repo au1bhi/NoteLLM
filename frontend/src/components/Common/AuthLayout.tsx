@@ -73,8 +73,10 @@ export function AuthLayout({ children }: AuthLayoutProps) {
           <Logo variant="full" asLink={false} className="lg:hidden" />
           <Appearance />
         </div>
-        <div className="flex flex-1 items-center justify-center">
-          <div className="w-full max-w-sm">{children}</div>
+        <div className="flex flex-1 items-center justify-center py-4">
+          <div className="w-full max-w-sm rounded-2xl border bg-card p-6 shadow-card sm:p-8">
+            {children}
+          </div>
         </div>
         <Footer />
       </div>

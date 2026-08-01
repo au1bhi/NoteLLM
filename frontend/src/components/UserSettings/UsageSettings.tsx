@@ -21,7 +21,7 @@ function StatCard({
   hint: string
 }) {
   return (
-    <div className="flex items-center gap-4 rounded-xl border bg-card p-5 shadow-soft">
+    <div className="flex items-center gap-4 rounded-xl border bg-card p-5 shadow-soft transition-shadow hover:shadow-card">
       <span className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl bg-brand-gradient-soft text-primary">
         <Icon className="size-5" />
       </span>
@@ -44,7 +44,7 @@ export function UsageSettings() {
 
   return (
     <div className="max-w-2xl">
-      <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+      <div className="rounded-lg border border-primary/15 bg-primary/5 px-4 py-3 text-sm text-muted-foreground">
         这里统计你的模型 API 用量：对话 token 数与嵌入字符数。用量只在你实际
         调用模型时累计，清除后保留的历史记录仍在。
       </div>

@@ -186,7 +186,7 @@ export function ProviderSettings() {
 
   return (
     <div className="max-w-2xl">
-      <div className="rounded-lg border bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
+      <div className="rounded-lg border border-primary/15 bg-primary/5 px-4 py-3 text-sm text-muted-foreground">
         在这里配置你自己的模型 API 密钥。留空的字段会回退到服务端默认配置；
         密钥只会加密保存在后端，前端永远看不到明文。
       </div>

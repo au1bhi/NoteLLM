@@ -11,6 +11,7 @@ import {
   SidebarGroupContent,
   SidebarGroupLabel,
   SidebarHeader,
+  SidebarSeparator,
 } from "@/components/ui/sidebar"
 import useAuth from "@/hooks/useAuth"
 import { type Item, Main } from "./Main"
@@ -35,9 +36,10 @@ export function AppSidebar() {
         <Logo variant="responsive" />
       </SidebarHeader>
       <SidebarContent>
-        <div className="px-3 pb-1 group-data-[collapsible=icon]:px-2">
+        <div className="px-3 pb-1 pt-1 group-data-[collapsible=icon]:px-2">
           <AddNotebook compact />
         </div>
+        <SidebarSeparator className="mx-3" />
         <SidebarGroup>
           <SidebarGroupLabel>Menu</SidebarGroupLabel>
           <SidebarGroupContent>
