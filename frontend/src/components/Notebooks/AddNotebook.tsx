@@ -70,7 +70,7 @@ export function AddNotebook({
         <Button
           className={cn(
             compact &&
-              "w-full justify-start gap-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2",
+              "h-8 w-full justify-start gap-2 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-2",
             triggerClassName,
           )}
         >

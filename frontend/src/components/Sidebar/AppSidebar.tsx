@@ -31,7 +31,7 @@ export function AppSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="px-4 pb-2 pt-5 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:pb-0 group-data-[collapsible=icon]:pt-2">
+      <SidebarHeader className="px-4 pb-3 pt-5 group-data-[collapsible=icon]:px-0 group-data-[collapsible=icon]:pb-4 group-data-[collapsible=icon]:pt-2">
         <Logo variant="responsive" />
       </SidebarHeader>
       <SidebarContent>
