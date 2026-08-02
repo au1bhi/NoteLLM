@@ -236,7 +236,12 @@ _SETTLE_SQL = sql_text(
 #: Effective upper bound for dimensions that are not server-billed (unlimited).
 _MAX_LIMIT = 2**63 - 1
 #: Extra tokens reserved above the question estimate to bound concurrent spend.
-CHAT_RESERVE_MARGIN = 2048
+#: A grounded answer costs far more than the question alone: the prompt embeds
+#: up to 5 × 1,000-char source chunks, the answer is capped at
+#: MAX_OUTPUT_TOKENS, and a second (suggestions) request re-sends the same
+#: context. 16k covers the worst such request; unused reservation is refunded
+#: by `settle_usage`, so over-reserving only limits burst concurrency.
+CHAT_RESERVE_MARGIN = 16_000
 
 
 def estimate_chat_reserve(question: str) -> int:

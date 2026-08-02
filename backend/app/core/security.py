@@ -42,9 +42,20 @@ def decrypt_secret(value: str) -> str | None:
 ALGORITHM = "HS256"
 
 
-def create_access_token(subject: str | Any, expires_delta: timedelta) -> str:
+def create_access_token(
+    subject: str | Any,
+    expires_delta: timedelta,
+    password_changed_at: datetime | None = None,
+) -> str:
     expire = datetime.now(UTC) + expires_delta
     to_encode = {"exp": expire, "sub": str(subject)}
+    if password_changed_at is not None:
+        # Snapshot of when the password was last changed (microsecond
+        # precision — whole seconds are too coarse when login and a rotation
+        # happen within the same second). `get_current_user` rejects tokens
+        # whose snapshot predates the user's current value, so a password
+        # change revokes every previously issued JWT immediately.
+        to_encode["pwd"] = int(password_changed_at.timestamp() * 1_000_000)
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 

@@ -53,6 +53,18 @@ def get_current_user(session: SessionDep, token: TokenDep) -> User:
         )
     if not user.is_active:
         raise HTTPException(status_code=400, detail="用户已停用")
+    if (
+        user.password_changed_at is not None
+        and token_data.pwd is not None
+        and int(user.password_changed_at.timestamp() * 1_000_000) > token_data.pwd
+    ):
+        # The password was rotated after this token was issued — the token is
+        # revoked (a stolen JWT must not survive the owner changing password).
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="凭据已失效，请重新登录",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     return user
 
 

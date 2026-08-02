@@ -679,6 +679,29 @@ export const SearchRequestSchema = {
     title: 'SearchRequest'
 } as const;
 
+export const SignupResultSchema = {
+    properties: {
+        email: {
+            type: 'string',
+            title: 'Email'
+        },
+        is_email_verified: {
+            type: 'boolean',
+            title: 'Is Email Verified'
+        }
+    },
+    type: 'object',
+    required: ['email', 'is_email_verified'],
+    title: 'SignupResult',
+    description: `Response for public self-signup.
+
+Deliberately carries no account id or timestamps, and \`is_email_verified\`
+reflects the mail-backend state (whether verification is required at all),
+never the actual account — so the endpoint cannot be used to enumerate
+registered addresses (a new signup and an existing account return the exact
+same body).`
+} as const;
+
 export const SourcePublicSchema = {
     properties: {
         display_name: {

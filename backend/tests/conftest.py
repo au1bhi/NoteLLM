@@ -1,4 +1,5 @@
 from collections.abc import Generator
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -37,6 +38,22 @@ def _reset_rate_limits() -> Generator[None]:
     rate_limit.reset()
     yield
     rate_limit.reset()
+
+
+@pytest.fixture(autouse=True)
+def _disable_email_verification_gate() -> Generator[None]:
+    """Pin the mail backend off so the server-billed usage gate stays inactive.
+
+    Test users are unverified by design, and `emails_enabled` derives from the
+    developer's local `.env` — if SMTP happened to be configured there, every
+    server-billed test (upload/search/overview/chat) would 429 on the
+    verification gate. Tests that exercise the mail path opt in explicitly by
+    patching `settings.SMTP_HOST` (see test_email_verification._email_enabled).
+    """
+    from app.core.config import settings as app_settings
+
+    with patch.object(app_settings, "SMTP_HOST", None):
+        yield
 
 
 @pytest.fixture(scope="module")

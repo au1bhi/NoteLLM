@@ -492,7 +492,7 @@ print_summary() {
   # 无条件赋值（包括空值），避免 set -u 下出现未定义变量。
   local k
   for k in DOMAIN FRONTEND_HOST FIRST_SUPERUSER FIRST_SUPERUSER_PASSWORD \
-           SMTP_HOST SMTP_PASSWORD LLM_API_KEY USERNAME TRAEFIK_PASSWORD; do
+           SMTP_HOST SMTP_PASSWORD LLM_API_KEY USERNAME TRAEFIK_PASSWORD EMAIL; do
     printf -v "$k" '%s' "$(env_get "$k" || true)"
   done
   echo
@@ -506,6 +506,7 @@ print_summary() {
     info "  API 文档:   https://api.${DOMAIN}/docs"
     info "  Adminer:    https://adminer.${DOMAIN}"
     info "  Traefik:    https://traefik.${DOMAIN}"
+    info "  Adminer / Traefik 面板登录（HTTP Basic Auth）:"
     info "              （用户: ${USERNAME} / 密码: ${TRAEFIK_PASSWORD}）"
     echo
     info "  管理员:     ${FIRST_SUPERUSER}"

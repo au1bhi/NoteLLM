@@ -26,14 +26,13 @@ def test_embedding_provider_orders_vectors_and_validates_dimensions(
     monkeypatch.setattr(settings, "EMBEDDING_MODEL", "test-embedding")
     monkeypatch.setattr(settings, "EMBEDDING_DIMENSIONS", 2)
 
-    def post(url: str, **kwargs: Any) -> httpx.Response:
-        assert url == "https://models.example/v1/embeddings"
-        assert kwargs["headers"]["Authorization"] == "Bearer test-key"
-        assert kwargs["json"] == {
-            "model": "test-embedding",
-            "input": ["first", "second"],
-            "dimensions": 2,
-        }
+    captured: dict[str, Any] = {}
+
+    def fake_pinned_request(method: str, url: str, **kwargs: Any) -> httpx.Response:
+        assert method == "POST"
+        captured["url"] = url
+        captured["headers"] = kwargs.get("headers", {})
+        captured["json"] = kwargs.get("json")
         return httpx.Response(
             200,
             json={
@@ -45,8 +44,15 @@ def test_embedding_provider_orders_vectors_and_validates_dimensions(
             request=httpx.Request("POST", url),
         )
 
-    monkeypatch.setattr(httpx, "post", post)
+    monkeypatch.setattr("app.services.embeddings.pinned_request", fake_pinned_request)
     assert get_embedding_provider().embed(["first", "second"]) == [
         [1.0, 1.0],
         [2.0, 2.0],
     ]
+    assert captured["url"] == "https://models.example/v1/embeddings"
+    assert captured["headers"]["Authorization"] == "Bearer test-key"
+    assert captured["json"] == {
+        "model": "test-embedding",
+        "input": ["first", "second"],
+        "dimensions": 2,
+    }

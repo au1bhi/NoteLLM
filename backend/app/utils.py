@@ -152,13 +152,24 @@ def generate_new_account_email(email_to: str, username: str) -> EmailData:
     return EmailData(html_content=html_content, subject=subject, text_content=text_content)
 
 
-def _encode_purpose_token(email: str, purpose: str, hours: int) -> str:
+def _encode_purpose_token(
+    email: str,
+    purpose: str,
+    hours: int,
+    password_changed_at: datetime | None = None,
+) -> str:
     delta = timedelta(hours=hours)
     now = datetime.now(UTC)
     expires = now + delta
-    exp = expires.timestamp()
+    claims = {"exp": expires.timestamp(), "nbf": now, "sub": email, "purpose": purpose}
+    if password_changed_at is not None:
+        # Snapshot of the account's password_changed_at (microsecond
+        # precision). A reset token is only usable while that value is
+        # unchanged, so a successful reset (or any password change) invalidates
+        # outstanding reset tokens immediately.
+        claims["pwd"] = int(password_changed_at.timestamp() * 1_000_000)
     encoded_jwt = jwt.encode(
-        {"exp": exp, "nbf": now, "sub": email, "purpose": purpose},
+        claims,
         settings.SECRET_KEY,
         algorithm=security.ALGORITHM,
     )
@@ -178,14 +189,33 @@ def _decode_purpose_token(token: str, purpose: str) -> str | None:
     return str(sub) if isinstance(sub, str) else None
 
 
-def generate_password_reset_token(email: str) -> str:
+def generate_password_reset_token(
+    email: str, password_changed_at: datetime | None = None
+) -> str:
     return _encode_purpose_token(
-        email, "password_reset", settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS
+        email,
+        "password_reset",
+        settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS,
+        password_changed_at,
     )
 
 
 def verify_password_reset_token(token: str) -> str | None:
     return _decode_purpose_token(token, "password_reset")
+
+
+def reset_token_password_changed_at(token: str) -> int | None:
+    """The `pwd` snapshot bound to a reset token, or None (unbound/legacy)."""
+    try:
+        decoded = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
+        )
+    except InvalidTokenError:
+        return None
+    if decoded.get("purpose") != "password_reset":
+        return None
+    pwd = decoded.get("pwd")
+    return int(pwd) if isinstance(pwd, (int, float)) else None
 
 
 def generate_verify_email_token(email: str) -> str:

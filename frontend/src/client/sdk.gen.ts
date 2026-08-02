@@ -724,9 +724,15 @@ export class UsersService {
     /**
      * Register User
      * Create new user without the need to be logged in.
+     *
+     * Anti-enumeration: a new signup and an existing account return the *exact
+     * same* body (no account id/timestamps, and `is_email_verified` only reflects
+     * whether the mail backend is configured). The exists-branch also runs a
+     * password hash so the response timing does not reveal whether the account
+     * existed, and to make probing expensive.
      * @param data The data for the request.
      * @param data.requestBody
-     * @returns UserPublic Successful Response
+     * @returns SignupResult Successful Response
      * @throws ApiError
      */
     public static registerUser(data: UsersRegisterUserData): CancelablePromise<UsersRegisterUserResponse> {

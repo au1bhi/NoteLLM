@@ -4,6 +4,7 @@ from typing import Protocol
 import httpx
 
 from app.core.config import settings
+from app.core.ssrf import pinned_request
 from app.services.provider_settings import ProviderConfig, resolve_api_base
 
 
@@ -32,7 +33,8 @@ class OpenAICompatibleEmbeddingProvider:
             "/embeddings"
         )
         try:
-            response = httpx.post(
+            response = pinned_request(
+                "POST",
                 endpoint,
                 headers={"Authorization": f"Bearer {self.config.api_key}"},
                 json={
@@ -41,7 +43,6 @@ class OpenAICompatibleEmbeddingProvider:
                     "dimensions": settings.EMBEDDING_DIMENSIONS,
                 },
                 timeout=30.0,
-                trust_env=False,
             )
             response.raise_for_status()
             data = response.json()["data"]

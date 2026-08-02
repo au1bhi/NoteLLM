@@ -355,7 +355,7 @@ def test_fetch_models_uses_openai_v1_format(
     _public_dns(monkeypatch)
     calls: list[str] = []
 
-    def fake_get(url: str, **_kwargs):
+    def fake_request(_method: str, url: str, **_kwargs):
         calls.append(url)
 
         class Response:
@@ -367,7 +367,7 @@ def test_fetch_models_uses_openai_v1_format(
 
         return Response()
 
-    monkeypatch.setattr("app.api.routes.users.httpx.get", fake_get)
+    monkeypatch.setattr("app.api.routes.users.pinned_request", fake_request)
     _, headers = _auth(client, db)
     response = client.post(
         _url() + "/models",
@@ -379,6 +379,8 @@ def test_fetch_models_uses_openai_v1_format(
         },
     )
     assert response.status_code == 200
+    # pinned_request is mocked out here; these tests assert the endpoint path
+    # resolution, not the SSRF pinning (covered by tests/core/test_ssrf.py).
     assert calls == ["https://new.28.al/v1/models"]
     assert response.json() == [{"id": "deepseek-v4-flash"}]
 
@@ -389,7 +391,7 @@ def test_fetch_models_falls_back_to_v1(
     _public_dns(monkeypatch)
     calls: list[str] = []
 
-    def fake_get(url: str, **_kwargs):
+    def fake_request(_method: str, url: str, **_kwargs):
         calls.append(url)
 
         class Response:
@@ -404,7 +406,7 @@ def test_fetch_models_falls_back_to_v1(
 
         return Response()
 
-    monkeypatch.setattr("app.api.routes.users.httpx.get", fake_get)
+    monkeypatch.setattr("app.api.routes.users.pinned_request", fake_request)
     _, headers = _auth(client, db)
     response = client.post(
         _url() + "/models",
@@ -426,7 +428,7 @@ def test_fetch_models_uses_stored_key_when_key_empty(
     )
     auth_headers: list[str] = []
 
-    def fake_get(_url: str, **_kwargs):
+    def fake_request(_method: str, _url: str, **_kwargs):
         auth_headers.append(str(_kwargs.get("headers", {}).get("Authorization", "")))
 
         class Response:
@@ -438,7 +440,7 @@ def test_fetch_models_uses_stored_key_when_key_empty(
 
         return Response()
 
-    monkeypatch.setattr("app.api.routes.users.httpx.get", fake_get)
+    monkeypatch.setattr("app.api.routes.users.pinned_request", fake_request)
     response = client.post(
         _url() + "/models",
         headers=headers,

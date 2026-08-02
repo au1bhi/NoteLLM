@@ -38,6 +38,7 @@ from app.services.provider_settings import (
 from app.services.retrieval import retrieve_chunks
 from app.services.sources import (
     create_source_from_upload,
+    delete_notebook_files,
     delete_source,
     process_source,
 )
@@ -144,6 +145,9 @@ def delete_notebook(
     )
     session.delete(notebook)
     session.commit()
+    # The DB rows cascade away; also unlink the uploaded files so deleted
+    # notebooks leave no residue on the uploads volume.
+    delete_notebook_files(notebook_id)
     return {"message": "笔记本删除成功"}
 
 

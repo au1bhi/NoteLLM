@@ -235,45 +235,62 @@ def test_update_user_me(client: TestClient, db: Session) -> None:
 
 
 def test_update_password_me(
-    client: TestClient, superuser_token_headers: dict[str, str], db: Session
+    client: TestClient, db: Session
 ) -> None:
+    # Use a dedicated account: password rotation now bumps password_changed_at
+    # and revokes every previously issued JWT, which would invalidate the
+    # module-scoped superuser token used by the rest of this file.
+    username = random_email()
+    password = random_lower_string()
+    crud.create_user(
+        session=db, user_create=UserCreate(email=username, password=password)
+    )
+    login = client.post(
+        f"{settings.API_V1_STR}/login/access-token",
+        data={"username": username, "password": password},
+    )
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
     new_password = random_lower_string()
     data = {
-        "current_password": settings.FIRST_SUPERUSER_PASSWORD,
+        "current_password": password,
         "new_password": new_password,
     }
     r = client.patch(
         f"{settings.API_V1_STR}/users/me/password",
-        headers=superuser_token_headers,
+        headers=headers,
         json=data,
     )
     assert r.status_code == 200
-    updated_user = r.json()
-    assert updated_user["message"] == "密码更新成功"
+    assert r.json()["message"] == "密码更新成功"
 
-    user_query = select(User).where(User.email == settings.FIRST_SUPERUSER)
-    user_db = db.exec(user_query).first()
-    assert user_db
-    assert user_db.email == settings.FIRST_SUPERUSER
-    verified, _ = verify_password(new_password, user_db.hashed_password)
-    assert verified
+    # The pre-change token must now be revoked (password_changed_at bumped).
+    stale = client.get(f"{settings.API_V1_STR}/users/me", headers=headers)
+    assert stale.status_code == 401
 
-    # Revert to the old password to keep consistency in test
-    old_data = {
-        "current_password": new_password,
-        "new_password": settings.FIRST_SUPERUSER_PASSWORD,
-    }
+    # A fresh login with the new password works, and lets us restore the old
+    # one to keep the account usable for the DB assertions.
+    login2 = client.post(
+        f"{settings.API_V1_STR}/login/access-token",
+        data={"username": username, "password": new_password},
+    )
+    headers2 = {"Authorization": f"Bearer {login2.json()['access_token']}"}
     r = client.patch(
         f"{settings.API_V1_STR}/users/me/password",
-        headers=superuser_token_headers,
-        json=old_data,
+        headers=headers2,
+        json={
+            "current_password": new_password,
+            "new_password": password,
+        },
     )
-    db.refresh(user_db)
-
     assert r.status_code == 200
-    verified, _ = verify_password(
-        settings.FIRST_SUPERUSER_PASSWORD, user_db.hashed_password
-    )
+
+    user_query = select(User).where(User.email == username)
+    user_db = db.exec(user_query).first()
+    assert user_db
+    assert user_db.email == username
+    verified, _ = verify_password(password, user_db.hashed_password)
+    assert verified
     assert verified
 
 
@@ -342,7 +359,10 @@ def test_register_user(
     assert r.status_code == 200
     created_user = r.json()
     assert created_user["email"] == username
-    assert created_user["full_name"] == full_name
+    # The signup body is deliberately minimal (anti-enumeration): no id, no
+    # full_name, just the email and whether verification is required.
+    assert "id" not in created_user
+    assert "full_name" not in created_user
 
     user_query = select(User).where(User.email == username)
     user_db = db.exec(user_query).first()
@@ -353,7 +373,12 @@ def test_register_user(
     assert verified
 
 
-def test_register_user_already_exists_error(client: TestClient) -> None:
+def test_register_user_does_not_enumerate_existing_account(
+    client: TestClient,
+) -> None:
+    """Signup must not reveal whether an address is already registered: an
+    existing account returns the same 200 body as a fresh signup, with no
+    account id or verification state of the real account."""
     password = random_lower_string()
     full_name = random_lower_string()
     data = {
@@ -365,8 +390,9 @@ def test_register_user_already_exists_error(client: TestClient) -> None:
         f"{settings.API_V1_STR}/users/signup",
         json=data,
     )
-    assert r.status_code == 400
-    assert r.json()["detail"] == "该邮箱的用户已存在于系统中"
+    assert r.status_code == 200
+    assert "id" not in r.json()
+    assert r.json()["email"] == settings.FIRST_SUPERUSER
 
 
 def test_update_user(

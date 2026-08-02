@@ -5,7 +5,7 @@ from pathlib import Path
 
 import fitz  # type: ignore[import-untyped]
 from fastapi import HTTPException, UploadFile, status
-from sqlmodel import Session, col, delete
+from sqlmodel import Session, col, delete, func, select
 
 from app.core.config import settings
 from app.models import Chunk, Notebook, Source, get_datetime_utc
@@ -252,8 +252,13 @@ async def create_source_from_upload(
         source.file_size_bytes = await save_upload(upload, get_upload_path(source))
         session.add(source)
         session.commit()
+        # Enforce the per-user storage cap after the size is known; on
+        # rejection the file and row are removed below so failed uploads do
+        # not accumulate on the uploads volume.
+        enforce_user_storage_limit(session=session, owner_id=notebook.owner_id)
         process_source(session=session, source=source)
     except HTTPException:
+        delete_source_file(source)
         session.delete(source)
         session.commit()
         raise
@@ -273,6 +278,42 @@ def delete_source_file(source: Source) -> None:
     parent = source_path.parent
     if parent.exists() and not any(parent.iterdir()):
         parent.rmdir()
+
+
+def user_storage_bytes(*, session: Session, owner_id: uuid.UUID) -> int:
+    """Total bytes stored across all of a user's sources (all notebooks)."""
+    notebook_ids = select(Notebook.id).where(col(Notebook.owner_id) == owner_id)
+    total = session.exec(
+        select(func.coalesce(func.sum(Source.file_size_bytes), 0)).where(
+            col(Source.notebook_id).in_(notebook_ids)
+        )
+    ).one()
+    return int(total or 0)
+
+
+def enforce_user_storage_limit(*, session: Session, owner_id: uuid.UUID) -> None:
+    """Reject the upload if the user would exceed their total storage quota."""
+    if user_storage_bytes(session=session, owner_id=owner_id) > settings.MAX_USER_STORAGE_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=(
+                f"单个用户的总存储不能超过 "
+                f"{settings.MAX_USER_STORAGE_BYTES // 1024 // 1024} MiB，请先删除部分资料"
+            ),
+        )
+
+
+def delete_notebook_files(notebook_id: uuid.UUID) -> None:
+    """Remove the upload directory of a notebook (used when it is deleted)."""
+    notebook_dir = settings.UPLOADS_DIR / str(notebook_id)
+    if notebook_dir.exists():
+        for path in notebook_dir.iterdir():
+            if path.is_file():
+                path.unlink(missing_ok=True)
+        try:
+            notebook_dir.rmdir()
+        except OSError:
+            pass
 
 
 def delete_source(*, session: Session, source: Source) -> None:

@@ -153,6 +153,20 @@ export type SearchRequest = {
     limit?: number;
 };
 
+/**
+ * Response for public self-signup.
+ *
+ * Deliberately carries no account id or timestamps, and `is_email_verified`
+ * reflects the mail-backend state (whether verification is required at all),
+ * never the actual account — so the endpoint cannot be used to enumerate
+ * registered addresses (a new signup and an existing account return the exact
+ * same body).
+ */
+export type SignupResult = {
+    email: string;
+    is_email_verified: boolean;
+};
+
 export type SourcePublic = {
     display_name: string;
     media_type: string;
@@ -518,7 +532,7 @@ export type UsersRegisterUserData = {
     requestBody: UserRegister;
 };
 
-export type UsersRegisterUserResponse = (UserPublic);
+export type UsersRegisterUserResponse = (SignupResult);
 
 export type UsersVerifyEmailData = {
     requestBody: VerifyEmailRequest;

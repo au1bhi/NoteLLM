@@ -45,6 +45,20 @@ class UserRegister(SQLModel):
     password: str = Field(min_length=8, max_length=128)
     full_name: str | None = Field(default=None, max_length=255)
 
+
+class SignupResult(SQLModel):
+    """Response for public self-signup.
+
+    Deliberately carries no account id or timestamps, and `is_email_verified`
+    reflects the mail-backend state (whether verification is required at all),
+    never the actual account — so the endpoint cannot be used to enumerate
+    registered addresses (a new signup and an existing account return the exact
+    same body).
+    """
+
+    email: str
+    is_email_verified: bool
+
     @field_validator("email", mode="before")
     @classmethod
     def _email_lower(cls, value: object) -> object:
@@ -102,6 +116,13 @@ class UpdatePassword(SQLModel):
 class User(UserBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     hashed_password: str
+    # Set whenever the password is created or changed; access and password-reset
+    # tokens carry a snapshot of this value so a password change invalidates
+    # every previously issued token (stolen JWTs stop working immediately).
+    password_changed_at: datetime | None = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
     # False until the user confirms ownership of the email via the link in the
     # verification message. Purely informational: login and the core features
     # stay available, the client shows a reminder banner instead.
@@ -525,6 +546,9 @@ class Token(SQLModel):
 # Contents of JWT token
 class TokenPayload(SQLModel):
     sub: str | None = None
+    # Epoch of the user's password_changed_at at token-issue time; used to
+    # reject JWTs that predate a password change.
+    pwd: int | None = None
 
 
 class NewPassword(SQLModel):

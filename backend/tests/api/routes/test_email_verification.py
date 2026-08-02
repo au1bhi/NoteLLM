@@ -372,13 +372,17 @@ def test_signup_normalizes_email_case(
     assert r.json()["email"] == "mixedcase@example.com"
     assert _user_from_db(db, "mixedcase@example.com") is not None
 
-    # The lowercased variant is now a duplicate.
+    # The lowercased variant is now a duplicate. The endpoint still answers
+    # 200 with the identical, non-enumerating body (no id, same verification
+    # flag) — it must not reveal that the account already existed.
     dup = client.post(
         f"{settings.API_V1_STR}/users/signup",
         json={"email": "mixedcase@example.com", "password": random_lower_string()},
     )
-    assert dup.status_code == 400
-    assert dup.json()["detail"] == "该邮箱的用户已存在于系统中"
+    assert dup.status_code == 200
+    assert dup.json()["email"] == "mixedcase@example.com"
+    assert "id" not in dup.json()
+    assert dup.json()["is_email_verified"] == r.json()["is_email_verified"]
 
 
 def test_login_is_case_insensitive(client: TestClient) -> None:

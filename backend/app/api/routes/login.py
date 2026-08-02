@@ -10,10 +10,18 @@ from app.api.deps import CurrentUser, SessionDep, get_current_active_superuser
 from app.core import security
 from app.core.config import settings
 from app.core.rate_limit import rate_limit
-from app.models import Message, NewPassword, Token, UserPublic, UserUpdate
+from app.models import (
+    Message,
+    NewPassword,
+    Token,
+    UserPublic,
+    UserUpdate,
+    get_datetime_utc,
+)
 from app.utils import (
     generate_password_reset_token,
     generate_reset_password_email,
+    reset_token_password_changed_at,
     send_email_safely,
     verify_password_reset_token,
 )
@@ -41,7 +49,9 @@ def login_access_token(
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     return Token(
         access_token=security.create_access_token(
-            user.id, expires_delta=access_token_expires
+            user.id,
+            expires_delta=access_token_expires,
+            password_changed_at=user.password_changed_at,
         )
     )
 
@@ -69,7 +79,9 @@ def recover_password(email: str, session: SessionDep) -> Message:
     # Always return the same response to prevent email enumeration attacks
     # Only send email if user actually exists
     if user:
-        password_reset_token = generate_password_reset_token(email=email)
+        password_reset_token = generate_password_reset_token(
+            email=email, password_changed_at=user.password_changed_at
+        )
         email_data = generate_reset_password_email(
             email_to=user.email, email=email, token=password_reset_token
         )
@@ -101,12 +113,25 @@ def reset_password(session: SessionDep, body: NewPassword) -> Message:
         raise HTTPException(status_code=400, detail="无效的令牌")
     elif not user.is_active:
         raise HTTPException(status_code=400, detail="用户已停用")
+    # A reset token is single-use: any password change (including a prior
+    # successful reset) bumps password_changed_at beyond the token's snapshot,
+    # so replayed links are rejected instead of re-resetting the account.
+    token_pwd = reset_token_password_changed_at(body.token)
+    if (
+        token_pwd is not None
+        and user.password_changed_at is not None
+        and int(user.password_changed_at.timestamp() * 1_000_000) > token_pwd
+    ):
+        raise HTTPException(status_code=400, detail="无效的令牌")
     user_in_update = UserUpdate(password=body.new_password)
     crud.update_user(
         session=session,
         db_user=user,
         user_in=user_in_update,
     )
+    user.password_changed_at = get_datetime_utc()
+    session.add(user)
+    session.commit()
     return Message(message="密码更新成功")
 
 

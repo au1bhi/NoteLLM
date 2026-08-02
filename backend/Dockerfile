@@ -42,4 +42,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 
 WORKDIR /app/backend/
 
-CMD ["fastapi", "run", "--workers", "4"]
+# `--proxy-headers` makes uvicorn treat the leftmost untrusted X-Forwarded-For
+# entry as the real client IP when the direct peer is one of
+# FORWARDED_ALLOW_IPS — otherwise every request behind Traefik/nginx shares one
+# rate-limit bucket. `exec` keeps uvicorn as PID 1 so SIGTERM stops it cleanly.
+CMD ["bash", "-c", "exec fastapi run --workers 4 --proxy-headers --forwarded-allow-ips \"${FORWARDED_ALLOW_IPS:-127.0.0.1}\""]

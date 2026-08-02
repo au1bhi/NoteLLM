@@ -36,11 +36,14 @@ services:
       - traefik.constraint-label=traefik-public
       - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-http.rule=Host(`adminer.${DOMAIN?Variable not set}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-http.entrypoints=http
-      - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-http.middlewares=https-redirect
+      - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-http.middlewares=https-redirect,admin-auth
       - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-https.rule=Host(`adminer.${DOMAIN?Variable not set}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-https.entrypoints=https
       - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-https.tls=true
       - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-https.tls.certresolver=le
+      # Adminer is a full database console — keep it behind the same HTTP Basic
+      # auth as the Traefik dashboard, not publicly reachable.
+      - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-https.middlewares=admin-auth
       - traefik.http.services.${STACK_NAME?Variable not set}-adminer.loadbalancer.server.port=8080
 
   prestart:
@@ -111,6 +114,11 @@ services:
       - POSTGRES_USER=${POSTGRES_USER?Variable not set}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD?Variable not set}
       - SENTRY_DSN=${SENTRY_DSN}
+      # Real-client IPs for rate limiting: the backend trusts X-Forwarded-For
+      # only from these peers (default = Docker private networks, where Traefik
+      # and the frontend nginx live). Override if your Docker networks use a
+      # different range; never publish port 8000 to the internet.
+      - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-172.16.0.0/12}
 
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/utils/health-check/', timeout=3)"]

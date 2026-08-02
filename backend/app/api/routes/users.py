@@ -21,12 +21,14 @@ from app.core.security import (
     get_password_hash,
     verify_password,
 )
-from app.core.ssrf import validate_outbound_url
+from app.core.ssrf import pinned_request, validate_outbound_url
 from app.models import (
     Message,
     ModelFetchRequest,
     ModelInfoPublic,
+    Notebook,
     ResendVerificationRequest,
+    SignupResult,
     UpdatePassword,
     User,
     UserCreate,
@@ -47,6 +49,7 @@ from app.services.provider_settings import (
     mask_secret,
     resolve_api_base,
 )
+from app.services.sources import delete_notebook_files
 from app.services.usage import quota_status
 from app.utils import (
     generate_new_account_email,
@@ -196,6 +199,8 @@ def update_password_me(
         raise HTTPException(status_code=400, detail="新密码不能与当前密码相同")
     hashed_password = get_password_hash(body.new_password)
     current_user.hashed_password = hashed_password
+    # Rotating the password revokes every previously issued access token.
+    current_user.password_changed_at = get_datetime_utc()
     session.add(current_user)
     session.commit()
     return Message(message="密码更新成功")
@@ -235,6 +240,13 @@ def delete_user_me(session: SessionDep, current_user: CurrentUser) -> Any:
     """
     if current_user.is_superuser:
         raise HTTPException(status_code=403, detail="超级管理员不能删除自己")
+    # Unlink uploaded files before the DB rows cascade away, so deleting an
+    # account leaves no residue on the uploads volume.
+    notebook_ids = session.exec(
+        select(Notebook.id).where(Notebook.owner_id == current_user.id)
+    ).all()
+    for notebook_id in notebook_ids:
+        delete_notebook_files(notebook_id)
     session.delete(current_user)
     session.commit()
     return Message(message="用户删除成功")
@@ -376,11 +388,11 @@ def delete_user_provider_settings(
 
 
 def _fetch_models_payload(root: str, api_key: str) -> object:
-    response = httpx.get(
+    response = pinned_request(
+        "GET",
         f"{root}/models",
         headers={"Authorization": f"Bearer {api_key}"},
         timeout=30.0,
-        trust_env=False,
     )
     response.raise_for_status()
     return response.json()
@@ -389,6 +401,9 @@ def _fetch_models_payload(root: str, api_key: str) -> object:
 @router.post(
     "/me/provider-settings/models",
     response_model=list[ModelInfoPublic],
+    # This probe spends the server's own chat key (or the caller's) on a live
+    # request — rate-limit it like an auth endpoint.
+    dependencies=[Depends(rate_limit(limit=10, window=60))],
 )
 def fetch_available_models(
     body: ModelFetchRequest,
@@ -465,47 +480,66 @@ def fetch_available_models(
 
 @router.post(
     "/signup",
-    response_model=UserPublic,
+    response_model=SignupResult,
     dependencies=[Depends(rate_limit(limit=5, window=60))],
 )
-def register_user(session: SessionDep, user_in: UserRegister) -> Any:
+def register_user(session: SessionDep, user_in: UserRegister) -> SignupResult:
     """
     Create new user without the need to be logged in.
+
+    Anti-enumeration: a new signup and an existing account return the *exact
+    same* body (no account id/timestamps, and `is_email_verified` only reflects
+    whether the mail backend is configured). The exists-branch also runs a
+    password hash so the response timing does not reveal whether the account
+    existed, and to make probing expensive.
     """
-    user = crud.get_user_by_email(session=session, email=user_in.email)
-    if user:
-        raise HTTPException(
-            status_code=400,
-            detail="该邮箱的用户已存在于系统中",
-        )
-    user_create = UserCreate.model_validate(user_in)
-    try:
-        user = crud.create_user(session=session, user_create=user_create)
-    except IntegrityError:
-        # Two concurrent signups for the same address raced past the check
-        # above; the unique index is authoritative.
-        session.rollback()
-        raise HTTPException(
-            status_code=400,
-            detail="该邮箱的用户已存在于系统中",
-        )
-    if settings.emails_enabled:
-        email_data = generate_verify_email_email(email_to=user.email)
-        if recipient_send_cooldown(user.email):
-            send_email_safely(
-                email_to=user.email,
-                subject=email_data.subject,
-                html_content=email_data.html_content,
-                text_content=email_data.text_content,
-            )
+    email = user_in.email
+    exists = crud.get_user_by_email(session=session, email=email) is not None
+    if not exists:
+        user_create = UserCreate.model_validate(user_in)
+        try:
+            user = crud.create_user(session=session, user_create=user_create)
+        except IntegrityError:
+            # Two concurrent signups for the same address raced past the check
+            # above; the unique index is authoritative.
+            session.rollback()
+            exists = True
+        else:
+            if settings.emails_enabled:
+                email_data = generate_verify_email_email(email_to=user.email)
+                if recipient_send_cooldown(user.email):
+                    send_email_safely(
+                        email_to=user.email,
+                        subject=email_data.subject,
+                        html_content=email_data.html_content,
+                        text_content=email_data.text_content,
+                    )
+            else:
+                # No mail backend configured: there is nothing to confirm, so
+                # the account is usable immediately (local development /
+                # email-disabled self-host).
+                user.is_email_verified = True
+                session.add(user)
+                session.commit()
     else:
-        # No mail backend configured: there is nothing to confirm, so the
-        # account is usable immediately (local development / email-disabled
-        # self-host). Production deployments set SMTP and get real verification.
-        user.is_email_verified = True
-        session.add(user)
-        session.commit()
-    return user
+        # Equalize timing with the create path (argon2 is slow) and make
+        # enumeration attempts expensive.
+        get_password_hash(user_in.password)
+        if settings.emails_enabled:
+            # Re-send the verification link — genuinely useful for an existing
+            # unverified account, harmless for a verified one (idempotent), and
+            # throttled by the per-recipient cooldown.
+            email_data = generate_verify_email_email(email_to=email)
+            if recipient_send_cooldown(email):
+                send_email_safely(
+                    email_to=email,
+                    subject=email_data.subject,
+                    html_content=email_data.html_content,
+                    text_content=email_data.text_content,
+                )
+    return SignupResult(
+        email=email, is_email_verified=not settings.emails_enabled
+    )
 
 
 @router.post(

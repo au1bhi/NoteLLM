@@ -52,6 +52,9 @@ class Settings(BaseSettings):
     SENTRY_DSN: HttpUrl | None = None
     UPLOADS_DIR: Path = Path("data/uploads")
     MAX_UPLOAD_SIZE_BYTES: int = 10 * 1024 * 1024
+    # Total bytes one user may hold across all sources (bounds the uploads
+    # volume against many small files slipping past the single-file cap).
+    MAX_USER_STORAGE_BYTES: int = 100 * 1024 * 1024
     LLM_BASE_URL: HttpUrl | None = None
     LLM_API_KEY: str | None = None
     LLM_MODEL: str | None = None
