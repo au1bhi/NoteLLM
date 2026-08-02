@@ -7,8 +7,12 @@ from app.models import User, UserCreate, UserUpdate
 
 
 def create_user(*, session: Session, user_create: UserCreate) -> User:
+    # Emails are stored lowercase (mailbox delivery is case-insensitive).
+    normalized = user_create.model_copy(
+        update={"email": user_create.email.strip().lower()}
+    )
     db_obj = User.model_validate(
-        user_create, update={"hashed_password": get_password_hash(user_create.password)}
+        normalized, update={"hashed_password": get_password_hash(normalized.password)}
     )
     session.add(db_obj)
     session.commit()
@@ -23,6 +27,8 @@ def update_user(*, session: Session, db_user: User, user_in: UserUpdate) -> Any:
         password = user_data["password"]
         hashed_password = get_password_hash(password)
         extra_data["hashed_password"] = hashed_password
+    if user_data.get("email"):
+        user_data["email"] = user_data["email"].strip().lower()
     db_user.sqlmodel_update(user_data, update=extra_data)
     session.add(db_user)
     session.commit()
@@ -31,7 +37,7 @@ def update_user(*, session: Session, db_user: User, user_in: UserUpdate) -> Any:
 
 
 def get_user_by_email(*, session: Session, email: str) -> User | None:
-    statement = select(User).where(User.email == email)
+    statement = select(User).where(User.email == email.strip().lower())
     session_user = session.exec(statement).first()
     return session_user
 
@@ -42,6 +48,7 @@ DUMMY_HASH = "$argon2id$v=19$m=65536,t=3,p=4$MjQyZWE1MzBjYjJlZTI0Yw$YTU4NGM5ZTZm
 
 
 def authenticate(*, session: Session, email: str, password: str) -> User | None:
+    # The OAuth2 form sends the raw string, so normalize here too.
     db_user = get_user_by_email(session=session, email=email)
     if not db_user:
         # Prevent timing attacks by running password verification even when user doesn't exist

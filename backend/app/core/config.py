@@ -144,6 +144,22 @@ class Settings(BaseSettings):
             else:
                 raise ValueError(message)
 
+        if self.SMTP_TLS and self.SMTP_SSL:
+            raise ValueError("SMTP_TLS and SMTP_SSL cannot both be enabled")
+
+        if self.ENVIRONMENT != "local":
+            if not str(self.FRONTEND_HOST).startswith("https://"):
+                raise ValueError(
+                    "FRONTEND_HOST must use https:// in production — verification "
+                    "and password-reset links point there and http would send "
+                    "their tokens in cleartext."
+                )
+            if "localhost" in str(self.FRONTEND_HOST).lower():
+                raise ValueError(
+                    "FRONTEND_HOST must be the public domain in production, "
+                    "not localhost — email links must be reachable by users."
+                )
+
         return self
 
 

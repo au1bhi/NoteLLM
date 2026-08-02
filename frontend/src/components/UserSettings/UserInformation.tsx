@@ -4,7 +4,7 @@ import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 
-import { UsersService, type UserUpdateMe } from "@/client"
+import { ApiError, UsersService, type UserUpdateMe } from "@/client"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -20,6 +20,7 @@ import { LoadingButton } from "@/components/ui/loading-button"
 import { PasswordInput } from "@/components/ui/password-input"
 import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
+import { useResendEmail } from "@/hooks/useResendEmail"
 import { cn } from "@/lib/utils"
 import { handleError } from "@/utils"
 
@@ -60,19 +61,26 @@ const UserInformation = () => {
       showSuccessToast("个人信息已更新")
       toggleEditMode()
     },
-    onError: handleError.bind(showErrorToast),
+    onError: (error: Error) => {
+      // A rejected password while changing the email belongs on the field, not
+      // just in a toast.
+      if (error instanceof ApiError) {
+        const detail = (error.body as { detail?: string } | undefined)?.detail
+        if (error.status === 400 && detail === "当前密码错误") {
+          form.setError("current_password", { message: "当前密码错误" })
+          return
+        }
+        handleError.call(showErrorToast, error)
+        return
+      }
+      showErrorToast("操作失败，请稍后重试")
+    },
     onSettled: () => {
       queryClient.invalidateQueries()
     },
   })
 
-  const resendMutation = useMutation({
-    mutationFn: () => UsersService.resendVerificationMe(),
-    onSuccess: () => {
-      showSuccessToast("验证邮件已发送，请查收")
-    },
-    onError: handleError.bind(showErrorToast),
-  })
+  const { resend, isPending: resending, cooldown, disabled } = useResendEmail()
 
   const typedEmail = form.watch("email")
   const emailChanged = editMode && typedEmail !== currentUser?.email
@@ -166,12 +174,14 @@ const UserInformation = () => {
                           variant="link"
                           size="sm"
                           className="px-1 text-primary"
-                          onClick={() => resendMutation.mutate()}
-                          disabled={resendMutation.isPending}
+                          onClick={resend}
+                          disabled={disabled}
                         >
-                          {resendMutation.isPending
+                          {resending
                             ? "发送中…"
-                            : "发送验证邮件"}
+                            : cooldown > 0
+                              ? `${cooldown}s 后可重发`
+                              : "发送验证邮件"}
                         </Button>
                       </>
                     )}

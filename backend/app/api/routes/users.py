@@ -4,6 +4,7 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, func, select
 
 from app import crud
@@ -13,7 +14,7 @@ from app.api.deps import (
     get_current_active_superuser,
 )
 from app.core.config import settings
-from app.core.rate_limit import rate_limit
+from app.core.rate_limit import rate_limit, recipient_send_cooldown
 from app.core.security import (
     decrypt_secret,
     encrypt_secret,
@@ -95,6 +96,13 @@ def create_user(*, session: SessionDep, user_in: UserCreate) -> Any:
         )
 
     user = crud.create_user(session=session, user_create=user_in)
+    # An admin creates an account for a known person (they receive the
+    # credentials email), so it is trusted from the start — unlike public
+    # self-signup, which must confirm the address.
+    user.is_email_verified = True
+    session.add(user)
+    session.commit()
+    session.refresh(user)
     if settings.emails_enabled and user_in.email:
         email_data = generate_new_account_email(
             email_to=user_in.email, username=user_in.email, password=user_in.password
@@ -103,6 +111,7 @@ def create_user(*, session: SessionDep, user_in: UserCreate) -> Any:
             email_to=user_in.email,
             subject=email_data.subject,
             html_content=email_data.html_content,
+            text_content=email_data.text_content,
         )
     return user
 
@@ -119,6 +128,8 @@ def update_user_me(
     # `current_password` is an authorization proof for email changes, not a
     # column on the user row — never let it reach sqlmodel_update.
     provided_password = user_data.pop("current_password", None)
+    if "email" in user_data and user_data["email"] is None:
+        raise HTTPException(status_code=422, detail="邮箱不能为空")
 
     email_changed = (
         "email" in user_data and user_data["email"] != current_user.email
@@ -146,16 +157,24 @@ def update_user_me(
 
     current_user.sqlmodel_update(user_data)
     session.add(current_user)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError:
+        # A concurrent request claimed the target email between the check and
+        # this commit (or the address collides with a legacy mixed-case row).
+        session.rollback()
+        raise HTTPException(status_code=409, detail="该邮箱的用户已存在")
     session.refresh(current_user)
 
     if email_changed and settings.emails_enabled:
         email_data = generate_verify_email_email(email_to=current_user.email)
-        send_email_safely(
-            email_to=current_user.email,
-            subject=email_data.subject,
-            html_content=email_data.html_content,
-        )
+        if recipient_send_cooldown(current_user.email):
+            send_email_safely(
+                email_to=current_user.email,
+                subject=email_data.subject,
+                html_content=email_data.html_content,
+                text_content=email_data.text_content,
+            )
     return current_user
 
 
@@ -460,14 +479,25 @@ def register_user(session: SessionDep, user_in: UserRegister) -> Any:
             detail="该邮箱的用户已存在于系统中",
         )
     user_create = UserCreate.model_validate(user_in)
-    user = crud.create_user(session=session, user_create=user_create)
+    try:
+        user = crud.create_user(session=session, user_create=user_create)
+    except IntegrityError:
+        # Two concurrent signups for the same address raced past the check
+        # above; the unique index is authoritative.
+        session.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="该邮箱的用户已存在于系统中",
+        )
     if settings.emails_enabled:
         email_data = generate_verify_email_email(email_to=user.email)
-        send_email_safely(
-            email_to=user.email,
-            subject=email_data.subject,
-            html_content=email_data.html_content,
-        )
+        if recipient_send_cooldown(user.email):
+            send_email_safely(
+                email_to=user.email,
+                subject=email_data.subject,
+                html_content=email_data.html_content,
+                text_content=email_data.text_content,
+            )
     else:
         # No mail backend configured: there is nothing to confirm, so the
         # account is usable immediately (local development / email-disabled
@@ -478,7 +508,11 @@ def register_user(session: SessionDep, user_in: UserRegister) -> Any:
     return user
 
 
-@router.post("/verify-email", response_model=Message)
+@router.post(
+    "/verify-email",
+    response_model=Message,
+    dependencies=[Depends(rate_limit(limit=10, window=60))],
+)
 def verify_email(session: SessionDep, body: VerifyEmailRequest) -> Any:
     """
     Confirm email ownership with the signed link token. The endpoint is
@@ -513,11 +547,13 @@ def resend_verification(
     user = crud.get_user_by_email(session=session, email=body.email)
     if settings.emails_enabled and user and not user.is_email_verified:
         email_data = generate_verify_email_email(email_to=user.email)
-        send_email_safely(
-            email_to=user.email,
-            subject=email_data.subject,
-            html_content=email_data.html_content,
-        )
+        if recipient_send_cooldown(user.email):
+            send_email_safely(
+                email_to=user.email,
+                subject=email_data.subject,
+                html_content=email_data.html_content,
+                text_content=email_data.text_content,
+            )
     return Message(message="如果该邮箱已注册，我们已发送验证邮件")
 
 
@@ -535,11 +571,13 @@ def resend_verification_me(current_user: CurrentUser) -> Any:
         return Message(message="邮箱已验证")
     if settings.emails_enabled:
         email_data = generate_verify_email_email(email_to=current_user.email)
-        send_email_safely(
-            email_to=current_user.email,
-            subject=email_data.subject,
-            html_content=email_data.html_content,
-        )
+        if recipient_send_cooldown(current_user.email):
+            send_email_safely(
+                email_to=current_user.email,
+                subject=email_data.subject,
+                html_content=email_data.html_content,
+                text_content=email_data.text_content,
+            )
     return Message(message="验证邮件已发送")
 
 

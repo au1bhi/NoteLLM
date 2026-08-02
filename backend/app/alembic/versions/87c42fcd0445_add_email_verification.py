@@ -1,8 +1,10 @@
 """add email verification
 
 Adds the `is_email_verified` flag used by the account email-verification
-flow. Existing accounts (including the pre-seeded superuser) start unverified;
-the client shows a reminder banner and a resend link.
+flow. Existing accounts are backfilled as verified (they predate the feature
+and — especially without a mail backend — must not be forced to prove their
+address retroactively); only new signups start unverified and go through the
+flow.
 
 Revision ID: 87c42fcd0445
 Revises: a1b2c3d4e5f6
@@ -22,11 +24,13 @@ depends_on = None
 def upgrade() -> None:
     op.add_column(
         'user',
-        sa.Column('is_email_verified', sa.Boolean(), nullable=False, server_default=sa.false()),
+        sa.Column(
+            'is_email_verified',
+            sa.Boolean(),
+            nullable=False,
+            server_default=sa.true(),
+        ),
     )
-    # Keep the DEFAULT only for the backfill of existing rows; the application
-    # now supplies the value explicitly on insert.
-    op.alter_column('user', 'is_email_verified', server_default=None)
 
 
 def downgrade() -> None:

@@ -7,7 +7,7 @@ from sqlalchemy import text as sql_text
 from sqlmodel import Session, select
 
 from app.core.config import settings
-from app.models import UserProviderSettings, UserUsage
+from app.models import User, UserProviderSettings, UserUsage
 from app.services.chat import estimate_tokens
 from app.services.provider_settings import (
     has_own_chat_key,
@@ -20,6 +20,29 @@ ProviderSource = Literal["server", "user", "none"]
 
 class QuotaError(Exception):
     """Raised when a request billed to the server's free allowance is exhausted."""
+
+
+def _require_verified_for_server_usage(
+    session: Session, user_id: uuid.UUID, status: "QuotaStatus"
+) -> None:
+    """Server-billed free allowance requires a verified email.
+
+    Bring-your-own-key usage is never gated. When the mail backend is
+    disabled every account is auto-verified (and the flag is moot), so the gate
+    only bites deployments that actually send verification emails — exactly
+    where anonymous signups would otherwise farm the operator's LLM budget.
+    """
+    if not settings.emails_enabled:
+        return
+    if status.chat_source != "server" and status.embedding_source != "server":
+        return
+    user = session.get(User, user_id)
+    if user is not None and not user.is_email_verified:
+        raise QuotaError(
+            "使用服务端免费额度前，请先验证你的邮箱。"
+            "可在“设置 → 个人信息”重新发送验证邮件，"
+            "或填入自己的 API Key 直接使用。"
+        )
 
 
 def current_period(now: datetime | None = None) -> datetime:
@@ -144,6 +167,7 @@ def check_chat_quota(
 ) -> QuotaStatus:
     """Raise QuotaError when the server-billed chat allowance is exhausted."""
     status = quota_status(session, user_id, user_settings)
+    _require_verified_for_server_usage(session, user_id, status)
     if status.chat_quota is not None and status.chat_tokens >= status.chat_quota:
         raise QuotaError(
             "本月的免费对话额度已用完（"
@@ -161,6 +185,7 @@ def check_embedding_quota(
 ) -> QuotaStatus:
     """Raise QuotaError when the server-billed embedding allowance is exhausted."""
     status = quota_status(session, user_id, user_settings)
+    _require_verified_for_server_usage(session, user_id, status)
     if (
         status.embedding_quota is not None
         and status.embedding_chars >= status.embedding_quota
@@ -269,6 +294,7 @@ def reserve_usage(
     reconcile the real cost afterwards with `settle_usage`.
     """
     status = quota_status(session, user_id, user_settings)
+    _require_verified_for_server_usage(session, user_id, status)
     if status.chat_quota is None:
         chat_tokens = 0
     if status.embedding_quota is None:

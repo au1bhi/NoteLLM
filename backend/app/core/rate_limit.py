@@ -16,6 +16,9 @@ from app.core.config import settings
 _lock = threading.Lock()
 # key -> (count, window_start_seconds). Guarded by _lock.
 _buckets: dict[tuple[str, str], tuple[int, float]] = {}
+# recipient email -> last send timestamp. Guards against one address being
+# flooded with verification mail from many different IPs.
+_recipient_sends: dict[str, float] = {}
 _MAX_ENTRIES = 10_000
 
 
@@ -23,6 +26,18 @@ def reset() -> None:
     """Clear all buckets (used by tests)."""
     with _lock:
         _buckets.clear()
+        _recipient_sends.clear()
+
+
+def _evict_oldest() -> None:
+    """Drop the oldest-bucketed entries when the table grows too large, instead
+    of wiping every bucket (which would momentarily open all limits)."""
+    with _lock:
+        while len(_buckets) > _MAX_ENTRIES:
+            oldest_key = min(
+                _buckets, key=lambda k: _buckets[k][1]
+            )
+            del _buckets[oldest_key]
 
 
 def rate_limit(limit: int, window: int = 60) -> Callable[[Request], None]:
@@ -46,7 +61,25 @@ def rate_limit(limit: int, window: int = 60) -> Callable[[Request], None]:
                     headers={"Retry-After": str(window)},
                 )
             _buckets[key] = (count + 1, start)
-            if len(_buckets) > _MAX_ENTRIES:
-                _buckets.clear()
+        _evict_oldest()
 
     return dependency
+
+
+def recipient_send_cooldown(email: str, window: int = 60) -> bool:
+    """Return True if a message may be sent to `email` now.
+
+    Enforces at most one send per `window` seconds per recipient, independent of
+    which IP triggers it, so a distributed caller cannot flood a target mailbox
+    with verification messages. A rejected call is silently skipped (the caller
+    still returns its generic success response).
+    """
+    if not settings.RATE_LIMIT_ENABLED:
+        return True
+    now = time.monotonic()
+    with _lock:
+        last = _recipient_sends.get(email)
+        if last is not None and now - last < window:
+            return False
+        _recipient_sends[email] = now
+    return True

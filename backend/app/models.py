@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from typing import Literal
 
 from pgvector.sqlalchemy import Vector
-from pydantic import EmailStr
+from pydantic import EmailStr, field_validator
 from sqlalchemy import JSON, Column, DateTime
 from sqlmodel import Field, Relationship, SQLModel
 
@@ -12,6 +12,19 @@ from app.core.config import settings
 
 def get_datetime_utc() -> datetime:
     return datetime.now(UTC)
+
+
+def _normalize_email(value: object) -> object:
+    """Lowercase emails on input.
+
+    Mailbox delivery is case-insensitive, but `EmailStr` only lowercases the
+    domain part. Storing the local part in its original case lets the same
+    mailbox register under case variants and makes login lookups case-sensitive
+    — normalize to lowercase so "A@X.com" and "a@x.com" are the same account.
+    """
+    if isinstance(value, str):
+        return value.strip().lower()
+    return value
 
 
 # Shared properties
@@ -32,6 +45,11 @@ class UserRegister(SQLModel):
     password: str = Field(min_length=8, max_length=128)
     full_name: str | None = Field(default=None, max_length=255)
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def _email_lower(cls, value: object) -> object:
+        return _normalize_email(value)
+
 
 # Properties to receive via API on update, all are optional
 class UserUpdate(SQLModel):
@@ -40,6 +58,11 @@ class UserUpdate(SQLModel):
     is_superuser: bool | None = None
     full_name: str | None = Field(default=None, max_length=255)
     password: str | None = Field(default=None, min_length=8, max_length=128)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def _email_lower(cls, value: object) -> object:
+        return _normalize_email(value)
 
 
 class UserUpdateMe(SQLModel):
@@ -51,6 +74,11 @@ class UserUpdateMe(SQLModel):
     # attacker-owned address and then using password recovery).
     current_password: str | None = Field(default=None, max_length=128)
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def _email_lower(cls, value: object) -> object:
+        return _normalize_email(value)
+
 
 class VerifyEmailRequest(SQLModel):
     token: str = Field(min_length=1, max_length=2048)
@@ -58,6 +86,11 @@ class VerifyEmailRequest(SQLModel):
 
 class ResendVerificationRequest(SQLModel):
     email: EmailStr = Field(max_length=255)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def _email_lower(cls, value: object) -> object:
+        return _normalize_email(value)
 
 
 class UpdatePassword(SQLModel):

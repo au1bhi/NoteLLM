@@ -116,7 +116,7 @@ function Login() {
                   <FormControl>
                     <PasswordInput
                       data-testid="password-input"
-                      placeholder="Password"
+                      placeholder="密码"
                       {...field}
                     />
                   </FormControl>

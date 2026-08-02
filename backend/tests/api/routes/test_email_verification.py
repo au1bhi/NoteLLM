@@ -4,14 +4,16 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock, patch
 
 import jwt
+import pytest
 from fastapi.testclient import TestClient
 from sqlmodel import Session, select
 
 from app.core import security
 from app.core.config import settings
 from app.models import User
+from app.services.usage import QuotaError, check_chat_quota
 from app.utils import generate_password_reset_token, generate_verify_email_token
-from tests.utils.user import user_authentication_headers
+from tests.utils.user import create_random_user, user_authentication_headers
 from tests.utils.utils import random_email, random_lower_string
 
 
@@ -19,10 +21,15 @@ from tests.utils.utils import random_email, random_lower_string
 def _email_enabled() -> Generator[Mock]:
     """Enable the mail backend and stub out the low-level sender. In the default
     test config SMTP is unset, so signups auto-verify; tests that exercise the
-    verification flow opt in to a real (mocked) mail path here."""
+    verification flow opt in to a real (mocked) mail path here. The per-recipient
+    send cooldown is bypassed so a test can signup and then immediately resend
+    (the cooldown itself has a dedicated test)."""
     with (
         patch("app.core.config.settings.SMTP_HOST", "smtp.example.com"),
         patch("app.utils.send_email", return_value=None) as mock_send,
+        patch(
+            "app.api.routes.users.recipient_send_cooldown", return_value=True
+        ),
     ):
         yield mock_send
 
@@ -313,6 +320,31 @@ def test_signup_auto_verified_when_email_disabled(
         assert r.json()["is_email_verified"] is True
 
 
+def test_resend_respects_per_recipient_cooldown(
+    client: TestClient,
+) -> None:
+    """A second message to the same address within the cooldown window is
+    silently skipped — a distributed caller cannot flood a target mailbox."""
+    with (
+        patch("app.core.config.settings.SMTP_HOST", "smtp.example.com"),
+        patch("app.utils.send_email", return_value=None) as mock_send,
+    ):
+        email, _ = _signup(client)  # sends once
+        assert mock_send.call_count == 1
+        r1 = client.post(
+            f"{settings.API_V1_STR}/users/resend-verification",
+            json={"email": email},
+        )
+        r2 = client.post(
+            f"{settings.API_V1_STR}/users/resend-verification",
+            json={"email": email},
+        )
+    # Generic 200s, but only the signup message actually went out.
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    assert mock_send.call_count == 1
+
+
 def test_user_public_exposes_verification_flag(
     client: TestClient,
 ) -> None:
@@ -324,3 +356,126 @@ def test_user_public_exposes_verification_flag(
         r = client.get(f"{settings.API_V1_STR}/users/me", headers=headers)
     assert r.status_code == 200
     assert r.json()["is_email_verified"] is False
+
+
+def test_signup_normalizes_email_case(
+    client: TestClient, db: Session
+) -> None:
+    """Mailbox delivery is case-insensitive, so case variants of the same
+    address must resolve to a single account (no duplicate registration)."""
+    mixed = "MixedCase@Example.COM"
+    r = client.post(
+        f"{settings.API_V1_STR}/users/signup",
+        json={"email": mixed, "password": random_lower_string()},
+    )
+    assert r.status_code == 200
+    assert r.json()["email"] == "mixedcase@example.com"
+    assert _user_from_db(db, "mixedcase@example.com") is not None
+
+    # The lowercased variant is now a duplicate.
+    dup = client.post(
+        f"{settings.API_V1_STR}/users/signup",
+        json={"email": "mixedcase@example.com", "password": random_lower_string()},
+    )
+    assert dup.status_code == 400
+    assert dup.json()["detail"] == "该邮箱的用户已存在于系统中"
+
+
+def test_login_is_case_insensitive(client: TestClient) -> None:
+    email, password = _signup(client)
+    r = client.post(
+        f"{settings.API_V1_STR}/login/access-token",
+        data={"username": email.upper(), "password": password},
+    )
+    assert r.status_code == 200
+    assert "access_token" in r.json()
+
+
+def test_server_quota_requires_verified_email(
+    client: TestClient, db: Session
+) -> None:
+    """With the mail backend on, server-billed free usage is gated on email
+    verification (bring-your-own-key usage is not)."""
+    with _email_enabled():
+        email, _ = _signup(client)
+        user = _user_from_db(db, email)
+    # Signup created the account unverified.
+    with patch("app.core.config.settings.SMTP_HOST", "smtp.example.com"):
+        with pytest.raises(QuotaError):
+            check_chat_quota(db, user.id)
+        # Verifying unlocks the server allowance.
+        token = generate_verify_email_token(user.email)
+        client.post(f"{settings.API_V1_STR}/users/verify-email", json={"token": token})
+        db.expire_all()
+        check_chat_quota(db, user.id)  # no raise
+
+
+def test_recover_password_never_500s_when_smtp_disabled(
+    client: TestClient, db: Session
+) -> None:
+    """The password-recovery endpoint must not turn SMTP absence into a 500
+    (which would both leak registration and noise up the logs)."""
+    user = create_random_user(db)
+    with patch("app.core.config.settings.SMTP_HOST", None):
+        registered = client.post(
+            f"{settings.API_V1_STR}/password-recovery/{user.email}"
+        )
+        ghost = client.post(
+            f"{settings.API_V1_STR}/password-recovery/{random_email()}"
+        )
+    assert registered.status_code == 200
+    assert ghost.status_code == 200
+    assert registered.json() == ghost.json()
+
+
+def test_purpose_token_as_bearer_is_403_not_500(
+    client: TestClient,
+) -> None:
+    email, _ = _signup(client)
+    verify_token = generate_verify_email_token(email)
+    r = client.get(
+        f"{settings.API_V1_STR}/users/me",
+        headers={"Authorization": f"Bearer {verify_token}"},
+    )
+    assert r.status_code == 403
+    assert r.json()["detail"] == "无法验证凭据"
+
+
+def test_update_email_null_is_rejected(
+    client: TestClient, db: Session
+) -> None:
+    email, password = _signup(client)
+    headers = user_authentication_headers(
+        client=client, email=email, password=password
+    )
+    r = client.patch(
+        f"{settings.API_V1_STR}/users/me",
+        headers=headers,
+        json={"email": None, "current_password": password},
+    )
+    assert r.status_code == 422
+    assert _user_from_db(db, email).email == email
+
+
+def test_verify_email_rate_limited(client: TestClient) -> None:
+    statuses = []
+    for _ in range(11):
+        r = client.post(
+            f"{settings.API_V1_STR}/users/verify-email",
+            json={"token": "garbage"},
+        )
+        statuses.append(r.status_code)
+    assert statuses == [400] * 10 + [429]
+
+
+def test_superuser_created_account_is_verified(
+    client: TestClient, superuser_token_headers: dict[str, str]
+) -> None:
+    email = random_email()
+    r = client.post(
+        f"{settings.API_V1_STR}/users/",
+        headers=superuser_token_headers,
+        json={"email": email, "password": random_lower_string()},
+    )
+    assert r.status_code == 200
+    assert r.json()["is_email_verified"] is True

@@ -1,5 +1,4 @@
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useMutation } from "@tanstack/react-query"
 import {
   createFileRoute,
   Link as RouterLink,
@@ -11,7 +10,6 @@ import { useState } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 
-import { UsersService } from "@/client"
 import { AuthLayout } from "@/components/Common/AuthLayout"
 import {
   Form,
@@ -25,8 +23,9 @@ import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { PasswordInput } from "@/components/ui/password-input"
 import useAuth, { isLoggedIn } from "@/hooks/useAuth"
-import useCustomToast from "@/hooks/useCustomToast"
-import { handleError } from "@/utils"
+import { useResendEmail } from "@/hooks/useResendEmail"
+
+const PENDING_VERIFY_KEY = "pending-verify-email"
 
 const formSchema = z
   .object({
@@ -65,10 +64,18 @@ export const Route = createFileRoute("/signup")({
 
 function SignUp() {
   const { signUpMutation } = useAuth()
-  const { showSuccessToast, showErrorToast } = useCustomToast()
   const navigate = useNavigate()
-  const [registered, setRegistered] = useState<{ email: string } | null>(null)
-  const [emailSent, setEmailSent] = useState(false)
+  // A just-registered address is remembered in this tab, so refreshing or
+  // going back after signup keeps the "check your inbox" screen instead of
+  // dropping the user back into the form (where re-submitting would fail with
+  // "该邮箱已存在").
+  const [registered, setRegistered] = useState<{ email: string } | null>(() => {
+    const pending = sessionStorage.getItem(PENDING_VERIFY_KEY)
+    return pending ? { email: pending } : null
+  })
+  const { resend, isPending, cooldown, disabled } = useResendEmail(
+    registered?.email,
+  )
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -82,21 +89,6 @@ function SignUp() {
     },
   })
 
-  const resendMutation = useMutation({
-    mutationFn: (email: string) =>
-      UsersService.resendVerification({ requestBody: { email } }),
-    onSuccess: () => {
-      showSuccessToast("验证邮件已重新发送")
-      setEmailSent(true)
-    },
-    onError: handleError.bind(showErrorToast),
-  })
-
-  const handleResend = () => {
-    if (!registered || resendMutation.isPending) return
-    resendMutation.mutate(registered.email)
-  }
-
   const onSubmit = (data: FormData) => {
     if (signUpMutation.isPending) return
 
@@ -106,10 +98,11 @@ function SignUp() {
       onSuccess: (created) => {
         if (created.is_email_verified) {
           // Mail backend not configured — account is already usable.
+          sessionStorage.removeItem(PENDING_VERIFY_KEY)
           navigate({ to: "/login" })
         } else {
+          sessionStorage.setItem(PENDING_VERIFY_KEY, created.email)
           setRegistered({ email: created.email })
-          setEmailSent(false)
         }
       },
     })
@@ -120,7 +113,7 @@ function SignUp() {
       <AuthLayout>
         <div className="flex flex-col items-center gap-6 text-center">
           <span className="inline-flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary">
-            <MailCheck className="size-6" />
+            <MailCheck aria-hidden="true" className="size-6" />
           </span>
           <div className="space-y-1.5">
             <h1 className="text-2xl font-bold tracking-tight">
@@ -128,16 +121,21 @@ function SignUp() {
             </h1>
             <p className="text-sm text-muted-foreground">
               我们已向 {registered.email}{" "}
-              发送了一封验证邮件，请点击邮件中的链接完成验证。
+              提交发送了一封验证邮件，请点击邮件中的链接完成验证。
             </p>
           </div>
           <div className="grid w-full gap-3">
             <LoadingButton
               className="w-full"
-              onClick={handleResend}
-              loading={resendMutation.isPending}
+              onClick={resend}
+              loading={isPending}
+              disabled={disabled && !isPending}
             >
-              {emailSent ? "已重新发送" : "重新发送验证邮件"}
+              {isPending
+                ? "发送中…"
+                : cooldown > 0
+                  ? `${cooldown}s 后可重发`
+                  : "重新发送验证邮件"}
             </LoadingButton>
             <RouterLink to="/login">
               <LoadingButton
@@ -150,7 +148,7 @@ function SignUp() {
             </RouterLink>
           </div>
           <p className="text-xs text-muted-foreground">
-            验证链接在 72 小时内有效。如果找不到邮件，请检查垃圾邮件文件夹。
+            验证链接在 72 小时内有效。如果几分钟内未收到，请检查垃圾邮件文件夹。
           </p>
         </div>
       </AuthLayout>

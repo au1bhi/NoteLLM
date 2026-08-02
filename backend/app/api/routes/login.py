@@ -14,7 +14,7 @@ from app.models import Message, NewPassword, Token, UserPublic, UserUpdate
 from app.utils import (
     generate_password_reset_token,
     generate_reset_password_email,
-    send_email,
+    send_email_safely,
     verify_password_reset_token,
 )
 
@@ -62,6 +62,8 @@ def recover_password(email: str, session: SessionDep) -> Message:
     """
     Password Recovery
     """
+    # Emails are stored lowercase; the path param is a raw string.
+    email = email.strip().lower()
     user = crud.get_user_by_email(session=session, email=email)
 
     # Always return the same response to prevent email enumeration attacks
@@ -71,10 +73,13 @@ def recover_password(email: str, session: SessionDep) -> Message:
         email_data = generate_reset_password_email(
             email_to=user.email, email=email, token=password_reset_token
         )
-        send_email(
+        # Never propagate SMTP failures to the client (they would both 500 the
+        # endpoint and turn it into an account enumerator).
+        send_email_safely(
             email_to=user.email,
             subject=email_data.subject,
             html_content=email_data.html_content,
+            text_content=email_data.text_content,
         )
     return Message(message="如果该邮箱已注册，我们已发送密码重置链接")
 
