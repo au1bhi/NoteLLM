@@ -226,18 +226,19 @@ collect_config() {
     ask_var STACK_NAME "栈名称（同一服务器多个部署时需唯一）" "$(env_get STACK_NAME || true)"
     STACK_NAME="${STACK_NAME:-notellm}"
     # EMAIL 是常见环境变量，用内部变量 LE_EMAIL 提问，避免意外继承。
+    # Let's Encrypt 邮箱仅用于证书到期提醒，不验证邮箱是否存在——
+    # 未提供时自动用 admin@域名 兜底，无需任何前置准备。
     LE_EMAIL="${EMAIL:-}"
-    ask_var LE_EMAIL "Let's Encrypt 证书通知邮箱（用于证书续期提醒）" "$(env_get EMAIL || true)"
-    while [[ -z "$LE_EMAIL" ]]; do
-      if [[ "$ASSUME_YES" == "1" ]] || [[ ! -t 0 ]]; then
-        err "生产部署需要有效的 Let's Encrypt 邮箱。请用环境变量指定后重试："
-        info "  LE_EMAIL=you@example.com DOMAIN=example.com bash install.sh --prod --yes"
-        exit 1
-      fi
-      warn "Let's Encrypt 需要有效邮箱用于证书续期通知，否则证书无法签发。"
-      LE_EMAIL=""
-      ask_var LE_EMAIL "Let's Encrypt 邮箱" ""
-    done
+    local le_default; le_default="$(env_get EMAIL || true)"
+    [[ -n "$le_default" ]] || le_default="admin@${DOMAIN}"
+    ask_var LE_EMAIL "Let's Encrypt 证书通知邮箱（用于证书续期提醒）" "$le_default"
+    LE_AUTO=0
+    if [[ -z "$LE_EMAIL" ]]; then
+      LE_EMAIL="admin@${DOMAIN}"
+      LE_AUTO=1
+    elif [[ "$LE_EMAIL" == "admin@${DOMAIN}" ]] && [[ -z "${EMAIL:-}" ]]; then
+      LE_AUTO=1
+    fi
     EMAIL="$LE_EMAIL"
     # USERNAME 也是常见登录环境变量，用 TRAEFIK_USER 提问避免意外继承。
     ask_var TRAEFIK_USER "Traefik 面板登录用户名" "$(env_get USERNAME || true)"
@@ -288,7 +289,12 @@ collect_config() {
     local d_host; d_host="$(env_get SMTP_HOST || true)"
     if [[ -z "$d_host" ]] && confirm "使用 Resend 推荐的 SMTP 参数（smtp.resend.com）？" "y"; then
       SMTP_HOST="smtp.resend.com"; SMTP_PORT="587"; SMTP_TLS="True"; SMTP_SSL="False"; SMTP_USER="resend"
-      ask_secret_var SMTP_PASSWORD "Resend SMTP 密钥（Resend → API Keys）" "$(env_get SMTP_PASSWORD || true)"
+      # 兼容常见约定：已设置 RESEND_API_KEY 环境变量时直接复用。
+      if [[ -z "${SMTP_PASSWORD:-}" ]] && [[ -n "${RESEND_API_KEY:-}" ]]; then
+        SMTP_PASSWORD="$RESEND_API_KEY"
+        ok "检测到 RESEND_API_KEY，已自动用作 SMTP 密钥。"
+      fi
+      ask_secret_var SMTP_PASSWORD "Resend API Key（免费注册 resend.com → API Keys 创建；回车留空跳过）" "$(env_get SMTP_PASSWORD || true)"
       local def_from; def_from="$(env_get EMAILS_FROM_EMAIL || true)"
       [[ -n "$def_from" ]] || def_from="no-reply@${DOMAIN}"
       ask_var EMAILS_FROM_EMAIL "发件人地址（发送域名需在 Resend 完成 SPF/DKIM 验证）" "$def_from"
@@ -309,12 +315,17 @@ collect_config() {
     SMTP_PORT="587"; SMTP_TLS="True"; SMTP_SSL="False"
   fi
 
-  # 非交互模式拿不到 SMTP 密码时，关闭邮箱验证（避免发信静默失败的半成品状态）。
-  if [[ -n "$SMTP_HOST" ]] && [[ -z "${SMTP_PASSWORD:-}" ]] \
-    && { [[ "$ASSUME_YES" == "1" ]] || [[ ! -t 0 ]]; }; then
-    warn "非交互模式未提供 SMTP_PASSWORD，已暂时关闭邮箱验证。"
-    info "  之后可在 .env 补填 SMTP_PASSWORD 后重启： docker compose up -d"
-    SMTP_HOST=""; SMTP_USER=""; SMTP_PASSWORD=""; EMAILS_FROM_EMAIL=""
+  # SMTP 密码为空时避免半成品：验证邮件会发不出去、新用户卡在未验证。
+  # 非交互直接关闭；交互则确认一次（默认跳过），用户也可明确选择保留。
+  if [[ -n "$SMTP_HOST" ]] && [[ -z "${SMTP_PASSWORD:-}" ]]; then
+    if [[ "$ASSUME_YES" == "1" ]] || [[ ! -t 0 ]]; then
+      warn "非交互模式未提供 SMTP_PASSWORD，已暂时关闭邮箱验证。"
+      info "  之后可在 .env 补填 SMTP_PASSWORD 后重启： docker compose up -d"
+      SMTP_HOST=""; SMTP_USER=""; SMTP_PASSWORD=""; EMAILS_FROM_EMAIL=""
+    elif confirm "SMTP 密码为空，验证邮件将无法发送。本次跳过邮箱验证？" "y"; then
+      warn "已跳过邮箱验证（可稍后在 .env 补填 SMTP_PASSWORD 后重启）。"
+      SMTP_HOST=""; SMTP_USER=""; SMTP_PASSWORD=""; EMAILS_FROM_EMAIL=""
+    fi
   fi
 
   # 模型
@@ -498,12 +509,17 @@ print_summary() {
     echo
     info "  管理员:     ${FIRST_SUPERUSER}"
     info "  密码:       ${FIRST_SUPERUSER_PASSWORD}"
+    info "  Let's Encrypt 邮箱: ${EMAIL}（仅用于证书到期提醒）"
     echo
     warn "部署前请确认 DNS 已全部指向本服务器公网 IP："
     info "    A  ${DOMAIN}          → <本机公网 IP>"
     info "    A  api.${DOMAIN}      → <本机公网 IP>"
     info "    A  adminer.${DOMAIN}  → <本机公网 IP>"
     info "    A  traefik.${DOMAIN}  → <本机公网 IP>"
+    if [[ "${LE_AUTO:-0}" == "1" ]]; then
+      info "  Let's Encrypt 邮箱自动使用了 ${EMAIL}（未配置时兜底）。"
+      info "  如需接收证书到期提醒，编辑 .env 的 EMAIL 后重启即可。"
+    fi
   else
     info "  前端:       http://localhost:5173"
     info "  API 文档:   http://localhost:8000/docs"
@@ -519,7 +535,8 @@ print_summary() {
     fi
   else
     echo
-    warn "  未配置邮箱验证：新注册账户将自动视为已验证，仅适合试用。"
+    warn "  未配置邮箱验证：新注册账户自动视为已验证（仅适合试用）。"
+    info "  启用：注册 resend.com 拿到 API Key → 编辑 .env 填 SMTP_HOST/SMTP_PASSWORD/EMAILS_FROM_EMAIL → docker compose up -d"
   fi
   if [[ -z "$LLM_API_KEY" ]]; then
     echo

@@ -102,20 +102,21 @@ bash install.sh
 `install.sh` 是交互式安装向导，自动完成全部配置——本地开发与生产部署二合一：
 
 - **本地开发**：选择 `1`（本地）后一路回车即可。向导自动生成安全密钥并构建启动，完成后打开 <http://localhost:5173>，用输出中的管理员邮箱/密码登录。
-- **生产部署**：选择 `2`（生产）后按提示填写域名、Let's Encrypt 通知邮箱、SMTP（推荐 Resend）与模型密钥。向导自动生成 `.env`（权限 600）、创建 `traefik-public` 网络、签发 HTTPS 证书并启动。
-  - **部署前请先准备好**：域名 A 记录指向本服务器（`@`、`api`、`adminer`、`traefik` 四个子域），发送邮件的域名在 Resend 完成 SPF/DKIM/DMARC 验证（见下方“邮件发送与部署”一节）。安装结尾会打印完整的 DNS 清单。
-  - SMTP / 模型密钥可留空，登录后在“设置 → 模型配置”自带 API Key 使用。
+- **生产部署**：选择 `2`（生产）后按提示填写域名并逐项确认。向导自动生成 `.env`（权限 600）、创建 `traefik-public` 网络、签发 HTTPS 证书并启动。所有密钥都是**自动生成**的，只有两样需要你提供或跳过：
+  - **Let's Encrypt 通知邮箱**：任意你能收信的邮箱，仅用于证书到期提醒，**不填就自动用 `admin@域名`**。
+  - **SMTP 密钥**：用于发送验证邮件。它由邮件服务商（推荐 [Resend](https://resend.com)，免费）在注册后签发，向导无法替你在对方平台生成——不填则本次跳过邮箱验证（注册即时生效），之后随时可补。
+  - 此外需把**域名 A 记录**指向本服务器：`@`、`api`、`adminer`、`traefik` 四个子域（安装结尾会打印完整清单，详情见下方“邮件发送与部署”一节）。
 
 向导重复运行不会覆盖已有 `.env`（直接重启现有栈；`--force` 重新生成并备份旧文件）。常用选项：
 
 ```bash
-bash install.sh --local --yes     # 本地全自动：默认值 + 自动生成密钥
-bash install.sh --prod --yes      # 生产全自动：跳过提问；SMTP/模型密钥默认不配置（可事后编辑 .env）
-bash install.sh --dry-run         # 只生成 .env 并预览命令，不实际启动
-bash install.sh --help            # 查看全部选项
+bash install.sh --local --yes                                # 本地全自动：默认值 + 自动生成密钥
+DOMAIN=notellm.au1bhi.com bash install.sh --prod --yes       # 生产全自动：只填域名，其余自动/跳过
+bash install.sh --dry-run                                    # 只生成 .env 并预览命令，不实际启动
+bash install.sh --help                                       # 查看全部选项
 ```
 
-生产全自动也可用环境变量指定关键值（避免向导提问）：`DOMAIN=notellm.au1bhi.com LE_EMAIL=ops@example.com bash install.sh --prod --yes`。全自动模式下若未提供 SMTP 密码，向导会**自动跳过邮箱验证**（注册即时生效，仅适合试用）；生产正式启用时请编辑 `.env` 补填 `SMTP_PASSWORD` 后 `docker compose up -d`。
+**没有配置过邮箱的新用户也能零准备完成部署**：`--prod --yes` 只需提供域名——Let's Encrypt 邮箱自动用 `admin@域名`，邮箱验证本次跳过（注册即时生效，适合试用）。想一并启用邮箱验证，加上 Resend 密钥（`RESEND_API_KEY` 或 `SMTP_PASSWORD` 二选一）：`DOMAIN=notellm.au1bhi.com RESEND_API_KEY=<你的Resend密钥> bash install.sh --prod --yes`。SMTP / 模型随时可在 `.env` 里补填后 `docker compose up -d`，无需重装。
 
 ### 备选：Makefile（仅本地）
 
