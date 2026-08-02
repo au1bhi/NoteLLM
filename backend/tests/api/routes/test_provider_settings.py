@@ -323,8 +323,8 @@ def test_provider_settings_returns_cooldown_until(
 def test_resolve_api_base_formats() -> None:
     from app.services.provider_settings import resolve_api_base
 
-    assert resolve_api_base("https://new.28.al", "openai") == "https://new.28.al"
-    assert resolve_api_base("https://new.28.al", "openai_v1") == "https://new.28.al/v1"
+    assert resolve_api_base("https://provider.example.com", "openai") == "https://provider.example.com"
+    assert resolve_api_base("https://provider.example.com", "openai_v1") == "https://provider.example.com/v1"
     assert (
         resolve_api_base("https://api.openai.com/v1", "openai_v1")
         == "https://api.openai.com/v1"
@@ -373,7 +373,7 @@ def test_fetch_models_uses_openai_v1_format(
         _url() + "/models",
         headers=headers,
         json={
-            "base_url": "https://new.28.al",
+            "base_url": "https://provider.example.com",
             "api_key": "sk-probe-123456",
             "api_format": "openai_v1",
         },
@@ -381,7 +381,7 @@ def test_fetch_models_uses_openai_v1_format(
     assert response.status_code == 200
     # pinned_request is mocked out here; these tests assert the endpoint path
     # resolution, not the SSRF pinning (covered by tests/core/test_ssrf.py).
-    assert calls == ["https://new.28.al/v1/models"]
+    assert calls == ["https://provider.example.com/v1/models"]
     assert response.json() == [{"id": "deepseek-v4-flash"}]
 
 
@@ -411,10 +411,10 @@ def test_fetch_models_falls_back_to_v1(
     response = client.post(
         _url() + "/models",
         headers=headers,
-        json={"base_url": "https://new.28.al", "api_key": "sk-probe-123456"},
+        json={"base_url": "https://provider.example.com", "api_key": "sk-probe-123456"},
     )
     assert response.status_code == 200
-    assert calls == ["https://new.28.al/models", "https://new.28.al/v1/models"]
+    assert calls == ["https://provider.example.com/models", "https://provider.example.com/v1/models"]
     assert response.json() == [{"id": "deepseek-v4-flash"}]
 
 
@@ -444,7 +444,7 @@ def test_fetch_models_uses_stored_key_when_key_empty(
     response = client.post(
         _url() + "/models",
         headers=headers,
-        json={"base_url": "https://new.28.al"},  # no key → use stored
+        json={"base_url": "https://provider.example.com"},  # no key → use stored
     )
     assert response.status_code == 200
     assert response.json() == [{"id": "model-x"}]
