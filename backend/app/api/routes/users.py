@@ -492,10 +492,14 @@ def fetch_available_models(
     data = payload.get("data", []) if isinstance(payload, dict) else None
     if not isinstance(data, list):
         raise HTTPException(status_code=502, detail="模型提供方返回了异常数据")
+    # Bind the extracted id to a variable so the isinstance() narrows it — ty
+    # does not narrow a repeated `item.get("id")` call expression.
     model_ids = [
-        item.get("id")
+        model_id
         for item in data
-        if isinstance(item, dict) and isinstance(item.get("id"), str)
+        if isinstance(item, dict)
+        for model_id in [item.get("id")]
+        if isinstance(model_id, str)
     ][:100]
     if not model_ids:
         raise HTTPException(status_code=502, detail="模型提供方未返回任何模型")
