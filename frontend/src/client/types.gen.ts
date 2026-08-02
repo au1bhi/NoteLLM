@@ -131,6 +131,10 @@ export type NotebookUpdate = {
     is_pinned?: (boolean | null);
 };
 
+export type ResendVerificationRequest = {
+    email: string;
+};
+
 export type RetrievedChunkPublic = {
     id: string;
     source_id: string;
@@ -241,6 +245,7 @@ export type UserPublic = {
     full_name?: (string | null);
     id: string;
     created_at?: (string | null);
+    is_email_verified?: boolean;
 };
 
 export type UserRegister = {
@@ -265,6 +270,7 @@ export type UserUpdate = {
 export type UserUpdateMe = {
     full_name?: (string | null);
     email?: (string | null);
+    current_password?: (string | null);
 };
 
 /**
@@ -296,6 +302,10 @@ export type ValidationError = {
     ctx?: {
         [key: string]: unknown;
     };
+};
+
+export type VerifyEmailRequest = {
+    token: string;
 };
 
 export type ConversationsReadConversationData = {
@@ -509,6 +519,20 @@ export type UsersRegisterUserData = {
 };
 
 export type UsersRegisterUserResponse = (UserPublic);
+
+export type UsersVerifyEmailData = {
+    requestBody: VerifyEmailRequest;
+};
+
+export type UsersVerifyEmailResponse = (Message);
+
+export type UsersResendVerificationData = {
+    requestBody: ResendVerificationRequest;
+};
+
+export type UsersResendVerificationResponse = (Message);
+
+export type UsersResendVerificationMeResponse = (Message);
 
 export type UsersReadUserByIdData = {
     userId: string;

@@ -103,6 +103,8 @@ class Settings(BaseSettings):
         return self
 
     EMAIL_RESET_TOKEN_EXPIRE_HOURS: int = 48
+    # How long an email-verification link stays valid after it is sent.
+    EMAIL_VERIFY_TOKEN_EXPIRE_HOURS: int = 72
 
     @computed_field  # type: ignore[prop-decorator]
     @property

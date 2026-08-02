@@ -28,6 +28,7 @@ NoteLLM 是一个参考 Google NotebookLM 核心体验实现的毕业设计原�
 ## 安全加固
 
 - 认证接口（登录/注册/找回与重置密码/改密）按 IP 限流，429 响应携带 `Retry-After`。
+- 邮箱验证采用**用途隔离**的签名 token（验证与密码重置分开 `purpose`，互不可复用）；注册即发送验证链接，重发按 IP 限流且对未注册邮箱返回统一响应，无法枚举已注册邮箱；修改邮箱必须验证当前密码（防会话泄露导致账户被迁移后接管）。
 - 用户提供的模型 Base URL 会解析 DNS 并拦截解析到私有、回环、链路本地、保留、组播或云元数据地址的域名（含十进制/十六进制/简写 IP 等绕过形式）；出站模型请求不读取代理环境变量。
 - `SECRET_KEY` 生产环境强制 ≥32 字符（它既签 JWT 又派生加密用户密钥的 Fernet key）；`.env` 不允许提交。
 - 密钥只在后端读取与加密存储；自定义端点永不携带服务端密钥。
@@ -106,6 +107,43 @@ make up        # 首次自动把 .env.example 复制为 .env，然后构建并�
 - 常用命令：`make down`（停止）、`make logs`（跟随日志）、`make ps`（状态）；不想用 Makefile 也可直接 `docker compose up -d --build`。
 - 前端与 API 同源代理：浏览器访问 `/api/v1/...`，由 nginx 转发到后端服务，无需配置 CORS。
 - 免费额度：服务端计费用量每月对话 10 万 token、嵌入 30 万字符；配置自己的 Key 的维度不限额。
+
+## 邮件发送与部署（邮箱验证 / 找回密码）
+
+应用会发送两类邮件：**注册后的邮箱验证**（点击链接确认邮箱归属）与**找回密码**。未配置邮件后端时（`SMTP_HOST` 为空），新注册账户自动视为已验证，仅适合本地开发。
+
+### 1. 选择邮件服务商
+
+推荐 [Resend](https://resend.com)（免费额度 3000 封/月），也可用任意 SMTP 服务。以 Resend 为例：
+
+1. 注册后在 **Domains** 添加一个发送子域名（例如 `notify.au1bhi.com`，只用于发信、与应用域名分离，便于隔离和撤销）。
+2. 按提示在 DNS 中添加三条 TXT 记录：
+   - **SPF**：`v=spf1 include:_spf.resend.com ~all`（放在发送域名的 TXT 记录上，注意整个域名只允许一条 SPF，需合并现有记录）。
+   - **DKIM**：Resend 给出的 `resend._domainkey.notify.au1bhi.com` 记录值。
+   - **DMARC**：建议 `v=DMARC1; p=quarantine; rua=mailto:你的邮箱`（放在 `_dmarc.notellm.au1bhi.com` 上），只对同一根域生效一次。
+3. 回到 Resend 等待子域名状态变为 **Verified**（通常几分钟）。
+
+> 子域名（而非根域）用于发送，SPF/DKIM 只覆盖它，不影响根域其他服务；DMARC 记录则放在 `_dmarc.<根域>` 上并对整根域生效。
+
+### 2. 填入 `.env`
+
+```env
+FRONTEND_HOST=https://notellm.au1bhi.com   # 邮件中的链接指向这里
+SMTP_HOST=smtp.resend.com
+SMTP_PORT=587
+SMTP_TLS=True
+SMTP_USER=resend
+SMTP_PASSWORD=<Resend SMTP 密钥>
+EMAILS_FROM_EMAIL=no-reply@notify.au1bhi.com
+EMAILS_FROM_NAME=NoteLLM
+```
+
+`SMTP_HOST` 非空即启用邮件验证：新注册用户收到含 72 小时有效链接的验证邮件；登录后应用顶部会显示"邮箱尚未验证"横幅，可一键重发；设置页可查看验证状态、重发，或修改邮箱（需输入当前密码，新邮箱需重新验证）。
+
+### 3. 验证发信
+
+`docker compose up -d --build` 后用 `make logs` 观察 `backend` 日志中的 `send email result`；也可注册一个真实邮箱点击链接走完整流程。若邮件进入垃圾箱，优先检查 SPF/DKIM/DMARC 是否生效（可用 mxtoolbox 等查询）。
+
 
 ## 快速开始（本地开发）
 

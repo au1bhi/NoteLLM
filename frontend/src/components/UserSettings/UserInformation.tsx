@@ -5,6 +5,7 @@ import { useForm } from "react-hook-form"
 import { z } from "zod"
 
 import { UsersService, type UserUpdateMe } from "@/client"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Form,
@@ -16,6 +17,7 @@ import {
 } from "@/components/ui/form"
 import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
+import { PasswordInput } from "@/components/ui/password-input"
 import useAuth from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
 import { cn } from "@/lib/utils"
@@ -24,6 +26,8 @@ import { handleError } from "@/utils"
 const formSchema = z.object({
   full_name: z.string().max(30).optional(),
   email: z.email({ message: "邮箱地址无效" }),
+  // Only required when the email is being changed (checked at submit time).
+  current_password: z.string().optional(),
 })
 
 type FormData = z.infer<typeof formSchema>
@@ -41,6 +45,7 @@ const UserInformation = () => {
     defaultValues: {
       full_name: currentUser?.full_name ?? undefined,
       email: currentUser?.email,
+      current_password: "",
     },
   })
 
@@ -61,6 +66,17 @@ const UserInformation = () => {
     },
   })
 
+  const resendMutation = useMutation({
+    mutationFn: () => UsersService.resendVerificationMe(),
+    onSuccess: () => {
+      showSuccessToast("验证邮件已发送，请查收")
+    },
+    onError: handleError.bind(showErrorToast),
+  })
+
+  const typedEmail = form.watch("email")
+  const emailChanged = editMode && typedEmail !== currentUser?.email
+
   const onSubmit = (data: FormData) => {
     const updateData: UserUpdateMe = {}
 
@@ -69,7 +85,14 @@ const UserInformation = () => {
       updateData.full_name = data.full_name
     }
     if (data.email !== currentUser?.email) {
+      if (!data.current_password) {
+        form.setError("current_password", {
+          message: "修改邮箱需要验证当前密码",
+        })
+        return
+      }
       updateData.email = data.email
+      updateData.current_password = data.current_password
     }
 
     mutation.mutate(updateData)
@@ -131,11 +154,55 @@ const UserInformation = () => {
               ) : (
                 <FormItem>
                   <FormLabel>邮箱</FormLabel>
-                  <p className="py-2 truncate max-w-sm">{field.value}</p>
+                  <div className="flex items-center gap-2 py-2">
+                    <p className="truncate max-w-sm">{field.value}</p>
+                    {currentUser?.is_email_verified ? (
+                      <Badge>已验证</Badge>
+                    ) : (
+                      <>
+                        <Badge variant="secondary">未验证</Badge>
+                        <Button
+                          type="button"
+                          variant="link"
+                          size="sm"
+                          className="px-1 text-primary"
+                          onClick={() => resendMutation.mutate()}
+                          disabled={resendMutation.isPending}
+                        >
+                          {resendMutation.isPending
+                            ? "发送中…"
+                            : "发送验证邮件"}
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </FormItem>
               )
             }
           />
+
+          {editMode && emailChanged && (
+            <FormField
+              control={form.control}
+              name="current_password"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>当前密码</FormLabel>
+                  <FormControl>
+                    <PasswordInput
+                      autoComplete="current-password"
+                      placeholder="输入当前密码以确认修改邮箱"
+                      {...field}
+                    />
+                  </FormControl>
+                  <p className="text-xs text-muted-foreground">
+                    修改邮箱后需重新验证新邮箱。
+                  </p>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          )}
 
           <div className="flex gap-3">
             {editMode ? (

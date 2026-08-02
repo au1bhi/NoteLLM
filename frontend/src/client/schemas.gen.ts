@@ -588,6 +588,20 @@ export const NotebooksPublicSchema = {
     title: 'NotebooksPublic'
 } as const;
 
+export const ResendVerificationRequestSchema = {
+    properties: {
+        email: {
+            type: 'string',
+            maxLength: 255,
+            format: 'email',
+            title: 'Email'
+        }
+    },
+    type: 'object',
+    required: ['email'],
+    title: 'ResendVerificationRequest'
+} as const;
+
 export const RetrievedChunkPublicSchema = {
     properties: {
         id: {
@@ -1155,6 +1169,11 @@ export const UserPublicSchema = {
                 }
             ],
             title: 'Created At'
+        },
+        is_email_verified: {
+            type: 'boolean',
+            title: 'Is Email Verified',
+            default: false
         }
     },
     type: 'object',
@@ -1287,6 +1306,18 @@ export const UserUpdateMeSchema = {
                 }
             ],
             title: 'Email'
+        },
+        current_password: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 128
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Current Password'
         }
     },
     type: 'object',
@@ -1414,4 +1445,18 @@ export const ValidationErrorSchema = {
     type: 'object',
     required: ['loc', 'msg', 'type'],
     title: 'ValidationError'
+} as const;
+
+export const VerifyEmailRequestSchema = {
+    properties: {
+        token: {
+            type: 'string',
+            maxLength: 2048,
+            minLength: 1,
+            title: 'Token'
+        }
+    },
+    type: 'object',
+    required: ['token'],
+    title: 'VerifyEmailRequest'
 } as const;

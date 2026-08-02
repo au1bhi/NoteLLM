@@ -29,9 +29,9 @@ const useAuth = () => {
   const signUpMutation = useMutation({
     mutationFn: (data: UserRegister) =>
       UsersService.registerUser({ requestBody: data }),
-    onSuccess: () => {
-      navigate({ to: "/login" })
-    },
+    // Navigation after a successful signup is the caller's choice: when a
+    // verification email is required the signup page shows a "check your
+    // inbox" screen instead of redirecting to /login.
     onError: handleError.bind(showErrorToast),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ["users"] })

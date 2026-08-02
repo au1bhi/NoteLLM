@@ -31,3 +31,8 @@ def init_db(session: Session) -> None:
             is_superuser=True,
         )
         user = crud.create_user(session=session, user_create=user_in)
+        # The operator's own account belongs to them; don't require an email
+        # confirmation round-trip for it.
+        user.is_email_verified = True
+        session.add(user)
+        session.commit()

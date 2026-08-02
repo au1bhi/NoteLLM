@@ -91,24 +91,88 @@ def generate_new_account_email(
     return EmailData(html_content=html_content, subject=subject)
 
 
-def generate_password_reset_token(email: str) -> str:
-    delta = timedelta(hours=settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS)
+def _encode_purpose_token(email: str, purpose: str, hours: int) -> str:
+    delta = timedelta(hours=hours)
     now = datetime.now(UTC)
     expires = now + delta
     exp = expires.timestamp()
     encoded_jwt = jwt.encode(
-        {"exp": exp, "nbf": now, "sub": email},
+        {"exp": exp, "nbf": now, "sub": email, "purpose": purpose},
         settings.SECRET_KEY,
         algorithm=security.ALGORITHM,
     )
     return encoded_jwt
 
 
-def verify_password_reset_token(token: str) -> str | None:
+def _decode_purpose_token(token: str, purpose: str) -> str | None:
     try:
         decoded_token = jwt.decode(
             token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
         )
-        return str(decoded_token["sub"])
     except InvalidTokenError:
         return None
+    if decoded_token.get("purpose") != purpose:
+        return None
+    sub = decoded_token.get("sub")
+    return str(sub) if isinstance(sub, str) else None
+
+
+def generate_password_reset_token(email: str) -> str:
+    return _encode_purpose_token(
+        email, "password_reset", settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS
+    )
+
+
+def verify_password_reset_token(token: str) -> str | None:
+    return _decode_purpose_token(token, "password_reset")
+
+
+def generate_verify_email_token(email: str) -> str:
+    """Signed link token that proves ownership of `email`. Purpose-scoped so a
+    password-reset token can never be replayed as a verification token (and
+    vice versa)."""
+    return _encode_purpose_token(
+        email, "email_verify", settings.EMAIL_VERIFY_TOKEN_EXPIRE_HOURS
+    )
+
+
+def verify_email_token(token: str) -> str | None:
+    """Return the email bound to a valid verification token, or None."""
+    return _decode_purpose_token(token, "email_verify")
+
+
+def generate_verify_email_email(email_to: str) -> EmailData:
+    link = (
+        f"{settings.FRONTEND_HOST}/verify-email"
+        f"?token={generate_verify_email_token(email_to)}"
+    )
+    subject = f"验证你的邮箱 - {settings.PROJECT_NAME}"
+    html_content = render_email_template(
+        template_name="verify_email.html",
+        context={
+            "project_name": settings.PROJECT_NAME,
+            "email": email_to,
+            "valid_hours": settings.EMAIL_VERIFY_TOKEN_EXPIRE_HOURS,
+            "link": link,
+        },
+    )
+    return EmailData(html_content=html_content, subject=subject)
+
+
+def send_email_safely(
+    *, email_to: str, subject: str, html_content: str
+) -> None:
+    """Send an email without propagating SMTP failures to the caller.
+
+    Registration/verification must succeed even when the mail backend is
+    temporarily down; the recipient can always request a new link. Failures are
+    logged so operators can investigate.
+    """
+    try:
+        send_email(
+            email_to=email_to, subject=subject, html_content=html_content
+        )
+    except Exception:  # noqa: BLE001 - the mail backend failure must not 500 an API call
+        logger.exception(
+            "Failed to send email to %s (subject: %s)", email_to, subject
+        )

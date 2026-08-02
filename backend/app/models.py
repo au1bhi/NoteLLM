@@ -45,6 +45,19 @@ class UserUpdate(SQLModel):
 class UserUpdateMe(SQLModel):
     full_name: str | None = Field(default=None, max_length=255)
     email: EmailStr | None = Field(default=None, max_length=255)
+    # Required when `email` changes. Changing the login identifier of an account
+    # is a sensitive action: it must be authorized by the current password so a
+    # stolen session alone cannot hijack the account (e.g. by moving it to an
+    # attacker-owned address and then using password recovery).
+    current_password: str | None = Field(default=None, max_length=128)
+
+
+class VerifyEmailRequest(SQLModel):
+    token: str = Field(min_length=1, max_length=2048)
+
+
+class ResendVerificationRequest(SQLModel):
+    email: EmailStr = Field(max_length=255)
 
 
 class UpdatePassword(SQLModel):
@@ -56,6 +69,10 @@ class UpdatePassword(SQLModel):
 class User(UserBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     hashed_password: str
+    # False until the user confirms ownership of the email via the link in the
+    # verification message. Purely informational: login and the core features
+    # stay available, the client shows a reminder banner instead.
+    is_email_verified: bool = False
     created_at: datetime | None = Field(
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),  # type: ignore
@@ -69,6 +86,7 @@ class User(UserBase, table=True):
 class UserPublic(UserBase):
     id: uuid.UUID
     created_at: datetime | None = None
+    is_email_verified: bool = False
 
 
 class UsersPublic(SQLModel):

@@ -198,15 +198,25 @@ def test_retrieve_users(
         assert "email" in item
 
 
-def test_update_user_me(
-    client: TestClient, normal_user_token_headers: dict[str, str], db: Session
-) -> None:
+def test_update_user_me(client: TestClient, db: Session) -> None:
+    # Changing the email requires the current password, so use an account whose
+    # password is known rather than the shared fixture.
+    username = random_email()
+    password = random_lower_string()
+    user_in = UserCreate(email=username, password=password)
+    crud.create_user(session=db, user_create=user_in)
+    login = client.post(
+        f"{settings.API_V1_STR}/login/access-token",
+        data={"username": username, "password": password},
+    )
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
     full_name = "Updated Name"
     email = random_email()
-    data = {"full_name": full_name, "email": email}
+    data = {"full_name": full_name, "email": email, "current_password": password}
     r = client.patch(
         f"{settings.API_V1_STR}/users/me",
-        headers=normal_user_token_headers,
+        headers=headers,
         json=data,
     )
     assert r.status_code == 200
@@ -214,6 +224,9 @@ def test_update_user_me(
     assert updated_user["email"] == email
     assert updated_user["full_name"] == full_name
 
+    # The PATCH wrote through the app's own session; expire the fixture session
+    # so this query observes the committed email rather than a stale copy.
+    db.expire_all()
     user_query = select(User).where(User.email == email)
     user_db = db.exec(user_query).first()
     assert user_db
@@ -314,7 +327,10 @@ def test_update_password_me_same_password_error(
     assert updated_user["detail"] == "新密码不能与当前密码相同"
 
 
-def test_register_user(client: TestClient, db: Session) -> None:
+@patch("app.utils.send_email", return_value=None)
+def test_register_user(
+    _mock_send_email, client: TestClient, db: Session
+) -> None:
     username = random_email()
     password = random_lower_string()
     full_name = random_lower_string()

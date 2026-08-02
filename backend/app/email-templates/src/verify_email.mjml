@@ -1,0 +1,22 @@
+<mjml>
+  <mj-head>
+    <mj-attributes>
+      <mj-all font-family="Helvetica Neue, Helvetica, Arial, PingFang SC, Microsoft YaHei, sans-serif" />
+    </mj-attributes>
+  </mj-head>
+  <mj-body background-color="#f4efe4">
+    <mj-section background-color="#f4efe4" padding="40px 16px">
+      <mj-column background-color="#fffdf7" border="1px solid #e6dcc8" border-radius="12px">
+        <mj-text align="center" padding="40px 32px 20px" font-size="20px" font-weight="700" color="#8a4a20">{{ project_name }}</mj-text>
+        <mj-text align="center" padding="0 32px" font-size="22px" font-weight="700" color="#3a2f26">验证你的邮箱</mj-text>
+        <mj-text align="center" padding="16px 32px" font-size="15px" line-height="1.7" color="#5c5245">你好，欢迎使用 {{ project_name }}！请点击下方按钮，确认 {{ email }} 属于你本人：</mj-text>
+        <mj-button align="center" background-color="#a44a20" color="#ffffff" border-radius="8px" font-size="15px" font-weight="600" padding="14px 32px" href="{{ link }}">验证邮箱</mj-button>
+        <mj-text align="center" padding="24px 32px 0" font-size="13px" color="#8b8072">如果按钮无法点击，请将以下链接复制到浏览器地址栏：</mj-text>
+        <mj-text align="center" padding="6px 32px 0" font-size="12px" color="#6b6255"><a href="{{ link }}" style="color:#8a4a20;">{{ link }}</a></mj-text>
+        <mj-text align="center" padding="16px 32px" font-size="12px" color="#8b8072">验证链接将在 {{ valid_hours }} 小时内有效。如果过期，可登录后在提示中重新发送。</mj-text>
+        <mj-divider border-color="#e9e0cf" border-width="1px" padding="0 32px"></mj-divider>
+        <mj-text align="center" padding="0 32px 32px" font-size="12px" line-height="1.7" color="#a09485">如果你没有注册 {{ project_name }}，请忽略这封邮件，你的邮箱不会发生任何变更。<br />此邮件由系统自动发送，请勿直接回复。</mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>
