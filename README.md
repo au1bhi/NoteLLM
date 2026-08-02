@@ -87,24 +87,50 @@ flowchart TB
 
 当前示例配置使用 DeepSeek 作为聊天模型接口、智谱 Embedding-3 作为 1024 维 embedding 接口；两者都可通过环境变量替换。密钥永远只由后端读取。
 
-## 快速开始（推荐：Docker 一键启动）
+## 快速开始（推荐）
 
-前置条件：已安装 Docker 与 Docker Compose。
+### 一键安装向导
+
+前置条件：已安装 Docker 与 Docker Compose。在终端里复制粘贴并运行：
 
 ```bash
-git clone <仓库地址>
+git clone https://github.com/au1bhi/NoteLLM.git
 cd NoteLLM
+bash install.sh
+```
+
+`install.sh` 是交互式安装向导，自动完成全部配置——本地开发与生产部署二合一：
+
+- **本地开发**：选择 `1`（本地）后一路回车即可。向导自动生成安全密钥并构建启动，完成后打开 <http://localhost:5173>，用输出中的管理员邮箱/密码登录。
+- **生产部署**：选择 `2`（生产）后按提示填写域名、Let's Encrypt 通知邮箱、SMTP（推荐 Resend）与模型密钥。向导自动生成 `.env`（权限 600）、创建 `traefik-public` 网络、签发 HTTPS 证书并启动。
+  - **部署前请先准备好**：域名 A 记录指向本服务器（`@`、`api`、`adminer`、`traefik` 四个子域），发送邮件的域名在 Resend 完成 SPF/DKIM/DMARC 验证（见下方“邮件发送与部署”一节）。安装结尾会打印完整的 DNS 清单。
+  - SMTP / 模型密钥可留空，登录后在“设置 → 模型配置”自带 API Key 使用。
+
+向导重复运行不会覆盖已有 `.env`（直接重启现有栈；`--force` 重新生成并备份旧文件）。常用选项：
+
+```bash
+bash install.sh --local --yes     # 本地全自动：默认值 + 自动生成密钥
+bash install.sh --prod --yes      # 生产全自动：跳过提问；SMTP/模型密钥默认不配置（可事后编辑 .env）
+bash install.sh --dry-run         # 只生成 .env 并预览命令，不实际启动
+bash install.sh --help            # 查看全部选项
+```
+
+生产全自动也可用环境变量指定关键值（避免向导提问）：`DOMAIN=notellm.au1bhi.com LE_EMAIL=ops@example.com bash install.sh --prod --yes`。全自动模式下若未提供 SMTP 密码，向导会**自动跳过邮箱验证**（注册即时生效，仅适合试用）；生产正式启用时请编辑 `.env` 补填 `SMTP_PASSWORD` 后 `docker compose up -d`。
+
+### 备选：Makefile（仅本地）
+
+```bash
 make up        # 首次自动把 .env.example 复制为 .env，然后构建并启动
 ```
 
 打开 <http://localhost:5173>，用 `.env` 里的 `FIRST_SUPERUSER` / `FIRST_SUPERUSER_PASSWORD` 登录（`.env.example` 默认是 `admin@example.com` / `replace-with-a-strong-password`，首次登录后请尽快在“设置 → 密码”中修改）。
 
-说明：
+### 安装后说明
 
 - **模型默认未配置**：开箱可注册、创建笔记本，但问答/上传需要模型。两种方式任选：
   1. 编辑 `.env` 填入 `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` 与 `EMBEDDING_*`（推荐服务端自用）；
   2. 登录后在 **“设置 → 模型配置”** 填入你自己的 OpenAI 兼容 API Key（浏览器内完成，密钥加密只存后端，更推荐）。
-- 常用命令：`make down`（停止）、`make logs`（跟随日志）、`make ps`（状态）；不想用 Makefile 也可直接 `docker compose up -d --build`。
+- 常用命令：`docker compose logs -f`（日志）、`docker compose down`（停止）；`make down` / `make logs` / `make ps` 等价。
 - 前端与 API 同源代理：浏览器访问 `/api/v1/...`，由 nginx 转发到后端服务，无需配置 CORS。
 - 免费额度：服务端计费用量每月对话 10 万 token、嵌入 30 万字符；**使用服务端免费额度需先验证邮箱**（配置自己的 Key 的维度不限额、也无需验证）。
 

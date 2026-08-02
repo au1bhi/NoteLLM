@@ -1,5 +1,9 @@
 # NoteLLM — one-command Docker bootstrap.
 #
+# 交互式安装向导（本地/生产二合一，自动生成 .env）：
+#   bash install.sh
+# Makefile 仅做本地开发的最小封装，等价于 install.sh --local --yes。
+#
 #   make up      # first run: copies .env.example to .env if missing, then builds & starts
 #   make up      # later runs: just starts (uses the existing .env)
 #   make down    # stop the stack
