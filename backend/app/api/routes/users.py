@@ -4,7 +4,7 @@ from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import col, delete, func, select
+from sqlmodel import col, func, select
 
 from app import crud
 from app.api.deps import (
@@ -22,7 +22,6 @@ from app.core.security import (
 )
 from app.core.ssrf import validate_outbound_url
 from app.models import (
-    Item,
     Message,
     ModelFetchRequest,
     ModelInfoPublic,
@@ -487,8 +486,7 @@ def delete_user(
         raise HTTPException(status_code=404, detail="用户不存在")
     if user == current_user:
         raise HTTPException(status_code=403, detail="超级管理员不能删除自己")
-    statement = delete(Item).where(col(Item.owner_id) == user_id)
-    session.exec(statement)
+    # Notebooks/sources/conversations cascade via their foreign keys.
     session.delete(user)
     session.commit()
     return Message(message="用户删除成功")
