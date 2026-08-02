@@ -407,6 +407,7 @@ write_env() {
   env_put SMTP_TLS "${SMTP_TLS:-True}"
   env_put SMTP_SSL "${SMTP_SSL:-False}"
   env_put EMAILS_FROM_EMAIL "${EMAILS_FROM_EMAIL:-info@example.com}"
+  env_put EMAILS_FROM_NAME "$PROJECT_NAME"
 
   env_header "模型（留空则仅支持用户自带 Key）"
   env_put LLM_BASE_URL "$LLM_BASE_URL"

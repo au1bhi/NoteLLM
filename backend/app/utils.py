@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 import emails
 import jwt
@@ -21,6 +22,15 @@ _jinja_env = Environment(
     loader=None,
     autoescape=select_autoescape(["html", "xml"]),
 )
+
+
+def _brand_host() -> str:
+    """Host part of FRONTEND_HOST (no scheme) for the footer anti-phishing line."""
+    try:
+        host = urlparse(settings.FRONTEND_HOST).netloc
+    except ValueError:
+        host = ""
+    return host or settings.FRONTEND_HOST
 
 
 @dataclass
@@ -91,6 +101,7 @@ def generate_reset_password_email(email_to: str, email: str, token: str) -> Emai
             "email": email_to,
             "valid_hours": settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS,
             "link": link,
+            "brand_host": _brand_host(),
         },
     )
     text_content = (
@@ -105,28 +116,38 @@ def generate_reset_password_email(email_to: str, email: str, token: str) -> Emai
     return EmailData(html_content=html_content, subject=subject, text_content=text_content)
 
 
-def generate_new_account_email(
-    email_to: str, username: str, password: str
-) -> EmailData:
+def generate_new_account_email(email_to: str, username: str) -> EmailData:
+    """Welcome email for admin-created accounts.
+
+    The admin supplies a password to create the row, but that plaintext is
+    never emailed back out — the recipient instead receives a one-time
+    password-reset link to set a password only they know. A reset token
+    expires (unlike a password) and becomes useless after first use.
+    """
     project_name = settings.PROJECT_NAME
-    subject = f"{project_name} - 新账号"
+    subject = f"设置你的初始密码 - {project_name}"
+    token = generate_password_reset_token(email_to)
+    link = f"{settings.FRONTEND_HOST}/reset-password?token={token}"
     html_content = render_email_template(
         template_name="new_account.html",
         context={
             "project_name": settings.PROJECT_NAME,
             "username": username,
-            "password": password,
             "email": email_to,
-            "link": settings.FRONTEND_HOST,
+            "valid_hours": settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS,
+            "link": link,
+            "brand_host": _brand_host(),
         },
     )
     text_content = (
         f"{project_name} 新账号\n\n"
-        f"欢迎使用 {project_name}！你的账号已创建：\n\n"
-        f"登录邮箱：{username}\n"
-        f"初始密码：{password}\n\n"
-        f"登录地址：{settings.FRONTEND_HOST}\n\n"
-        f"请尽快登录并修改密码。\n"
+        f"你好 {username}：\n\n"
+        f"管理员已为你创建 {project_name} 账号。点击以下链接设置一个属于你自己的密码"
+        f"（{settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS} 小时内有效）：\n\n"
+        f"{link}\n\n"
+        f"如果链接无法点击，请将以上地址复制到浏览器打开。\n\n"
+        f"设置完成后即可用 {username} 登录 {project_name}。\n\n"
+        f"如果你没有请求创建账号，请忽略并删除这封邮件。\n"
     )
     return EmailData(html_content=html_content, subject=subject, text_content=text_content)
 
@@ -194,6 +215,7 @@ def generate_verify_email_email(email_to: str) -> EmailData:
             "email": email_to,
             "valid_hours": settings.EMAIL_VERIFY_TOKEN_EXPIRE_HOURS,
             "link": link,
+            "brand_host": _brand_host(),
         },
     )
     text_content = (

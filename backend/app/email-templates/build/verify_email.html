@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light" />
     <meta name="supported-color-schemes" content="light" />
-    <title>验证你的邮箱</title>
+    <title>验证你的邮箱 - {{ project_name }}</title>
     <style>
       /* Outlook table fixes */
       body { margin: 0; padding: 0; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
@@ -16,10 +16,13 @@
         .container { width: 100% !important; }
         .content { padding: 32px 24px !important; }
         .btn { display: block !important; width: 100% !important; box-sizing: border-box; }
+        .brand { font-size: 19px !important; }
+        .h1 { font-size: 20px !important; }
       }
     </style>
   </head>
   <body style="margin:0;padding:0;background-color:#f4efe4;">
+    <div style="display:none;font-size:1px;color:#f4efe4;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all;">确认邮箱归属，{{ valid_hours }} 小时内有效</div>
     <div style="background-color:#f4efe4;">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4efe4;">
         <tr>
@@ -31,37 +34,32 @@
                   <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                     <tr>
                       <td align="center" style="padding-bottom:28px;">
-                        <span style="font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:20px;font-weight:700;color:#8a4a20;letter-spacing:0.5px;">{{ project_name }}</span>
+                        <span style="display:inline-block;width:42px;height:42px;line-height:42px;background-color:#a44a20;color:#ffffff;border-radius:10px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:20px;font-weight:700;text-align:center;">{{ project_name[:1] }}</span>
+                        <div class="brand" style="margin-top:14px;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:20px;font-weight:700;color:#8a4a20;letter-spacing:0.5px;">{{ project_name }}</div>
                       </td>
                     </tr>
                     <tr>
-                      <td style="padding-bottom:24px;">
-                        <h1 style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,'PingFang SC','Microsoft YaHei',sans-serif;font-size:22px;line-height:1.4;color:#3a2f26;text-align:center;">验证你的邮箱</h1>
+                      <td style="padding-bottom:20px;">
+                        <h1 class="h1" style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,'PingFang SC','Microsoft YaHei',sans-serif;font-size:22px;line-height:1.4;color:#3a2f26;text-align:center;">验证你的邮箱</h1>
                       </td>
                     </tr>
                     <tr>
-                      <td style="padding-bottom:16px;">
-                        <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,'PingFang SC','Microsoft YaHei',sans-serif;font-size:15px;line-height:1.7;color:#5c5245;text-align:center;">你好，欢迎使用 {{ project_name }}！<br />请点击下方按钮，确认 {{ email }} 属于你本人：</p>
+                      <td style="padding-bottom:20px;">
+                        <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,'PingFang SC','Microsoft YaHei',sans-serif;font-size:15px;line-height:1.8;color:#5c5245;text-align:center;">你好，欢迎使用 {{ project_name }}！<br />请点击下方按钮，确认 <strong style="color:#3a2f26;">{{ email }}</strong> 属于你本人，即可开始上传资料、提问与引用检索。</p>
                       </td>
                     </tr>
                     <tr>
-                      <td align="center" style="padding:12px 0 24px;">
+                      <td align="center" style="padding:8px 0 26px;">
                         <a href="{{ link }}" class="btn" style="display:inline-block;background-color:#a44a20;color:#ffffff;font-family:'Helvetica Neue',Helvetica,Arial,'PingFang SC','Microsoft YaHei',sans-serif;font-size:15px;font-weight:600;line-height:1;padding:14px 32px;border-radius:8px;">验证邮箱</a>
                       </td>
                     </tr>
                     <tr>
                       <td style="padding-bottom:16px;">
-                        <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,'PingFang SC','Microsoft YaHei',sans-serif;font-size:13px;line-height:1.7;color:#8b8072;text-align:center;">如果按钮无法点击，请将以下链接复制到浏览器地址栏：</p>
-                        <p style="margin:6px 0 0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:12px;line-height:1.6;color:#6b6255;text-align:center;word-break:break-all;"><a href="{{ link }}" style="color:#8a4a20;">{{ link }}</a></p>
+                        <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,'PingFang SC','Microsoft YaHei',sans-serif;font-size:13px;line-height:1.7;color:#756a5c;text-align:center;">验证链接将在 <strong style="color:#5c5245;">{{ valid_hours }} 小时</strong>内有效。若链接过期，登录后点击顶部提示即可重新发送。</p>
                       </td>
                     </tr>
                     <tr>
-                      <td style="padding-bottom:8px;">
-                        <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,'PingFang SC','Microsoft YaHei',sans-serif;font-size:12px;line-height:1.7;color:#8b8072;text-align:center;">验证链接将在 {{ valid_hours }} 小时内有效。如果过期，可登录后在提示中重新发送。</p>
-                      </td>
-                    </tr>
-                    <tr>
-                      <td style="padding:0 0 20px;">
+                      <td style="padding:0 0 24px;">
                         <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
                           <tr>
                             <td style="border-top:1px solid #e9e0cf;font-size:0;line-height:0;height:1px;">&nbsp;</td>
@@ -70,8 +68,14 @@
                       </td>
                     </tr>
                     <tr>
+                      <td style="padding-bottom:16px;">
+                        <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,'PingFang SC','Microsoft YaHei',sans-serif;font-size:13px;line-height:1.7;color:#756a5c;text-align:center;">如果按钮无法点击，请将以下链接复制到浏览器地址栏：</p>
+                        <p style="margin:6px 0 0;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;font-size:13px;line-height:1.6;color:#5c5245;text-align:center;word-break:break-all;"><a href="{{ link }}" style="color:#8a4a20;">{{ link }}</a></p>
+                      </td>
+                    </tr>
+                    <tr>
                       <td>
-                        <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,'PingFang SC','Microsoft YaHei',sans-serif;font-size:12px;line-height:1.7;color:#a09485;text-align:center;">如果你没有注册 {{ project_name }}，请忽略这封邮件，你的邮箱不会发生任何变更。<br />此邮件由系统自动发送，请勿直接回复。</p>
+                        <p style="margin:0;font-family:'Helvetica Neue',Helvetica,Arial,'PingFang SC','Microsoft YaHei',sans-serif;font-size:12px;line-height:1.7;color:#756a5c;text-align:center;">如果你没有注册 {{ project_name }}，请忽略这封邮件，你的邮箱不会发生任何变更。<br />此邮件来自 {{ project_name }}（{{ brand_host }}），由系统自动发送，请勿直接回复。</p>
                       </td>
                     </tr>
                   </table>
