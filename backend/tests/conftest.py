@@ -56,6 +56,21 @@ def _disable_email_verification_gate() -> Generator[None]:
         yield
 
 
+@pytest.fixture(autouse=True)
+def _allow_all_email_domains() -> Generator[None]:
+    """Let the suite register/change to any address by default.
+
+    The signup allowlist derives from the developer's `.env` (absent there, the
+    default common-provider list would reject the random `*.com` addresses most
+    tests use). Whitelist-specific tests opt in by patching
+    `settings.ALLOWED_EMAIL_DOMAINS` themselves (see test_email_domain_whitelist).
+    """
+    from app.core.config import settings as app_settings
+
+    with patch.object(app_settings, "ALLOWED_EMAIL_DOMAINS", []):
+        yield
+
+
 @pytest.fixture(scope="module")
 def superuser_token_headers(client: TestClient) -> dict[str, str]:
     return get_superuser_token_headers(client)

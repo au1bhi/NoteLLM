@@ -417,8 +417,10 @@ def test_server_quota_requires_verified_email(
 def test_recover_password_never_500s_when_smtp_disabled(
     client: TestClient, db: Session
 ) -> None:
-    """The password-recovery endpoint must not turn SMTP absence into a 500
-    (which would both leak registration and noise up the logs)."""
+    """The password-recovery endpoint must not turn SMTP absence into a 500.
+    A registered address still reports the link as sent (SMTP failures are
+    swallowed by design); an unregistered one gets an honest 404. Neither path
+    may 500."""
     user = create_random_user(db)
     with patch("app.core.config.settings.SMTP_HOST", None):
         registered = client.post(
@@ -428,8 +430,9 @@ def test_recover_password_never_500s_when_smtp_disabled(
             f"{settings.API_V1_STR}/password-recovery/{random_email()}"
         )
     assert registered.status_code == 200
-    assert ghost.status_code == 200
-    assert registered.json() == ghost.json()
+    assert registered.json() == {"message": "密码重置链接已发送，请查收"}
+    assert ghost.status_code == 404
+    assert ghost.json() == {"detail": "该邮箱未注册"}
 
 
 def test_purpose_token_as_bearer_is_403_not_500(

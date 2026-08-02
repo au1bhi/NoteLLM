@@ -52,14 +52,33 @@ from app.services.provider_settings import (
 from app.services.sources import delete_notebook_files
 from app.services.usage import quota_status
 from app.utils import (
+    allowed_email_domains_text,
     generate_new_account_email,
     generate_verify_email_email,
-    send_email,
+    is_allowed_email,
     send_email_safely,
     verify_email_token,
 )
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+def _require_allowed_email(email: str) -> None:
+    """Reject addresses outside the configured registration allowlist.
+
+    Enforced at every point a NEW email enters the system (public signup, admin
+    creation, email change) — before any message is queued — so a disallowed
+    address can never be registered or emailed. This is deliberately a
+    write-time policy: an account created under a looser list keeps its
+    address (lockout would be worse), so the recovery/resend endpoints do not
+    re-check it. An empty allowlist disables the policy entirely.
+    """
+    if not is_allowed_email(email):
+        domains = allowed_email_domains_text()
+        detail = (
+            f"暂不支持该邮箱域名，当前仅支持：{domains}" if domains else "暂不支持该邮箱域名"
+        )
+        raise HTTPException(status_code=400, detail=detail)
 
 
 @router.get(
@@ -97,6 +116,7 @@ def create_user(*, session: SessionDep, user_in: UserCreate) -> Any:
             status_code=400,
             detail="该邮箱的用户已存在于系统中。",
         )
+    _require_allowed_email(user_in.email)
 
     user = crud.create_user(session=session, user_create=user_in)
     # An admin creates an account for a known person (they receive the
@@ -110,7 +130,10 @@ def create_user(*, session: SessionDep, user_in: UserCreate) -> Any:
         email_data = generate_new_account_email(
             email_to=user.email, username=user.email
         )
-        send_email(
+        # The account row is already committed above; an SMTP failure must not
+        # 500 the endpoint (the admin would retry into "already exists"). The
+        # recipient can always use the reset-password flow instead.
+        send_email_safely(
             email_to=user_in.email,
             subject=email_data.subject,
             html_content=email_data.html_content,
@@ -138,6 +161,7 @@ def update_user_me(
         "email" in user_data and user_data["email"] != current_user.email
     )
     if email_changed:
+        _require_allowed_email(user_data["email"])
         existing_user = crud.get_user_by_email(
             session=session, email=user_data["email"]
         )
@@ -487,6 +511,11 @@ def register_user(session: SessionDep, user_in: UserRegister) -> SignupResult:
     """
     Create new user without the need to be logged in.
 
+    Registration is domain-allowlisted: `_require_allowed_email` rejects
+    addresses outside `ALLOWED_EMAIL_DOMAINS` up front, so a disallowed domain
+    never reaches the create/send branches (and no message can be aimed at an
+    arbitrary inbox).
+
     Anti-enumeration: a new signup and an existing account return the *exact
     same* body (no account id/timestamps, and `is_email_verified` only reflects
     whether the mail backend is configured). The exists-branch also runs a
@@ -494,6 +523,7 @@ def register_user(session: SessionDep, user_in: UserRegister) -> SignupResult:
     existed, and to make probing expensive.
     """
     email = user_in.email
+    _require_allowed_email(email)
     exists = crud.get_user_by_email(session=session, email=email) is not None
     if not exists:
         user_create = UserCreate.model_validate(user_in)
@@ -657,6 +687,7 @@ def update_user(
             detail="系统中不存在该 ID 的用户",
         )
     if user_in.email:
+        _require_allowed_email(user_in.email)
         existing_user = crud.get_user_by_email(session=session, email=user_in.email)
         if existing_user and existing_user.id != user_id:
             raise HTTPException(status_code=409, detail="该邮箱的用户已存在")

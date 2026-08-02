@@ -9,7 +9,7 @@ from app import crud
 from app.api.deps import CurrentUser, SessionDep, get_current_active_superuser
 from app.core import security
 from app.core.config import settings
-from app.core.rate_limit import rate_limit
+from app.core.rate_limit import rate_limit, recipient_send_cooldown
 from app.models import (
     Message,
     NewPassword,
@@ -76,24 +76,32 @@ def recover_password(email: str, session: SessionDep) -> Message:
     email = email.strip().lower()
     user = crud.get_user_by_email(session=session, email=email)
 
-    # Always return the same response to prevent email enumeration attacks
-    # Only send email if user actually exists
-    if user:
-        password_reset_token = generate_password_reset_token(
-            email=email, password_changed_at=user.password_changed_at
-        )
-        email_data = generate_reset_password_email(
-            email_to=user.email, email=email, token=password_reset_token
-        )
-        # Never propagate SMTP failures to the client (they would both 500 the
-        # endpoint and turn it into an account enumerator).
+    if not user or not user.is_active:
+        # Honest failure: never claim a message was sent for an address that is
+        # not a registered account. Registration is domain-allowlisted (enforced
+        # when an email first enters the system) and this endpoint 404s unknown
+        # addresses, so it cannot be aimed at an inbox that was never approved.
+        raise HTTPException(status_code=404, detail="该邮箱未注册")
+
+    password_reset_token = generate_password_reset_token(
+        email=email, password_changed_at=user.password_changed_at
+    )
+    email_data = generate_reset_password_email(
+        email_to=user.email, email=email, token=password_reset_token
+    )
+    # Never propagate SMTP failures to the client (they would both 500 the
+    # endpoint and turn it into an account enumerator). The per-recipient
+    # cooldown stops a distributed caller flooding one registered inbox with
+    # reset links; like every other send path, a cooldown hit is silently
+    # skipped and the generic success response is still returned.
+    if recipient_send_cooldown(email):
         send_email_safely(
             email_to=user.email,
             subject=email_data.subject,
             html_content=email_data.html_content,
             text_content=email_data.text_content,
         )
-    return Message(message="如果该邮箱已注册，我们已发送密码重置链接")
+    return Message(message="密码重置链接已发送，请查收")
 
 
 @router.post(

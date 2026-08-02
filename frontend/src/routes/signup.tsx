@@ -198,11 +198,14 @@ function SignUp() {
                   <FormControl>
                     <Input
                       data-testid="email-input"
-                      placeholder="user@example.com"
+                      placeholder="user@163.com"
                       type="email"
                       {...field}
                     />
                   </FormControl>
+                  <p className="text-xs text-muted-foreground">
+                    仅支持常见邮箱域名（如 163.com、qq.com、gmail.com）。
+                  </p>
                   <FormMessage />
                 </FormItem>
               )}

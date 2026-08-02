@@ -59,7 +59,7 @@ def test_recovery_password(
             headers=normal_user_token_headers,
         )
         assert r.status_code == 200
-        assert r.json() == {"message": "如果该邮箱已注册，我们已发送密码重置链接"}
+        assert r.json() == {"message": "密码重置链接已发送，请查收"}
 
 
 def test_recovery_password_user_not_exits(
@@ -70,9 +70,11 @@ def test_recovery_password_user_not_exits(
         f"{settings.API_V1_STR}/password-recovery/{email}",
         headers=normal_user_token_headers,
     )
-    # Should return 200 with generic message to prevent email enumeration attacks
-    assert r.status_code == 200
-    assert r.json() == {"message": "如果该邮箱已注册，我们已发送密码重置链接"}
+    # An unregistered address must NOT claim a message was sent — the endpoint
+    # now returns a clear 404 (the anti-enumeration tradeoff is documented in
+    # the README; signup is domain-allowlisted so probing is limited).
+    assert r.status_code == 404
+    assert r.json() == {"detail": "该邮箱未注册"}
 
 
 def test_reset_password(client: TestClient, db: Session) -> None:

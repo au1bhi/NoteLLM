@@ -282,3 +282,33 @@ def send_email_safely(
             "Failed to send email to %s (subject: %s)", email_to, subject
         )
         return False
+
+
+def is_allowed_email(email: str) -> bool:
+    """Whether `email`'s domain is in the configured signup allowlist.
+
+    A literal `*` entry (or an empty list) disables the restriction — every
+    address passes. Comparison is on the exact domain after lowercasing —
+    subdomains, prefix-suffix lookalikes and `@qq.com@evil.com` tricks never
+    match.
+    """
+    allowed = {
+        d.strip().lower() for d in settings.ALLOWED_EMAIL_DOMAINS if d.strip()
+    }
+    if not allowed or "*" in allowed:
+        return True
+    try:
+        domain = email.rsplit("@", 1)[1]
+    except IndexError:
+        return False
+    return domain.strip().lower() in allowed
+
+
+def allowed_email_domains_text() -> str:
+    """Comma-joined allowed domains for user-facing error messages."""
+    domains = [
+        d.strip().lower()
+        for d in settings.ALLOWED_EMAIL_DOMAINS
+        if d.strip() and d.strip().lower() != "*"
+    ]
+    return "、".join(domains)

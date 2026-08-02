@@ -98,6 +98,22 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str | None = None
     EMAILS_FROM_EMAIL: EmailStr | None = None
     EMAILS_FROM_NAME: str | None = None
+    # Mailbox domains allowed for registration / email change (comma-separated
+    # in .env). Enforced before any message is queued, so an attacker can never
+    # point the app at an inbox outside this list. Unset = this default list;
+    # a literal `*` (or empty list in code) = any domain allowed.
+    ALLOWED_EMAIL_DOMAINS: Annotated[list[str], BeforeValidator(parse_cors)] = [
+        "163.com",
+        "qq.com",
+        "gmail.com",
+        "126.com",
+        "outlook.com",
+        "hotmail.com",
+        "foxmail.com",
+        "139.com",
+        "sina.com",
+        "icloud.com",
+    ]
 
     @model_validator(mode="after")
     def _set_default_emails_from(self) -> Self:

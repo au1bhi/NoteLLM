@@ -408,6 +408,8 @@ write_env() {
   env_put SMTP_SSL "${SMTP_SSL:-False}"
   env_put EMAILS_FROM_EMAIL "${EMAILS_FROM_EMAIL:-info@example.com}"
   env_put EMAILS_FROM_NAME "$PROJECT_NAME"
+  # 注册/改密邮箱域名白名单（逗号分隔）；设为 * 放行任意域名。
+  env_put ALLOWED_EMAIL_DOMAINS "${ALLOWED_EMAIL_DOMAINS:-163.com,qq.com,gmail.com,126.com,outlook.com,hotmail.com,foxmail.com,139.com,sina.com,icloud.com}"
 
   env_header "模型（留空则仅支持用户自带 Key）"
   env_put LLM_BASE_URL "$LLM_BASE_URL"
