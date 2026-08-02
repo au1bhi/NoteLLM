@@ -90,7 +90,9 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
       args:
-        - VITE_API_URL=http://localhost:8000
+        # Empty → same-origin /api (nginx proxies to the backend service),
+        # so a fresh `docker compose up` needs no CORS or published port.
+        - VITE_API_URL=
         - NODE_ENV=development
 
 networks:

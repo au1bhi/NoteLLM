@@ -86,6 +86,27 @@ flowchart TB
 
 当前示例配置使用 DeepSeek 作为聊天模型接口、智谱 Embedding-3 作为 1024 维 embedding 接口；两者都可通过环境变量替换。密钥永远只由后端读取。
 
+## 快速开始（推荐：Docker 一键启动）
+
+前置条件：已安装 Docker 与 Docker Compose。
+
+```bash
+git clone <仓库地址>
+cd NoteLLM
+make up        # 首次自动把 .env.example 复制为 .env，然后构建并启动
+```
+
+打开 <http://localhost:5173>，用 `.env` 里的 `FIRST_SUPERUSER` / `FIRST_SUPERUSER_PASSWORD` 登录（`.env.example` 默认是 `admin@example.com` / `replace-with-a-strong-password`，首次登录后请尽快在“设置 → 密码”中修改）。
+
+说明：
+
+- **模型默认未配置**：开箱可注册、创建笔记本，但问答/上传需要模型。两种方式任选：
+  1. 编辑 `.env` 填入 `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` 与 `EMBEDDING_*`（推荐服务端自用）；
+  2. 登录后在 **“设置 → 模型配置”** 填入你自己的 OpenAI 兼容 API Key（浏览器内完成，密钥加密只存后端，更推荐）。
+- 常用命令：`make down`（停止）、`make logs`（跟随日志）、`make ps`（状态）；不想用 Makefile 也可直接 `docker compose up -d --build`。
+- 前端与 API 同源代理：浏览器访问 `/api/v1/...`，由 nginx 转发到后端服务，无需配置 CORS。
+- 免费额度：服务端计费用量每月对话 10 万 token、嵌入 30 万字符；配置自己的 Key 的维度不限额。
+
 ## 快速开始（本地开发）
 
 ### 1. 准备配置

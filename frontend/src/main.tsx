@@ -16,7 +16,7 @@ import "@fontsource-variable/noto-serif-sc"
 import "./index.css"
 import { routeTree } from "./routeTree.gen"
 
-OpenAPI.BASE = import.meta.env.VITE_API_URL
+OpenAPI.BASE = import.meta.env.VITE_API_URL ?? ""
 OpenAPI.TOKEN = async () => {
   return localStorage.getItem("access_token") || ""
 }
