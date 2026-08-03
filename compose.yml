@@ -169,6 +169,12 @@ services:
       # crash-loops with "host not found in upstream".
       backend:
         condition: service_started
+    ports:
+      # Loopback-only HTTP endpoint for the Cloudflare Tunnel origin
+      # (cloudflared -> http://localhost:8080): plain HTTP so there are no
+      # TLS-origin certificate issues; the SPA /api proxy still works. Not
+      # exposed to the internet (127.0.0.1 binding only).
+      - "127.0.0.1:8080:80"
     build:
       context: .
       dockerfile: frontend/Dockerfile
