@@ -147,9 +147,9 @@ class Settings(BaseSettings):
     FIRST_SUPERUSER_PASSWORD: str
 
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
-        if value == "changethis":
+        if value == "changethis" or (value and value.startswith("replace-with-")):
             message = (
-                f'The value of {var_name} is "changethis", '
+                f'The value of {var_name} is "{value}", '
                 "for security, please change it, at least for deployments."
             )
             if self.ENVIRONMENT == "local":

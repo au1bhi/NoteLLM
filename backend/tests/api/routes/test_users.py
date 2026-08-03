@@ -8,7 +8,7 @@ from app import crud
 from app.core.config import settings
 from app.core.security import verify_password
 from app.models import User, UserCreate
-from tests.utils.user import create_random_user
+from tests.utils.user import create_random_user, user_authentication_headers
 from tests.utils.utils import random_email, random_lower_string
 
 
@@ -310,19 +310,27 @@ def test_update_password_me_incorrect_password(
 
 
 def test_update_user_me_email_exists(
-    client: TestClient, normal_user_token_headers: dict[str, str], db: Session
+    client: TestClient, db: Session
 ) -> None:
-    username = random_email()
-    password = random_lower_string()
-    user_in = UserCreate(email=username, password=password)
-    user = crud.create_user(session=db, user_create=user_in)
-
-    data = {"email": user.email}
+    # A second registered account whose address the actor tries to claim.
+    target_user = create_random_user(db)
+    actor_email = random_email()
+    actor_password = random_lower_string()
+    crud.create_user(
+        session=db,
+        user_create=UserCreate(email=actor_email, password=actor_password),
+    )
+    headers = user_authentication_headers(
+        client=client, email=actor_email, password=actor_password
+    )
+    data = {"email": target_user.email, "current_password": actor_password}
     r = client.patch(
         f"{settings.API_V1_STR}/users/me",
-        headers=normal_user_token_headers,
+        headers=headers,
         json=data,
     )
+    # The password is verified first (an anti-enumeration ordering: the 409
+    # only appears after authenticating), then the taken address is rejected.
     assert r.status_code == 409
     assert r.json()["detail"] == "该邮箱的用户已存在"
 
@@ -580,3 +588,67 @@ def test_delete_user_without_privileges(
     )
     assert r.status_code == 403
     assert r.json()["detail"] == "该用户权限不足"
+
+
+def test_admin_password_reset_revokes_existing_jwts(
+    client: TestClient, db: Session, superuser_token_headers: dict[str, str]
+) -> None:
+    """An admin-issued password reset must bump password_changed_at so every
+    previously issued JWT (and outstanding reset token) is revoked."""
+    email = random_email()
+    password = random_lower_string()
+    user = crud.create_user(
+        session=db,
+        user_create=UserCreate(email=email, password=password),
+    )
+    headers = user_authentication_headers(client=client, email=email, password=password)
+    # The pre-reset token authenticates before the reset.
+    assert client.get(f"{settings.API_V1_STR}/users/me", headers=headers).status_code == 200
+    new_password = random_lower_string()
+    r = client.patch(
+        f"{settings.API_V1_STR}/users/{user.id}",
+        headers=superuser_token_headers,
+        json={"password": new_password},
+    )
+    assert r.status_code == 200
+    # The stolen/pre-reset JWT must now be rejected.
+    r = client.get(f"{settings.API_V1_STR}/users/me", headers=headers)
+    assert r.status_code == 401
+
+
+def test_delete_and_reregister_preserves_allowance(
+    client: TestClient, db: Session
+) -> None:
+    """Deleting an account and re-registering the same email must not reset the
+    monthly free allowance (the usage is carried on an email tombstone)."""
+    from app.models import EmailUsageTombstone, UserUsage
+
+    email = random_email()
+    password = random_lower_string()
+    crud.create_user(session=db, user_create=UserCreate(email=email, password=password))
+    headers = user_authentication_headers(client=client, email=email, password=password)
+    me = client.get(f"{settings.API_V1_STR}/users/me", headers=headers).json()
+    db.add(
+        UserUsage(user_id=me["id"], chat_tokens=42_000, embedding_chars=200_000)
+    )
+    db.commit()
+    # Delete the account.
+    r = client.delete(f"{settings.API_V1_STR}/users/me", headers=headers)
+    assert r.status_code == 200
+    assert db.get(EmailUsageTombstone, email) is not None
+    # Re-register the same address.
+    r = client.post(
+        f"{settings.API_V1_STR}/users/signup",
+        json={"email": email, "password": random_lower_string()},
+    )
+    assert r.status_code == 200
+    user = crud.get_user_by_email(session=db, email=email)
+    assert user is not None
+    usage = db.exec(
+        select(UserUsage).where(UserUsage.user_id == user.id)
+    ).first()
+    # The allowance is NOT refreshed: the restored counters leave the quota
+    # exhausted for the current period.
+    assert usage is not None
+    assert usage.chat_tokens >= 42_000
+    assert usage.embedding_chars >= 200_000

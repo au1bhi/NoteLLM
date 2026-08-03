@@ -92,7 +92,11 @@ def send_email(
 def generate_reset_password_email(email_to: str, email: str, token: str) -> EmailData:
     project_name = settings.PROJECT_NAME
     subject = f"{project_name} - 重置密码"
-    link = f"{settings.FRONTEND_HOST}/reset-password?token={token}"
+    # The token rides in the URL *fragment* (`#token=...`), never in the query
+    # string: fragments are not sent to the server, not logged by the proxy,
+    # and not leaked through the Referer header, so a 48h password-reset JWT
+    # cannot be harvested from access logs, browser history sync, or referrers.
+    link = f"{settings.FRONTEND_HOST}/reset-password#token={token}"
     html_content = render_email_template(
         template_name="reset_password.html",
         context={
@@ -116,7 +120,9 @@ def generate_reset_password_email(email_to: str, email: str, token: str) -> Emai
     return EmailData(html_content=html_content, subject=subject, text_content=text_content)
 
 
-def generate_new_account_email(email_to: str, username: str) -> EmailData:
+def generate_new_account_email(
+    email_to: str, username: str, password_changed_at: datetime | None = None
+) -> EmailData:
     """Welcome email for admin-created accounts.
 
     The admin supplies a password to create the row, but that plaintext is
@@ -126,8 +132,10 @@ def generate_new_account_email(email_to: str, username: str) -> EmailData:
     """
     project_name = settings.PROJECT_NAME
     subject = f"设置你的初始密码 - {project_name}"
-    token = generate_password_reset_token(email_to)
-    link = f"{settings.FRONTEND_HOST}/reset-password?token={token}"
+    token = generate_password_reset_token(email_to, password_changed_at)
+    # URL fragment (see generate_reset_password_email): the token never
+    # reaches the server, logs, or Referer.
+    link = f"{settings.FRONTEND_HOST}/reset-password#token={token}"
     html_content = render_email_template(
         template_name="new_account.html",
         context={
@@ -233,9 +241,11 @@ def verify_email_token(token: str) -> str | None:
 
 
 def generate_verify_email_email(email_to: str) -> EmailData:
+    # URL fragment (see generate_reset_password_email): the verify JWT never
+    # reaches the server, logs, or Referer.
     link = (
         f"{settings.FRONTEND_HOST}/verify-email"
-        f"?token={generate_verify_email_token(email_to)}"
+        f"#token={generate_verify_email_token(email_to)}"
     )
     subject = f"验证你的邮箱 - {settings.PROJECT_NAME}"
     html_content = render_email_template(

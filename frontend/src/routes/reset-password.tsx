@@ -25,10 +25,6 @@ import { isLoggedIn } from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
 import { handleError } from "@/utils"
 
-const searchSchema = z.object({
-  token: z.string().catch(""),
-})
-
 const formSchema = z
   .object({
     new_password: z
@@ -44,14 +40,22 @@ const formSchema = z
 
 type FormData = z.infer<typeof formSchema>
 
+// The reset JWT is delivered in the URL *fragment* (`#token=...`), never the
+// query string, so it is not written to proxy access logs and is not leaked
+// through the Referer header. Parse it here.
+function tokenFromHash(): string {
+  const hash = window.location.hash
+  if (!hash) return ""
+  return new URLSearchParams(hash.replace(/^#/, "")).get("token") ?? ""
+}
+
 export const Route = createFileRoute("/reset-password")({
   component: ResetPassword,
-  validateSearch: searchSchema,
-  beforeLoad: async ({ search }) => {
+  beforeLoad: () => {
     if (isLoggedIn()) {
       throw redirect({ to: "/" })
     }
-    if (!search.token) {
+    if (!tokenFromHash()) {
       throw redirect({ to: "/login" })
     }
   },
@@ -65,7 +69,7 @@ export const Route = createFileRoute("/reset-password")({
 })
 
 function ResetPassword() {
-  const { token } = Route.useSearch()
+  const token = tokenFromHash()
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const navigate = useNavigate()
 

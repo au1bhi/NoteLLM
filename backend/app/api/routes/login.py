@@ -77,11 +77,14 @@ def recover_password(email: str, session: SessionDep) -> Message:
     user = crud.get_user_by_email(session=session, email=email)
 
     if not user or not user.is_active:
-        # Honest failure: never claim a message was sent for an address that is
-        # not a registered account. Registration is domain-allowlisted (enforced
-        # when an email first enters the system) and this endpoint 404s unknown
-        # addresses, so it cannot be aimed at an inbox that was never approved.
-        raise HTTPException(status_code=404, detail="该邮箱未注册")
+        # Uniform 200 for every address: a 404 here is a trivially scriptable
+        # account-enumeration oracle (probing is only throttled once the rate
+        # limit keys on the endpoint, and the allowlist bounds candidate
+        # domains). Equalize timing with the registered branch via the Argon2
+        # dummy hash; no email is sent for an unknown address. The per-recipient
+        # cooldown still bounds floodable sends to registered inboxes.
+        security.verify_password("", crud.DUMMY_HASH)
+        return Message(message="密码重置链接已发送，请查收")
 
     password_reset_token = generate_password_reset_token(
         email=email, password_changed_at=user.password_changed_at
@@ -123,12 +126,14 @@ def reset_password(session: SessionDep, body: NewPassword) -> Message:
         raise HTTPException(status_code=400, detail="用户已停用")
     # A reset token is single-use: any password change (including a prior
     # successful reset) bumps password_changed_at beyond the token's snapshot,
-    # so replayed links are rejected instead of re-resetting the account.
+    # so replayed links are rejected instead of re-resetting the account. The
+    # check is unconditional: a token issued without a `pwd` snapshot (legacy
+    # or welcome-email tokens before the fix) is itself replayable, so once an
+    # account has a password-change clock it is rejected outright.
     token_pwd = reset_token_password_changed_at(body.token)
-    if (
-        token_pwd is not None
-        and user.password_changed_at is not None
-        and int(user.password_changed_at.timestamp() * 1_000_000) > token_pwd
+    if user.password_changed_at is not None and (
+        token_pwd is None
+        or int(user.password_changed_at.timestamp() * 1_000_000) > token_pwd
     ):
         raise HTTPException(status_code=400, detail="无效的令牌")
     user_in_update = UserUpdate(password=body.new_password)
@@ -159,7 +164,9 @@ def recover_password_html_content(email: str, session: SessionDep) -> Any:
             status_code=404,
             detail="系统中不存在该用户名的用户。",
         )
-    password_reset_token = generate_password_reset_token(email=email)
+    password_reset_token = generate_password_reset_token(
+        email=email, password_changed_at=user.password_changed_at
+    )
     email_data = generate_reset_password_email(
         email_to=user.email, email=email, token=password_reset_token
     )

@@ -6,20 +6,23 @@ import {
 } from "@tanstack/react-router"
 import { Loader2, MailCheck, MailWarning, RefreshCw } from "lucide-react"
 import { useEffect } from "react"
-import { z } from "zod"
 
 import { ApiError, UsersService } from "@/client"
 import { AuthLayout } from "@/components/Common/AuthLayout"
 import { Button } from "@/components/ui/button"
 import { isLoggedIn } from "@/hooks/useAuth"
 
-const searchSchema = z.object({
-  token: z.string().catch(""),
-})
+// The verify JWT is delivered in the URL *fragment* (`#token=...`), never the
+// query string, so it is not written to proxy access logs and is not leaked
+// through the Referer header. Parse it here.
+function tokenFromHash(): string {
+  const hash = window.location.hash
+  if (!hash) return ""
+  return new URLSearchParams(hash.replace(/^#/, "")).get("token") ?? ""
+}
 
 export const Route = createFileRoute("/verify-email")({
   component: VerifyEmail,
-  validateSearch: searchSchema,
   head: () => ({
     meta: [
       {
@@ -30,7 +33,7 @@ export const Route = createFileRoute("/verify-email")({
 })
 
 function VerifyEmail() {
-  const { token } = Route.useSearch()
+  const token = tokenFromHash()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
 

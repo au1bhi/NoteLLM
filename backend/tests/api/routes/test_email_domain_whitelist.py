@@ -245,10 +245,13 @@ def test_recovery_password_registered_returns_sent(
     assert r.json() == {"message": "密码重置链接已发送，请查收"}
 
 
-def test_recovery_password_unregistered_returns_404(client: TestClient) -> None:
+def test_recovery_password_unregistered_returns_200(client: TestClient) -> None:
+    # Anti-enumeration: an unregistered address returns the same 200 body as a
+    # registered one (no email is actually sent), so the endpoint cannot be
+    # used to probe which addresses have accounts.
     r = client.post(_url("/password-recovery/nobody@qq.com"))
-    assert r.status_code == 404
-    assert r.json() == {"detail": "该邮箱未注册"}
+    assert r.status_code == 200
+    assert r.json() == {"message": "密码重置链接已发送，请查收"}
 
 
 def test_recovery_password_respects_recipient_cooldown(

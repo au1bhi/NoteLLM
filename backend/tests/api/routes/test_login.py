@@ -70,11 +70,11 @@ def test_recovery_password_user_not_exits(
         f"{settings.API_V1_STR}/password-recovery/{email}",
         headers=normal_user_token_headers,
     )
-    # An unregistered address must NOT claim a message was sent — the endpoint
-    # now returns a clear 404 (the anti-enumeration tradeoff is documented in
-    # the README; signup is domain-allowlisted so probing is limited).
-    assert r.status_code == 404
-    assert r.json() == {"detail": "该邮箱未注册"}
+    # Anti-enumeration: an unregistered address returns the SAME 200 body as a
+    # registered one (no email is actually sent), so the endpoint cannot be
+    # used to probe which addresses have accounts.
+    assert r.status_code == 200
+    assert r.json() == {"message": "密码重置链接已发送，请查收"}
 
 
 def test_reset_password(client: TestClient, db: Session) -> None:
@@ -90,7 +90,11 @@ def test_reset_password(client: TestClient, db: Session) -> None:
         is_superuser=False,
     )
     user = create_user(session=db, user_create=user_create)
-    token = generate_password_reset_token(email=email)
+    # Tokens must carry the account's password_changed_at snapshot; an unbound
+    # token is rejected by the single-use guard (see the red-team fix).
+    token = generate_password_reset_token(
+        email=email, password_changed_at=user.password_changed_at
+    )
     headers = user_authentication_headers(client=client, email=email, password=password)
     data = {"new_password": new_password, "token": token}
 
@@ -187,3 +191,37 @@ def test_login_with_argon2_password_keeps_hash(client: TestClient, db: Session) 
 
     assert user.hashed_password == original_hash
     assert user.hashed_password.startswith("$argon2")
+
+
+def test_welcome_email_reset_token_is_single_use(
+    client: TestClient, db: Session
+) -> None:
+    """The welcome-email reset token is bound to the account's
+    password_changed_at, so after it is used once the same token is rejected
+    (an unbound token would stay valid for 48h and re-hijack the account)."""
+    from app.utils import generate_new_account_email
+
+    email = random_email()
+    user_in = UserCreate(email=email, password=random_lower_string())
+    user = create_user(session=db, user_create=user_in)
+    email_data = generate_new_account_email(
+        email_to=email, username=email, password_changed_at=user.password_changed_at
+    )
+    # Extract the token from the URL fragment in the welcome email.
+    link = next(
+        part for part in email_data.html_content.split() if "token=" in part
+    )
+    token = link.split("token=")[1].split('"')[0]
+
+    new_password = random_lower_string()
+    data = {"new_password": new_password, "token": token}
+    r = client.post(f"{settings.API_V1_STR}/reset-password/", json=data)
+    assert r.status_code == 200
+
+    # Reusing the same token must now be rejected (password changed → the
+    # token's pwd snapshot is stale).
+    r = client.post(
+        f"{settings.API_V1_STR}/reset-password/",
+        json={"new_password": random_lower_string(), "token": token},
+    )
+    assert r.status_code == 400

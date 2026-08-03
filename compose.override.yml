@@ -10,9 +10,9 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
-      - "8081:80"
-      - "8090:8080"
-    # Duplicate the command from compose.yml to add --api.insecure=true
+      # Loopback-only: the local dev Traefik must never be internet-reachable.
+      - "127.0.0.1:8081:80"
+      - "127.0.0.1:8090:8080"
     command:
       # Enable Docker in Traefik, so that it reads labels from Docker services
       - --providers.docker
@@ -28,12 +28,8 @@ services:
       - --accesslog
       # Enable the Traefik log, for configurations and errors
       - --log
-      # Enable debug logging for local development
-      - --log.level=DEBUG
       # Enable the Dashboard and API
       - --api
-      # Enable the Dashboard and API in insecure mode for local development
-      - --api.insecure=true
     labels:
       # Enable Traefik for this service, to make it available in the public network
       - traefik.enable=true
@@ -53,17 +49,19 @@ services:
   db:
     restart: "no"
     ports:
-      - "5433:5432"
+      # Loopback-only — never expose Postgres on the network.
+      - "127.0.0.1:5433:5432"
 
   adminer:
     restart: "no"
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
 
   backend:
     restart: "no"
     ports:
-      - "8000:8000"
+      # Loopback-only — the dev backend must never be internet-reachable.
+      - "127.0.0.1:8000:8000"
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -90,7 +88,7 @@ services:
   frontend:
     restart: "no"
     ports:
-      - "5173:80"
+      - "127.0.0.1:5173:80"
     build:
       context: .
       dockerfile: frontend/Dockerfile

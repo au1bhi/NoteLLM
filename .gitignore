@@ -2,6 +2,10 @@
 !.vscode/extensions.json
 node_modules/
 .env
+# install.sh --force backs the old env up as .env.bak.<ts>; never let those
+# (with live secrets) reach git. (.env.example and frontend/.env stay tracked.)
+.env.bak*
+*.bak
 /test-results/
 /playwright-report/
 /blob-report/

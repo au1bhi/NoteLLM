@@ -48,7 +48,13 @@ def rate_limit(limit: int, window: int = 60) -> Callable[[Request], None]:
         if not settings.RATE_LIMIT_ENABLED:
             return
         host = request.client.host if request.client else "unknown"
-        key = (request.url.path, host)
+        # Key on the ROUTE template path (e.g. `/password-recovery/{email}`),
+        # not the concrete path: otherwise each distinct path parameter gets
+        # its own bucket and probing many values (e.g. different emails)
+        # bypasses the intended per-endpoint throttle.
+        route = request.scope.get("route")
+        path = getattr(route, "path", None) or request.url.path
+        key = (path, host)
         now = time.monotonic()
         with _lock:
             count, start = _buckets.get(key, (0, now))

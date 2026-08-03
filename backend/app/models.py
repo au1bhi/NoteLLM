@@ -248,6 +248,30 @@ class UserUsagePublic(SQLModel):
     period_start: datetime | None = None
 
 
+class EmailUsageTombstone(SQLModel, table=True):
+    """Free-allowance usage carried across account deletion, keyed by the
+    normalized email.
+
+    `UserUsage` rows cascade away when their user is deleted; without this,
+    deleting and re-registering the same address would mint a brand-new monthly
+    allowance every time (unbounded free LLM spend for the operator). The
+    counters are restored to a re-registered account's usage row so the
+    allowance survives deletion.
+    """
+
+    email: str = Field(primary_key=True, max_length=255)
+    period_start: datetime | None = Field(
+        default=None,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+    chat_tokens: int = Field(default=0, ge=0)
+    embedding_chars: int = Field(default=0, ge=0)
+    updated_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+
+
 class ModelFetchRequest(SQLModel):
     """Fetch available model IDs from an OpenAI-compatible /models endpoint.
     Empty base_url/api_key fall back to the server's configured provider.

@@ -40,6 +40,7 @@ from app.models import (
     UsersPublic,
     UserUpdate,
     UserUpdateMe,
+    UserUsage,
     UserUsagePublic,
     VerifyEmailRequest,
     get_datetime_utc,
@@ -50,7 +51,11 @@ from app.services.provider_settings import (
     resolve_api_base,
 )
 from app.services.sources import delete_notebook_files
-from app.services.usage import quota_status
+from app.services.usage import (
+    quota_status,
+    restore_tombstone_usage,
+    save_usage_tombstone,
+)
 from app.utils import (
     allowed_email_domains_text,
     generate_new_account_email,
@@ -128,7 +133,11 @@ def create_user(*, session: SessionDep, user_in: UserCreate) -> Any:
     session.refresh(user)
     if settings.emails_enabled and user_in.email:
         email_data = generate_new_account_email(
-            email_to=user.email, username=user.email
+            email_to=user.email,
+            username=user.email,
+            # Bind the welcome reset token to the account's password-change
+            # clock so it dies as soon as the new password is set (single-use).
+            password_changed_at=user.password_changed_at,
         )
         # The account row is already committed above; an SMTP failure must not
         # 500 the endpoint (the admin would retry into "already exists"). The
@@ -142,7 +151,11 @@ def create_user(*, session: SessionDep, user_in: UserCreate) -> Any:
     return user
 
 
-@router.patch("/me", response_model=UserPublic)
+@router.patch(
+    "/me",
+    response_model=UserPublic,
+    dependencies=[Depends(rate_limit(limit=30, window=60))],
+)
 def update_user_me(
     *, session: SessionDep, user_in: UserUpdateMe, current_user: CurrentUser
 ) -> Any:
@@ -162,11 +175,9 @@ def update_user_me(
     )
     if email_changed:
         _require_allowed_email(user_data["email"])
-        existing_user = crud.get_user_by_email(
-            session=session, email=user_data["email"]
-        )
-        if existing_user and existing_user.id != current_user.id:
-            raise HTTPException(status_code=409, detail="该邮箱的用户已存在")
+        # Verify the current password BEFORE revealing whether the target
+        # address is taken: checking existence first would let any authenticated
+        # caller probe registered addresses (409 vs 422).
         if not provided_password:
             raise HTTPException(
                 status_code=422, detail="修改邮箱需要验证当前密码"
@@ -176,6 +187,11 @@ def update_user_me(
         )
         if not verified:
             raise HTTPException(status_code=400, detail="当前密码错误")
+        existing_user = crud.get_user_by_email(
+            session=session, email=user_data["email"]
+        )
+        if existing_user and existing_user.id != current_user.id:
+            raise HTTPException(status_code=409, detail="该邮箱的用户已存在")
         # The new address must be confirmed by its owner. When the mail backend
         # is configured we downgrade and ask for confirmation; otherwise the
         # account cannot prove anything, so the flag simply stays.
@@ -264,6 +280,13 @@ def delete_user_me(session: SessionDep, current_user: CurrentUser) -> Any:
     """
     if current_user.is_superuser:
         raise HTTPException(status_code=403, detail="超级管理员不能删除自己")
+    # Carry the free-allowance counters onto an email key before the UserUsage
+    # row cascades away, so deleting and re-registering cannot refresh the
+    # monthly allowance (unbounded operator LLM spend).
+    usage = session.exec(
+        select(UserUsage).where(UserUsage.user_id == current_user.id)
+    ).first()
+    save_usage_tombstone(session=session, email=current_user.email, usage=usage)
     # Unlink uploaded files before the DB rows cascade away, so deleting an
     # account leaves no residue on the uploads volume.
     notebook_ids = session.exec(
@@ -539,6 +562,13 @@ def register_user(session: SessionDep, user_in: UserRegister) -> SignupResult:
             session.rollback()
             exists = True
         else:
+            # A deleted account's usage tombstone (if any) is restored so the
+            # monthly allowance does not refresh by deleting + re-registering
+            # the same address. ensure_period rolls it over if it is old.
+            restore_tombstone_usage(
+                session=session, user_id=user.id, email=email
+            )
+            session.commit()
             if settings.emails_enabled:
                 email_data = generate_verify_email_email(email_to=user.email)
                 if recipient_send_cooldown(user.email):
@@ -712,6 +742,12 @@ def delete_user(
         raise HTTPException(status_code=404, detail="用户不存在")
     if user == current_user:
         raise HTTPException(status_code=403, detail="超级管理员不能删除自己")
+    # Carry the free-allowance counters onto the email key before the usage
+    # row cascades away (same anti-allowance-farming protection as /me delete).
+    usage = session.exec(
+        select(UserUsage).where(UserUsage.user_id == user_id)
+    ).first()
+    save_usage_tombstone(session=session, email=user.email, usage=usage)
     # Notebooks/sources/conversations cascade via their foreign keys.
     session.delete(user)
     session.commit()

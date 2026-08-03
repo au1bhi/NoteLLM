@@ -7,7 +7,12 @@ from sqlalchemy import text as sql_text
 from sqlmodel import Session, select
 
 from app.core.config import settings
-from app.models import User, UserProviderSettings, UserUsage
+from app.models import (
+    EmailUsageTombstone,
+    User,
+    UserProviderSettings,
+    UserUsage,
+)
 from app.services.chat import estimate_tokens
 from app.services.provider_settings import (
     has_own_chat_key,
@@ -108,6 +113,54 @@ def record_usage(
 
 def get_usage(session: Session, user_id: uuid.UUID) -> UserUsage:
     return ensure_period(session, user_id)
+
+
+def save_usage_tombstone(
+    *, session: Session, email: str, usage: UserUsage | None
+) -> None:
+    """Carry a deleted account's free-allowance counters onto an email key.
+
+    Called right before a user row is deleted (their ``UserUsage`` row cascades
+    away). Without this, deleting and re-registering the same address would
+    reset the monthly allowance, letting anyone farm unlimited free LLM spend.
+    """
+    if usage is None or (usage.chat_tokens == 0 and usage.embedding_chars == 0):
+        return
+    tombstone = session.get(EmailUsageTombstone, email)
+    if tombstone is None:
+        tombstone = EmailUsageTombstone(email=email)
+    # Merge rather than overwrite so a repeated delete/register cycle cannot
+    # discard already-accumulated usage.
+    tombstone.chat_tokens = max(tombstone.chat_tokens, usage.chat_tokens)
+    tombstone.embedding_chars = max(
+        tombstone.embedding_chars, usage.embedding_chars
+    )
+    tombstone.period_start = usage.period_start
+    tombstone.updated_at = datetime.now(UTC)
+    session.add(tombstone)
+
+
+def restore_tombstone_usage(
+    *, session: Session, user_id: uuid.UUID, email: str
+) -> None:
+    """Seed a freshly registered account's usage from a prior deletion tombstone.
+
+    `ensure_period` rolls the counters to the current period if the tombstone
+    belongs to an earlier one, so re-registering in the *same* month keeps the
+    old usage (no allowance refresh), and in a later month gets a fresh
+    allowance as intended.
+    """
+    tombstone = session.get(EmailUsageTombstone, email)
+    if tombstone is None:
+        return
+    usage = UserUsage(
+        user_id=user_id,
+        chat_tokens=tombstone.chat_tokens,
+        embedding_chars=tombstone.embedding_chars,
+        period_start=tombstone.period_start,
+    )
+    session.add(usage)
+    session.delete(tombstone)
 
 
 @dataclass(frozen=True)

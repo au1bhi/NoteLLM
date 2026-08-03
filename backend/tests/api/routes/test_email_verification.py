@@ -78,7 +78,9 @@ def test_signup_sends_verification_email_and_is_unverified(
         kwargs = mock_send.call_args.kwargs
         assert kwargs["email_to"] == email
         assert "验证" in kwargs["subject"]
-        assert "/verify-email?token=" in kwargs["html_content"]
+        # The verify token rides in the URL fragment (never the query string)
+        # so it does not leak via proxy logs or the Referer header.
+        assert "/verify-email#token=" in kwargs["html_content"]
     assert _user_from_db(db, email).is_email_verified is False
 
 
@@ -419,8 +421,8 @@ def test_recover_password_never_500s_when_smtp_disabled(
 ) -> None:
     """The password-recovery endpoint must not turn SMTP absence into a 500.
     A registered address still reports the link as sent (SMTP failures are
-    swallowed by design); an unregistered one gets an honest 404. Neither path
-    may 500."""
+    swallowed by design); an unregistered one returns the identical 200 body
+    (anti-enumeration). Neither path may 500."""
     user = create_random_user(db)
     with patch("app.core.config.settings.SMTP_HOST", None):
         registered = client.post(
@@ -431,8 +433,8 @@ def test_recover_password_never_500s_when_smtp_disabled(
         )
     assert registered.status_code == 200
     assert registered.json() == {"message": "密码重置链接已发送，请查收"}
-    assert ghost.status_code == 404
-    assert ghost.json() == {"detail": "该邮箱未注册"}
+    assert ghost.status_code == 200
+    assert ghost.json() == {"message": "密码重置链接已发送，请查收"}
 
 
 def test_purpose_token_as_bearer_is_403_not_500(

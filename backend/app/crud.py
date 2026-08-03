@@ -3,7 +3,7 @@ from typing import Any
 from sqlmodel import Session, select
 
 from app.core.security import get_password_hash, verify_password
-from app.models import User, UserCreate, UserUpdate
+from app.models import User, UserCreate, UserUpdate, get_datetime_utc
 
 
 def create_user(*, session: Session, user_create: UserCreate) -> User:
@@ -22,11 +22,17 @@ def create_user(*, session: Session, user_create: UserCreate) -> User:
 
 def update_user(*, session: Session, db_user: User, user_in: UserUpdate) -> Any:
     user_data = user_in.model_dump(exclude_unset=True)
-    extra_data = {}
+    extra_data: dict[str, Any] = {}
     if "password" in user_data:
         password = user_data["password"]
         hashed_password = get_password_hash(password)
         extra_data["hashed_password"] = hashed_password
+        # Every password change must rotate the JWT/reset-token revocation
+        # clock. get_current_user (deps.py) and reset_password (login.py) key
+        # off password_changed_at, so skipping this (e.g. the admin PATCH
+        # /users/{id} reset) would silently leave stolen JWTs and outstanding
+        # reset tokens valid for up to ACCESS_TOKEN_EXPIRE_MINUTES.
+        extra_data["password_changed_at"] = get_datetime_utc()
     if user_data.get("email"):
         user_data["email"] = user_data["email"].strip().lower()
     db_user.sqlmodel_update(user_data, update=extra_data)

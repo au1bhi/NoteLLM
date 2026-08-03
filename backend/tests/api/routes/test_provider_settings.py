@@ -449,3 +449,59 @@ def test_fetch_models_uses_stored_key_when_key_empty(
     assert response.status_code == 200
     assert response.json() == [{"id": "model-x"}]
     assert any("sk-stored-key-123456" in header for header in auth_headers)
+
+
+def test_server_billed_uses_server_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When a call is billed to the server's key (user has no own key), the
+    user's chat_model must be ignored: honoring it would let anyone pick an
+    arbitrarily expensive model on the operator's endpoint (cost amplification)."""
+    monkeypatch.setattr(settings, "LLM_API_KEY", "server-key")
+    monkeypatch.setattr(settings, "LLM_BASE_URL", "https://api.example.com/v1")
+    monkeypatch.setattr(settings, "LLM_MODEL", "server-model")
+    import uuid as _uuid
+
+    user_settings = UserProviderSettings(
+        user_id=_uuid.uuid4(), chat_model="attacker-picked-expensive-model"
+    )
+    config = effective_chat_config(user_settings)
+    assert config.api_key == "server-key"
+    assert config.model == "server-model"
+
+
+def test_user_billed_allows_user_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A user who supplies their own key is billed on it, so their model choice
+    (which only costs them) is honored."""
+    monkeypatch.setattr(settings, "LLM_API_KEY", "server-key")
+    monkeypatch.setattr(settings, "LLM_BASE_URL", "https://api.example.com/v1")
+    monkeypatch.setattr(settings, "LLM_MODEL", "server-model")
+    import uuid as _uuid
+
+    user_settings = UserProviderSettings(
+        user_id=_uuid.uuid4(),
+        chat_api_key=encrypt_secret("user-key"),
+        chat_model="my-own-model",
+    )
+    config = effective_chat_config(user_settings)
+    assert config.api_key == "user-key"
+    assert config.model == "my-own-model"
+
+
+def test_server_model_forced_on_server_default_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Even when the user pins the endpoint to the server default (so the server
+    key is sent), the user model must not apply to a server-billed call."""
+    _public_dns(monkeypatch)
+    monkeypatch.setattr(settings, "LLM_API_KEY", "server-key")
+    monkeypatch.setattr(settings, "LLM_BASE_URL", "https://api.example.com/v1")
+    monkeypatch.setattr(settings, "LLM_MODEL", "server-model")
+    import uuid as _uuid
+
+    user_settings = UserProviderSettings(
+        user_id=_uuid.uuid4(),
+        chat_base_url="https://api.example.com/v1",
+        chat_model="attacker-model",
+    )
+    config = effective_chat_config(user_settings)
+    assert config.api_key == "server-key"
+    assert config.model == "server-model"

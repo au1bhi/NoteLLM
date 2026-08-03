@@ -75,24 +75,6 @@ def _first(*values: str | None) -> str:
     return ""
 
 
-def _resolve_key(
-    stored_encrypted: str | None,
-    server_key: str | None,
-    *,
-    allow_server_fallback: bool,
-) -> str:
-    """Return the user's decrypted key, falling back to the server key only
-    when the endpoint is the server default (so the server key is never sent
-    to a URL the user controls)."""
-    if stored_encrypted:
-        decrypted = decrypt_secret(stored_encrypted)
-        if decrypted:
-            return decrypted
-    if allow_server_fallback:
-        return server_key or ""
-    return ""
-
-
 def _endpoints_match(user_value: str | None, server_value: str | None) -> bool:
     return (user_value or "").strip() == (server_value or "").strip()
 
@@ -101,24 +83,39 @@ def effective_chat_config(
     user_settings: UserProviderSettings | None,
 ) -> ProviderConfig:
     server_base_url = str(settings.LLM_BASE_URL) if settings.LLM_BASE_URL else ""
+    server_key = settings.LLM_API_KEY or ""
+    server_model = settings.LLM_MODEL or ""
     user_base_url = user_settings.chat_base_url if user_settings else None
     base_url = _first(user_base_url, server_base_url)
     # Only the user-supplied endpoint is untrusted; validate it so the server
     # never calls internal/private targets.
     if user_base_url:
         base_url = validate_outbound_url(base_url)
+    allow_server_fallback = not user_base_url or _endpoints_match(
+        user_base_url, server_base_url
+    )
+    # Decrypt the user's own key if present; it is the only thing that makes a
+    # call user-billed (and thus user-model) instead of server-billed.
+    user_key = ""
+    if user_settings and user_settings.chat_api_key:
+        user_key = decrypt_secret(user_settings.chat_api_key) or ""
+    if user_key:
+        api_key = user_key
+        # User-billed: honoring the user's model choice only costs them.
+        model = _first(
+            user_settings.chat_model if user_settings else None, server_model
+        )
+    else:
+        api_key = server_key if allow_server_fallback else ""
+        # Server-billed: the operator pays, so only the operator's configured
+        # model may be used. Honoring a user-supplied model here would let any
+        # user pick an arbitrarily expensive model on the server's endpoint,
+        # amplifying the operator's LLM spend without limit.
+        model = server_model
     return ProviderConfig(
         base_url=base_url,
-        api_key=_resolve_key(
-            user_settings.chat_api_key if user_settings else None,
-            settings.LLM_API_KEY,
-            allow_server_fallback=not user_base_url
-            or _endpoints_match(user_base_url, server_base_url),
-        ),
-        model=_first(
-            user_settings.chat_model if user_settings else None,
-            settings.LLM_MODEL,
-        ),
+        api_key=api_key,
+        model=model,
         api_format=(
             user_settings.chat_api_format
             if user_settings and user_settings.chat_api_format
@@ -133,22 +130,30 @@ def effective_embedding_config(
     server_base_url = (
         str(settings.EMBEDDING_BASE_URL) if settings.EMBEDDING_BASE_URL else ""
     )
+    server_key = settings.EMBEDDING_API_KEY or ""
+    server_model = settings.EMBEDDING_MODEL or ""
     user_base_url = user_settings.embedding_base_url if user_settings else None
     base_url = _first(user_base_url, server_base_url)
     if user_base_url:
         base_url = validate_outbound_url(base_url)
+    allow_server_fallback = not user_base_url or _endpoints_match(
+        user_base_url, server_base_url
+    )
+    user_key = ""
+    if user_settings and user_settings.embedding_api_key:
+        user_key = decrypt_secret(user_settings.embedding_api_key) or ""
+    if user_key:
+        api_key = user_key
+        model = _first(
+            user_settings.embedding_model if user_settings else None, server_model
+        )
+    else:
+        api_key = server_key if allow_server_fallback else ""
+        model = server_model
     return ProviderConfig(
         base_url=base_url,
-        api_key=_resolve_key(
-            user_settings.embedding_api_key if user_settings else None,
-            settings.EMBEDDING_API_KEY,
-            allow_server_fallback=not user_base_url
-            or _endpoints_match(user_base_url, server_base_url),
-        ),
-        model=_first(
-            user_settings.embedding_model if user_settings else None,
-            settings.EMBEDDING_MODEL,
-        ),
+        api_key=api_key,
+        model=model,
         api_format=(
             user_settings.embedding_api_format
             if user_settings and user_settings.embedding_api_format
