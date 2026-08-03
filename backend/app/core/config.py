@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 8
     FRONTEND_HOST: str = "http://localhost:5173"
     ENVIRONMENT: Literal["local", "staging", "production"] = "local"
+    # Text overlaid as a full-viewport watermark by the frontend (anti-screen-
+    # shot branding). Served by GET /meta/watermark so a modified frontend
+    # bundle still has to talk to the backend to know what to render.
+    WATERMARK_TEXT: str = "notellm.au1bhi.com"
 
     BACKEND_CORS_ORIGINS: Annotated[
         list[AnyUrl] | str, BeforeValidator(parse_cors)

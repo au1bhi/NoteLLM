@@ -537,6 +537,12 @@ class Message(SQLModel):
     message: str
 
 
+# Public, unauthenticated metadata served to the frontend. Kept minimal on
+# purpose — nothing here may depend on a logged-in user.
+class WatermarkPublic(SQLModel):
+    text: str
+
+
 # JSON payload containing access token
 class Token(SQLModel):
     access_token: str

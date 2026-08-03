@@ -1483,3 +1483,15 @@ export const VerifyEmailRequestSchema = {
     required: ['token'],
     title: 'VerifyEmailRequest'
 } as const;
+
+export const WatermarkPublicSchema = {
+    properties: {
+        text: {
+            type: 'string',
+            title: 'Text'
+        }
+    },
+    type: 'object',
+    required: ['text'],
+    title: 'WatermarkPublic'
+} as const;

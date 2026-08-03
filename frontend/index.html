@@ -6,9 +6,32 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NoteLLM — 可追溯引用的文档问答</title>
+  <!--
+    Static watermark layer. Present from first paint and independent of React,
+    so it survives even if the app's JS is disabled or crashes. The React
+    <Watermark /> component also re-asserts this element's styles inline and
+    re-creates it if removed, and adds a second full-document layer for
+    full-page screenshot coverage.
+  -->
+  <style>
+    #app-watermark {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 9999;
+      pointer-events: none;
+      user-select: none;
+      background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%22260%22%20height%3D%22160%22%3E%3Cg%20transform%3D%22rotate%28-30%20130%2080%29%22%3E%3Ctext%20x%3D%220%22%20y%3D%2260%22%20font-size%3D%2216%22%20font-family%3D%22system-ui%2C%20-apple-system%2C%20%26apos%3BSegoe%20UI%26apos%3B%2C%20sans-serif%22%20fill%3D%22rgba%280%2C0%2C0%2C0.05%29%22%3Enotellm.au1bhi.com%3C/text%3E%3Ctext%20x%3D%221%22%20y%3D%2261%22%20font-size%3D%2216%22%20font-family%3D%22system-ui%2C%20-apple-system%2C%20%26apos%3BSegoe%20UI%26apos%3B%2C%20sans-serif%22%20fill%3D%22rgba%28255%2C255%2C255%2C0.055%29%22%3Enotellm.au1bhi.com%3C/text%3E%3C/g%3E%3C/svg%3E");
+      background-repeat: repeat;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }
+  </style>
 </head>
 
 <body>
+  <div id="app-watermark" aria-hidden="true"></div>
   <div id="root"></div>
   <script type="module" src="./src/main.tsx"></script>
 </body>

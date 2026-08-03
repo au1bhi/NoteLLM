@@ -322,6 +322,10 @@ export type VerifyEmailRequest = {
     token: string;
 };
 
+export type WatermarkPublic = {
+    text: string;
+};
+
 export type ConversationsReadConversationData = {
     conversationId: string;
 };
@@ -375,6 +379,8 @@ export type LoginRecoverPasswordHtmlContentData = {
 };
 
 export type LoginRecoverPasswordHtmlContentResponse = (string);
+
+export type MetaGetWatermarkResponse = (WatermarkPublic);
 
 export type NotebooksReadNotebooksData = {
     limit?: number;

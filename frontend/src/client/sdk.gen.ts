@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ConversationsReadConversationData, ConversationsReadConversationResponse, ConversationsUpdateConversationData, ConversationsUpdateConversationResponse, ConversationsDeleteConversationData, ConversationsDeleteConversationResponse, ConversationsStreamMessageData, ConversationsStreamMessageResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, NotebooksReadNotebooksData, NotebooksReadNotebooksResponse, NotebooksCreateNotebookData, NotebooksCreateNotebookResponse, NotebooksReadNotebookData, NotebooksReadNotebookResponse, NotebooksUpdateNotebookData, NotebooksUpdateNotebookResponse, NotebooksDeleteNotebookData, NotebooksDeleteNotebookResponse, NotebooksReadSourcesData, NotebooksReadSourcesResponse, NotebooksUploadSourceData, NotebooksUploadSourceResponse, NotebooksReadConversationsData, NotebooksReadConversationsResponse, NotebooksCreateConversationData, NotebooksCreateConversationResponse, NotebooksSearchNotebookData, NotebooksSearchNotebookResponse, NotebooksReadNotebookOverviewData, NotebooksReadNotebookOverviewResponse, NotebooksRegenerateNotebookOverviewData, NotebooksRegenerateNotebookOverviewResponse, NotebooksGenerateNotebookStudyGuideData, NotebooksGenerateNotebookStudyGuideResponse, NotebooksRemoveSourceData, NotebooksRemoveSourceResponse, NotebooksRetrySourceData, NotebooksRetrySourceResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersReadUserUsageResponse, UsersReadUserProviderSettingsResponse, UsersUpsertUserProviderSettingsData, UsersUpsertUserProviderSettingsResponse, UsersDeleteUserProviderSettingsResponse, UsersFetchAvailableModelsData, UsersFetchAvailableModelsResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersVerifyEmailData, UsersVerifyEmailResponse, UsersResendVerificationData, UsersResendVerificationResponse, UsersResendVerificationMeResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsHealthCheckResponse } from './types.gen';
+import type { ConversationsReadConversationData, ConversationsReadConversationResponse, ConversationsUpdateConversationData, ConversationsUpdateConversationResponse, ConversationsDeleteConversationData, ConversationsDeleteConversationResponse, ConversationsStreamMessageData, ConversationsStreamMessageResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, MetaGetWatermarkResponse, NotebooksReadNotebooksData, NotebooksReadNotebooksResponse, NotebooksCreateNotebookData, NotebooksCreateNotebookResponse, NotebooksReadNotebookData, NotebooksReadNotebookResponse, NotebooksUpdateNotebookData, NotebooksUpdateNotebookResponse, NotebooksDeleteNotebookData, NotebooksDeleteNotebookResponse, NotebooksReadSourcesData, NotebooksReadSourcesResponse, NotebooksUploadSourceData, NotebooksUploadSourceResponse, NotebooksReadConversationsData, NotebooksReadConversationsResponse, NotebooksCreateConversationData, NotebooksCreateConversationResponse, NotebooksSearchNotebookData, NotebooksSearchNotebookResponse, NotebooksReadNotebookOverviewData, NotebooksReadNotebookOverviewResponse, NotebooksRegenerateNotebookOverviewData, NotebooksRegenerateNotebookOverviewResponse, NotebooksGenerateNotebookStudyGuideData, NotebooksGenerateNotebookStudyGuideResponse, NotebooksRemoveSourceData, NotebooksRemoveSourceResponse, NotebooksRetrySourceData, NotebooksRetrySourceResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersReadUserUsageResponse, UsersReadUserProviderSettingsResponse, UsersUpsertUserProviderSettingsData, UsersUpsertUserProviderSettingsResponse, UsersDeleteUserProviderSettingsResponse, UsersFetchAvailableModelsData, UsersFetchAvailableModelsResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersVerifyEmailData, UsersVerifyEmailResponse, UsersResendVerificationData, UsersResendVerificationResponse, UsersResendVerificationMeResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsHealthCheckResponse } from './types.gen';
 
 export class ConversationsService {
     /**
@@ -187,6 +187,25 @@ export class LoginService {
             errors: {
                 422: 'Validation Error'
             }
+        });
+    }
+}
+
+export class MetaService {
+    /**
+     * Get Watermark
+     * The frontend watermark text.
+     *
+     * Public and unauthenticated: the watermark must render on login/signup too,
+     * and the text is server-authoritative so a rebuilt frontend cannot silently
+     * change it without also changing this setting.
+     * @returns WatermarkPublic Successful Response
+     * @throws ApiError
+     */
+    public static getWatermark(): CancelablePromise<MetaGetWatermarkResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/meta/watermark'
         });
     }
 }
@@ -724,6 +743,11 @@ export class UsersService {
     /**
      * Register User
      * Create new user without the need to be logged in.
+     *
+     * Registration is domain-allowlisted: `_require_allowed_email` rejects
+     * addresses outside `ALLOWED_EMAIL_DOMAINS` up front, so a disallowed domain
+     * never reaches the create/send branches (and no message can be aimed at an
+     * arbitrary inbox).
      *
      * Anti-enumeration: a new signup and an existing account return the *exact
      * same* body (no account id/timestamps, and `is_email_verified` only reflects
