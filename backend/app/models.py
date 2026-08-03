@@ -132,6 +132,11 @@ class User(UserBase, table=True):
     # onto ALL its former addresses — otherwise "change email, then delete,
     # then re-register the old address" would reset the monthly free allowance.
     email_history: list[str] = Field(default_factory=list, sa_column=Column(JSON))
+    # Canonical mailbox identity of the CURRENT email, UNIQUE. Two subaddress/
+    # dot-variant/case-variant strings that deliver to one inbox share a value,
+    # so a physical mailbox can never hold more than one live account (kills
+    # concurrent allowance farming). Set in crud.create_user / update paths.
+    email_canonical: str = Field(max_length=255, unique=True, index=True)
     created_at: datetime | None = Field(
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),  # type: ignore
@@ -588,5 +593,5 @@ class TokenPayload(SQLModel):
 
 
 class NewPassword(SQLModel):
-    token: str
+    token: str = Field(min_length=1, max_length=2048)
     new_password: str = Field(min_length=8, max_length=128)

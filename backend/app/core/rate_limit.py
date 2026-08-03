@@ -88,4 +88,11 @@ def recipient_send_cooldown(email: str, window: int = 60) -> bool:
         if last is not None and now - last < window:
             return False
         _recipient_sends[email] = now
+        # Bound the dict: attackers can enumerate many distinct recipients (or
+        # sign up for many addresses) to grow it without bound. Drop the oldest
+        # entry past the cap — a cooldown that falls off early only re-opens
+        # that one address slightly sooner, never a security boundary.
+        if len(_recipient_sends) > _MAX_ENTRIES:
+            oldest = min(_recipient_sends, key=lambda k: _recipient_sends[k])
+            del _recipient_sends[oldest]
     return True

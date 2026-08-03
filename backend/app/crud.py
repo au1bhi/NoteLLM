@@ -17,6 +17,7 @@ def create_user(*, session: Session, user_create: UserCreate) -> User:
         update={
             "hashed_password": get_password_hash(normalized.password),
             "email_history": [canonical_email(normalized.email)],
+            "email_canonical": canonical_email(normalized.email),
         },
     )
     session.add(db_obj)
@@ -40,6 +41,9 @@ def update_user(*, session: Session, db_user: User, user_in: UserUpdate) -> Any:
         extra_data["password_changed_at"] = get_datetime_utc()
     if user_data.get("email"):
         user_data["email"] = user_data["email"].strip().lower()
+        # Keep the unique canonical identity in sync with the current email
+        # (one live account per physical mailbox).
+        extra_data["email_canonical"] = canonical_email(user_data["email"])
     db_user.sqlmodel_update(user_data, update=extra_data)
     session.add(db_user)
     session.commit()

@@ -3,6 +3,7 @@ from typing import Any
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from sqlmodel import col, func, select
+from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import CurrentUser, SessionDep
 from app.models import (
@@ -40,7 +41,7 @@ from app.services.sources import (
     create_source_from_upload,
     delete_notebook_files,
     delete_source,
-    process_source,
+    process_source_isolated,
 )
 from app.services.study_guide import generate_study_guide
 from app.services.usage import (
@@ -298,9 +299,18 @@ def _generate_and_store_overview(
         overview = generate_overview(
             session=session, notebook_id=notebook.id, chat_provider=chat_provider
         )
-    except (ChatError, QuotaError) as error:
-        status_code = 429 if isinstance(error, QuotaError) else 503
-        raise HTTPException(status_code=status_code, detail=str(error)) from error
+    except QuotaError as error:
+        raise HTTPException(status_code=429, detail=str(error)) from error
+    except ChatError as error:
+        # The provider call failed after a reservation was made: refund it so a
+        # burst of failing calls cannot drain the monthly allowance.
+        if chat_reserved:
+            settle_usage(
+                session=session,
+                user_id=current_user.id,
+                chat_tokens=-chat_reserved,
+            )
+        raise HTTPException(status_code=503, detail=str(error)) from error
     store_overview(session=session, notebook=notebook, overview=overview)
     if chat_reserved:
         settle_usage(
@@ -376,9 +386,17 @@ def generate_notebook_study_guide(
         guide = generate_study_guide(
             session=session, notebook_id=notebook_id, chat_provider=chat_provider
         )
-    except (ChatError, QuotaError) as error:
-        status_code = 429 if isinstance(error, QuotaError) else 503
-        raise HTTPException(status_code=status_code, detail=str(error)) from error
+    except QuotaError as error:
+        raise HTTPException(status_code=429, detail=str(error)) from error
+    except ChatError as error:
+        # Refund the reservation on a failed provider call (see overview).
+        if chat_reserved:
+            settle_usage(
+                session=session,
+                user_id=current_user.id,
+                chat_tokens=-chat_reserved,
+            )
+        raise HTTPException(status_code=503, detail=str(error)) from error
     if chat_reserved:
         settle_usage(
             session=session,
@@ -416,6 +434,11 @@ async def upload_source(
     created = await create_source_from_upload(
         session=session, notebook=notebook, upload=file
     )
+    # Offload the blocking PDF/text extraction + embedding HTTP calls off the
+    # async event loop (a large upload would otherwise freeze the API for all
+    # users while it runs).
+    await run_in_threadpool(process_source_isolated, created.id)
+    session.refresh(created)
     _clear_overview(session, notebook)
     return created
 
@@ -439,7 +462,7 @@ def remove_source(
 
 
 @router.post("/{notebook_id}/sources/{source_id}/retry", response_model=SourcePublic)
-def retry_source(
+async def retry_source(
     notebook_id: uuid.UUID,
     source_id: uuid.UUID,
     session: SessionDep,
@@ -451,6 +474,7 @@ def retry_source(
     source = get_source_or_404(
         session=session, notebook_id=notebook_id, source_id=source_id
     )
-    process_source(session=session, source=source)
+    await run_in_threadpool(process_source_isolated, source.id)
+    session.refresh(source)
     _clear_overview(session, notebook)
     return source

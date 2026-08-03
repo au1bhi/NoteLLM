@@ -8,6 +8,7 @@ from fastapi import HTTPException, UploadFile, status
 from sqlmodel import Session, col, delete, func, select
 
 from app.core.config import settings
+from app.core.db import engine
 from app.models import Chunk, Notebook, Source, get_datetime_utc
 from app.services.embeddings import EmbeddingError, get_embedding_provider
 from app.services.provider_settings import (
@@ -278,7 +279,9 @@ async def create_source_from_upload(
         # rejection the file and row are removed below so failed uploads do
         # not accumulate on the uploads volume.
         enforce_user_storage_limit(session=session, owner_id=notebook.owner_id)
-        process_source(session=session, source=source)
+        # NOTE: process_source is intentionally NOT called here — the caller
+        # offloads the blocking extraction+embedding off the async event loop
+        # (run_in_threadpool with process_source_isolated).
     except HTTPException:
         delete_source_file(source)
         session.delete(source)
@@ -292,6 +295,20 @@ async def create_source_from_upload(
         session.commit()
         session.refresh(source)
     return source
+
+
+def process_source_isolated(source_id: uuid.UUID) -> None:
+    """Run process_source in its own session.
+
+    Extraction + embedding are CPU/network heavy and must not block the async
+    event loop; call this via run_in_threadpool from async handlers. Its own
+    session avoids sharing the request-scoped session across threads.
+    """
+    with Session(engine) as session:
+        source = session.get(Source, source_id)
+        if source is None:
+            return
+        process_source(session=session, source=source)
 
 
 def delete_source_file(source: Source) -> None:

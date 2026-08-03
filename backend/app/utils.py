@@ -297,10 +297,11 @@ def send_email_safely(
 def canonical_email(email: str) -> str:
     """Canonical mailbox identity used for allowance/anti-farming keys.
 
-    Mailbox delivery is case-insensitive, and Gmail/Googlemail treat dots in
-    the local part and ``+tag`` subaddressing as the same inbox. Without
-    normalization, deleting/re-registering the same physical mailbox under a
-    different spelling (case variant, ``us.er@``, ``user+tag@``) would mint a
+    Mailbox delivery is case-insensitive, Gmail/Googlemail treat dots in the
+    local part and ``+tag`` subaddressing as the same inbox, and Outlook/Hotmail/
+    Live/iCloud treat ``+tag`` subaddressing the same way. Without normalization,
+    one physical mailbox could register concurrent subaddress/dot-variant
+    accounts — or delete/re-register under a different spelling — and mint a
     fresh monthly allowance every time.
     """
     local, sep, domain = email.rpartition("@")
@@ -310,6 +311,14 @@ def canonical_email(email: str) -> str:
     if domain in {"gmail.com", "googlemail.com"}:
         # Gmail ignores dots and everything after '+' in the local part.
         local = local.split("+", 1)[0].replace(".", "")
+    elif domain in {
+        "outlook.com",
+        "hotmail.com",
+        "live.com",
+        "icloud.com",
+    }:
+        # These providers treat '+tag' subaddressing as the same mailbox.
+        local = local.split("+", 1)[0]
     return f"{local.lower()}@{domain}"
 
 

@@ -17,6 +17,17 @@ branch_labels = None
 depends_on = None
 
 
+def _canonical(email: str) -> str:
+    """Canonical mailbox identity (mirror of app.utils.canonical_email)."""
+    local, sep, domain = email.rpartition("@")
+    if not sep:
+        return email.strip().lower()
+    domain = domain.strip().lower()
+    if domain in {"gmail.com", "googlemail.com"}:
+        local = local.split("+", 1)[0].replace(".", "")
+    return f"{local.lower()}@{domain}"
+
+
 def upgrade():
     op.add_column('user', sa.Column('email_history', sa.JSON(), nullable=True))
     # Backfill: every account must have a revocation clock so JWT revocation
@@ -25,12 +36,16 @@ def upgrade():
     op.execute(
         "UPDATE \"user\" SET password_changed_at = COALESCE(password_changed_at, created_at)"
     )
-    # Backfill email_history for pre-existing accounts so a later deletion
-    # tombstones the right canonical identity.
-    op.execute(
-        "UPDATE \"user\" SET email_history = json_build_array(lower(email)) "
-        "WHERE email_history IS NULL OR email_history::text = '[]'"
-    )
+    # Backfill email_history using the CANONICAL mailbox identity so a later
+    # deletion tombstones a key a re-registration with a dot/+tag/case variant
+    # will actually hit.
+    conn = op.get_bind()
+    rows = conn.execute(sa.text("SELECT id, email FROM \"user\"")).fetchall()
+    for row_id, email in rows:
+        conn.execute(
+            sa.text("UPDATE \"user\" SET email_history = :hist WHERE id = :id"),
+            {"hist": [_canonical(email)], "id": row_id},
+        )
 
 
 def downgrade():

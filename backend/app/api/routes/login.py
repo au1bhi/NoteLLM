@@ -1,7 +1,7 @@
 from datetime import timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.security import OAuth2PasswordRequestForm
 
@@ -68,7 +68,9 @@ def test_token(current_user: CurrentUser) -> Any:
     "/password-recovery/{email}",
     dependencies=[Depends(rate_limit(limit=5, window=60))],
 )
-def recover_password(email: str, session: SessionDep) -> Message:
+def recover_password(
+    email: str, session: SessionDep, background_tasks: BackgroundTasks
+) -> Message:
     """
     Password Recovery
     """
@@ -78,18 +80,15 @@ def recover_password(email: str, session: SessionDep) -> Message:
 
     if not user or not user.is_active:
         # Uniform 200 for every address: a 404 here is a trivially scriptable
-        # account-enumeration oracle (probing is only throttled once the rate
-        # limit keys on the endpoint, and the allowlist bounds candidate
-        # domains). Equalize timing with the registered branch via the Argon2
-        # dummy hash; no email is sent for an unknown address. The per-recipient
-        # cooldown still bounds floodable sends to registered inboxes.
+        # account-enumeration oracle. Equalize timing with the registered branch
+        # via the Argon2 dummy hash; no email is sent for an unknown address.
         security.verify_password("", crud.DUMMY_HASH)
         return Message(message="密码重置链接已发送，请查收")
 
     # Equalize timing with the not-found branch REGARDLESS of the SMTP
     # cooldown: a registered address with an active cooldown skips the send and
     # would otherwise respond ~10x faster than the Argon2 dummy — a timing
-    # oracle that defeats the uniform body (see the round-2 finding).
+    # oracle that defeats the uniform body.
     security.verify_password("", crud.DUMMY_HASH)
 
     password_reset_token = generate_password_reset_token(
@@ -100,11 +99,13 @@ def recover_password(email: str, session: SessionDep) -> Message:
     )
     # Never propagate SMTP failures to the client (they would both 500 the
     # endpoint and turn it into an account enumerator). The per-recipient
-    # cooldown stops a distributed caller flooding one registered inbox with
-    # reset links; like every other send path, a cooldown hit is silently
-    # skipped and the generic success response is still returned.
+    # cooldown stops a distributed caller flooding one registered inbox. The
+    # send is deferred to a background task so the response returns right after
+    # the Argon2 dummy — identical timing to the not-found branch, so the SMTP
+    # round-trip on a found address cannot be used as a timing oracle.
     if recipient_send_cooldown(email):
-        send_email_safely(
+        background_tasks.add_task(
+            send_email_safely,
             email_to=user.email,
             subject=email_data.subject,
             html_content=email_data.html_content,

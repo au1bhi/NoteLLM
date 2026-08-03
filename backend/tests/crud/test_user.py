@@ -104,7 +104,7 @@ def test_authenticate_user_with_bcrypt_upgrades_to_argon2(db: Session) -> None:
     assert bcrypt_hash.startswith("$2")  # bcrypt hashes start with $2
 
     # Create user with bcrypt hash directly in the database
-    user = User(email=email, hashed_password=bcrypt_hash)
+    user = User(email=email, hashed_password=bcrypt_hash, email_canonical=email.lower())
     db.add(user)
     db.commit()
     db.refresh(user)

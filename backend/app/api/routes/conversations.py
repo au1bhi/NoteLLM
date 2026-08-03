@@ -144,17 +144,30 @@ def persist_answer(
                 chat_tokens=estimate_chat_reserve(question),
                 embedding_chars=embedding_reserve,
             )
-        answer = answer_question(
-            session=session,
-            notebook_id=conversation.notebook_id,
-            query=question,
-            chat_provider=get_chat_provider(effective_chat_config(user_settings)),
-            embedding_provider=get_embedding_provider(
-                effective_embedding_config(user_settings)
-            ),
-            mode=mode,
-            source_ids=source_ids,
-        )
+        try:
+            answer = answer_question(
+                session=session,
+                notebook_id=conversation.notebook_id,
+                query=question,
+                chat_provider=get_chat_provider(effective_chat_config(user_settings)),
+                embedding_provider=get_embedding_provider(
+                    effective_embedding_config(user_settings)
+                ),
+                mode=mode,
+                source_ids=source_ids,
+            )
+        except Exception:
+            # The provider call failed after a reservation: refund it so a burst
+            # of failing calls cannot drain the monthly allowance. (Clamped at
+            # zero by settle_usage.)
+            if notebook and (chat_reserved or embedding_reserved):
+                settle_usage(
+                    session=session,
+                    user_id=notebook.owner_id,
+                    chat_tokens=-chat_reserved if chat_reserved else 0,
+                    embedding_chars=-embedding_reserved if embedding_reserved else 0,
+                )
+            raise
         if notebook:
             settle_usage(
                 session=session,

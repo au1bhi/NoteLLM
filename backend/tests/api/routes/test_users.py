@@ -759,3 +759,69 @@ def test_access_token_without_pwd_snapshot_is_rejected(
     headers = {"Authorization": f"Bearer {token}"}
     r = client.get(f"{settings.API_V1_STR}/users/me", headers=headers)
     assert r.status_code == 401
+
+
+def test_subaddress_duplicate_signup_is_blocked(
+    client: TestClient, db: Session
+) -> None:
+    """A Gmail subaddress/dot-variant of an existing account's canonical mailbox
+    cannot register a second live account (concurrent allowance farming)."""
+    from app.utils import canonical_email
+
+    raw = random_lower_string()
+    base = f"{raw}@gmail.com"
+    alias = f"{raw}+tag@gmail.com"
+    password = random_lower_string()
+    r = client.post(
+        f"{settings.API_V1_STR}/users/signup",
+        json={"email": base, "password": password},
+    )
+    assert r.status_code == 200
+    # The alias delivers to the same inbox — registering it must NOT mint a
+    # second account.
+    r2 = client.post(
+        f"{settings.API_V1_STR}/users/signup",
+        json={"email": alias, "password": random_lower_string()},
+    )
+    assert r2.status_code == 200  # generic anti-enumeration body
+    users = db.exec(
+        select(User).where(User.email_canonical == canonical_email(base))
+    ).all()
+    assert len(users) == 1
+
+
+def test_email_change_to_taken_canonical_is_rejected(
+    client: TestClient, db: Session
+) -> None:
+    """Changing an account's email to a subaddress/case-variant of another
+    account's mailbox is rejected (one live account per physical mailbox)."""
+    from app.utils import canonical_email
+
+    raw = random_lower_string()
+    base = f"{raw}@gmail.com"
+    actor_email = random_email()
+    actor_password = random_lower_string()
+    crud.create_user(
+        session=db,
+        user_create=UserCreate(email=base, password=random_lower_string()),
+    )
+    crud.create_user(
+        session=db,
+        user_create=UserCreate(email=actor_email, password=actor_password),
+    )
+    headers = user_authentication_headers(
+        client=client, email=actor_email, password=actor_password
+    )
+    r = client.patch(
+        f"{settings.API_V1_STR}/users/me",
+        headers=headers,
+        json={
+            "email": f"{raw.upper()}@GMAIL.COM",
+            "current_password": actor_password,
+        },
+    )
+    # Generic 422 (no enumeration), and the account's email did not change.
+    assert r.status_code == 422
+    me = client.get(f"{settings.API_V1_STR}/users/me", headers=headers).json()
+    assert me["email"] == actor_email
+    assert canonical_email(me["email"]) != canonical_email(base)

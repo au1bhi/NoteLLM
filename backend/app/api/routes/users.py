@@ -57,6 +57,7 @@ from app.services.usage import (
     reserve_usage,
     restore_tombstone_usage,
     save_usage_tombstone,
+    settle_usage,
 )
 from app.utils import (
     allowed_email_domains_text,
@@ -210,6 +211,10 @@ def update_user_me(
         if canonical not in history:
             history.append(canonical)
         current_user.email_history = history
+        # The unique email_canonical column enforces one live account per
+        # mailbox at the DB level (blocks concurrent subaddress farming); a
+        # conflict surfaces as an IntegrityError at commit -> generic 422.
+        current_user.email_canonical = canonical
 
     current_user.sqlmodel_update(user_data)
     session.add(current_user)
@@ -508,17 +513,21 @@ def fetch_available_models(
         # Server-billed probe (the operator's key is spent on a live /models
         # request): account for it against the free allowance so repeated
         # model-list probes cannot spend the operator's LLM budget outside
-        # quota. A nominal reservation is kept (the probe is not metered).
+        # quota. A small reservation is settled afterwards (nominal cost kept
+        # on success, fully refunded on failure).
         user_settings = load_user_provider_settings(session, current_user.id)
         try:
             reserve_usage(
                 session=session,
                 user_id=current_user.id,
                 user_settings=user_settings,
-                chat_tokens=2000,
+                chat_tokens=500,
             )
         except QuotaError as error:
             raise HTTPException(status_code=429, detail=str(error)) from error
+        reserved = 500
+    else:
+        reserved = 0
     root = resolve_api_base(base_url, body.api_format)
     # When the base URL has no version path, the service may still serve the
     # OpenAI API under /v1 (common for aggregator gateways) — probe it.
@@ -526,37 +535,53 @@ def fetch_available_models(
     if body.api_format == "openai_v1" or fallback_root == root:
         fallback_root = None
     try:
-        payload = _fetch_models_payload(root, api_key)
-    except (httpx.HTTPError, ValueError, TypeError) as error:
-        if fallback_root is None:
-            raise HTTPException(
-                status_code=503,
-                detail="无法获取模型，请检查 Base URL 与 API Key 是否正确",
-            ) from error
         try:
-            payload = _fetch_models_payload(fallback_root, api_key)
-        except (httpx.HTTPError, ValueError, TypeError) as fallback_error:
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    "无法获取模型。若 Base URL 是根域名（如 https://host），"
-                    "请在“API 格式”中选择“根域名，自动加 /v1”后重试。"
-                ),
-            ) from fallback_error
-    data = payload.get("data", []) if isinstance(payload, dict) else None
-    if not isinstance(data, list):
-        raise HTTPException(status_code=502, detail="模型提供方返回了异常数据")
-    # Bind the extracted id to a variable so the isinstance() narrows it — ty
-    # does not narrow a repeated `item.get("id")` call expression.
-    model_ids = [
-        model_id
-        for item in data
-        if isinstance(item, dict)
-        for model_id in [item.get("id")]
-        if isinstance(model_id, str)
-    ][:100]
-    if not model_ids:
-        raise HTTPException(status_code=502, detail="模型提供方未返回任何模型")
+            payload = _fetch_models_payload(root, api_key)
+        except (httpx.HTTPError, ValueError, TypeError) as error:
+            if fallback_root is None:
+                raise HTTPException(
+                    status_code=503,
+                    detail="无法获取模型，请检查 Base URL 与 API Key 是否正确",
+                ) from error
+            try:
+                payload = _fetch_models_payload(fallback_root, api_key)
+            except (httpx.HTTPError, ValueError, TypeError) as fallback_error:
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        "无法获取模型。若 Base URL 是根域名（如 https://host），"
+                        "请在“API 格式”中选择“根域名，自动加 /v1”后重试。"
+                    ),
+                ) from fallback_error
+        data = payload.get("data", []) if isinstance(payload, dict) else None
+        if not isinstance(data, list):
+            raise HTTPException(status_code=502, detail="模型提供方返回了异常数据")
+        # Bind the extracted id to a variable so the isinstance() narrows it —
+        # ty does not narrow a repeated `item.get("id")` call expression.
+        model_ids = [
+            model_id
+            for item in data
+            if isinstance(item, dict)
+            for model_id in [item.get("id")]
+            if isinstance(model_id, str)
+        ][:100]
+        if not model_ids:
+            raise HTTPException(status_code=502, detail="模型提供方未返回任何模型")
+    except HTTPException:
+        # Refund the full server-billed reservation on any failure.
+        if reserved:
+            settle_usage(
+                session=session, user_id=current_user.id, chat_tokens=-reserved
+            )
+        raise
+    if reserved:
+        # Keep a nominal cost (~100 tokens) for the successful server-billed
+        # probe; refund the rest of the reservation.
+        settle_usage(
+            session=session,
+            user_id=current_user.id,
+            chat_tokens=-(reserved - 100),
+        )
     return [ModelInfoPublic(id=model_id) for model_id in model_ids]
 
 
@@ -757,7 +782,13 @@ def update_user(
         if existing_user and existing_user.id != user_id:
             raise HTTPException(status_code=409, detail="该邮箱的用户已存在")
 
-    db_user = crud.update_user(session=session, db_user=db_user, user_in=user_in)
+    try:
+        db_user = crud.update_user(session=session, db_user=db_user, user_in=user_in)
+    except IntegrityError:
+        # The canonical mailbox identity is already held by another account
+        # (e.g. a subaddress/case variant of the target email).
+        session.rollback()
+        raise HTTPException(status_code=409, detail="该邮箱的用户已存在")
     return db_user
 
 
