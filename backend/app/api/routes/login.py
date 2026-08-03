@@ -86,6 +86,12 @@ def recover_password(email: str, session: SessionDep) -> Message:
         security.verify_password("", crud.DUMMY_HASH)
         return Message(message="密码重置链接已发送，请查收")
 
+    # Equalize timing with the not-found branch REGARDLESS of the SMTP
+    # cooldown: a registered address with an active cooldown skips the send and
+    # would otherwise respond ~10x faster than the Argon2 dummy — a timing
+    # oracle that defeats the uniform body (see the round-2 finding).
+    security.verify_password("", crud.DUMMY_HASH)
+
     password_reset_token = generate_password_reset_token(
         email=email, password_changed_at=user.password_changed_at
     )

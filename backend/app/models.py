@@ -127,6 +127,11 @@ class User(UserBase, table=True):
     # verification message. Purely informational: login and the core features
     # stay available, the client shows a reminder banner instead.
     is_email_verified: bool = False
+    # Canonical forms of every email this account has used (canonical_email()).
+    # Used by the allowance tombstone so deleting an account carries the usage
+    # onto ALL its former addresses — otherwise "change email, then delete,
+    # then re-register the old address" would reset the monthly free allowance.
+    email_history: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     created_at: datetime | None = Field(
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),  # type: ignore

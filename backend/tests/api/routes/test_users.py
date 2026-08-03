@@ -329,10 +329,11 @@ def test_update_user_me_email_exists(
         headers=headers,
         json=data,
     )
-    # The password is verified first (an anti-enumeration ordering: the 409
-    # only appears after authenticating), then the taken address is rejected.
-    assert r.status_code == 409
-    assert r.json()["detail"] == "该邮箱的用户已存在"
+    # The password is verified first (an anti-enumeration ordering) and the
+    # conflict returns a GENERIC 422 (a distinguishable 409 would let any
+    # authenticated user probe registered addresses).
+    assert r.status_code == 422
+    assert r.json()["detail"] == "无法修改为指定邮箱"
 
 
 def test_update_password_me_same_password_error(
@@ -652,3 +653,109 @@ def test_delete_and_reregister_preserves_allowance(
     assert usage is not None
     assert usage.chat_tokens >= 42_000
     assert usage.embedding_chars >= 200_000
+
+
+def test_email_change_then_delete_preserves_allowance(
+    client: TestClient, db: Session
+) -> None:
+    """The round-1 tombstone bypass: change email E1->E2, delete, re-register
+    E1 must NOT mint a fresh allowance (the tombstone now covers every canonical
+    email the account has used)."""
+    from app.models import EmailUsageTombstone, UserUsage
+    from app.utils import canonical_email
+
+    e1 = random_email()
+    e2 = random_email()
+    password = random_lower_string()
+    r = client.post(
+        f"{settings.API_V1_STR}/users/signup",
+        json={"email": e1, "password": password},
+    )
+    assert r.status_code == 200
+    headers = user_authentication_headers(client=client, email=e1, password=password)
+    me = client.get(f"{settings.API_V1_STR}/users/me", headers=headers).json()
+    db.add(UserUsage(user_id=me["id"], chat_tokens=99_000, embedding_chars=250_000))
+    db.commit()
+    # Change email E1 -> E2 (password verified).
+    r = client.patch(
+        f"{settings.API_V1_STR}/users/me",
+        headers=headers,
+        json={"email": e2, "current_password": password},
+    )
+    assert r.status_code == 200
+    # Delete the account (tombstone must cover BOTH canonical emails).
+    r = client.delete(f"{settings.API_V1_STR}/users/me", headers=headers)
+    assert r.status_code == 200
+    for addr in (e1, e2):
+        assert db.get(EmailUsageTombstone, canonical_email(addr)) is not None
+    # Re-register E1: the allowance must NOT be refreshed.
+    r = client.post(
+        f"{settings.API_V1_STR}/users/signup",
+        json={"email": e1, "password": random_lower_string()},
+    )
+    assert r.status_code == 200
+    user = crud.get_user_by_email(session=db, email=e1)
+    assert user is not None
+    usage = db.exec(select(UserUsage).where(UserUsage.user_id == user.id)).first()
+    assert usage is not None
+    assert usage.chat_tokens >= 99_000
+    assert usage.embedding_chars >= 250_000
+
+
+def test_case_and_alias_variant_reregister_preserves_allowance(
+    client: TestClient, db: Session
+) -> None:
+    """Case variants and Gmail dot/+ subaddressing of the same mailbox must not
+    escape the allowance tombstone (canonical email keying)."""
+    from app.models import EmailUsageTombstone, UserUsage
+    from app.utils import canonical_email
+
+    # Register with a subaddressed Gmail address.
+    raw = random_lower_string()
+    gmail = f"{raw}+tag@gmail.com"
+    password = random_lower_string()
+    r = client.post(
+        f"{settings.API_V1_STR}/users/signup",
+        json={"email": gmail, "password": password},
+    )
+    assert r.status_code == 200
+    headers = user_authentication_headers(client=client, email=gmail, password=password)
+    me = client.get(f"{settings.API_V1_STR}/users/me", headers=headers).json()
+    db.add(UserUsage(user_id=me["id"], chat_tokens=80_000, embedding_chars=200_000))
+    db.commit()
+    r = client.delete(f"{settings.API_V1_STR}/users/me", headers=headers)
+    assert r.status_code == 200
+    # A case-variant / dot-stripped / no-tag re-registration of the SAME mailbox.
+    variant = f"{raw.upper()}@GMAIL.COM"
+    assert canonical_email(variant) == canonical_email(gmail)
+    assert db.get(EmailUsageTombstone, canonical_email(variant)) is not None
+    r = client.post(
+        f"{settings.API_V1_STR}/users/signup",
+        json={"email": variant, "password": random_lower_string()},
+    )
+    assert r.status_code == 200
+    user = crud.get_user_by_email(session=db, email=variant.lower())
+    assert user is not None
+    usage = db.exec(select(UserUsage).where(UserUsage.user_id == user.id)).first()
+    assert usage is not None
+    assert usage.chat_tokens >= 80_000
+
+
+def test_access_token_without_pwd_snapshot_is_rejected(
+    client: TestClient, db: Session
+) -> None:
+    """A legacy JWT carrying no `pwd` snapshot is rejected once the account has
+    a revocation clock (closes the NULL/legacy-token revocation gap)."""
+    from datetime import timedelta
+
+    from app.core.security import create_access_token
+
+    user = create_random_user(db)
+    token = create_access_token(
+        subject=str(user.id),
+        expires_delta=timedelta(minutes=30),
+        password_changed_at=None,
+    )
+    headers = {"Authorization": f"Bearer {token}"}
+    r = client.get(f"{settings.API_V1_STR}/users/me", headers=headers)
+    assert r.status_code == 401

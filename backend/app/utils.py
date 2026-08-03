@@ -294,6 +294,25 @@ def send_email_safely(
         return False
 
 
+def canonical_email(email: str) -> str:
+    """Canonical mailbox identity used for allowance/anti-farming keys.
+
+    Mailbox delivery is case-insensitive, and Gmail/Googlemail treat dots in
+    the local part and ``+tag`` subaddressing as the same inbox. Without
+    normalization, deleting/re-registering the same physical mailbox under a
+    different spelling (case variant, ``us.er@``, ``user+tag@``) would mint a
+    fresh monthly allowance every time.
+    """
+    local, sep, domain = email.rpartition("@")
+    if not sep:
+        return email.strip().lower()
+    domain = domain.strip().lower()
+    if domain in {"gmail.com", "googlemail.com"}:
+        # Gmail ignores dots and everything after '+' in the local part.
+        local = local.split("+", 1)[0].replace(".", "")
+    return f"{local.lower()}@{domain}"
+
+
 def is_allowed_email(email: str) -> bool:
     """Whether `email`'s domain is in the configured signup allowlist.
 

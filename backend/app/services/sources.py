@@ -28,6 +28,14 @@ SUPPORTED_EXTENSIONS = {
     ".txt": "text/plain",
 }
 
+# PDF extraction bounds: a 10 MiB upload can be a FlateDecode decompression
+# bomb (multi-GB of rendered text) or declare tens of thousands of cheap pages,
+# tying up a worker and unbounded memory in PyMuPDF. Cap both so extraction
+# cost stays bounded regardless of the quota state (quota is reserved only
+# after extraction).
+MAX_PDF_PAGES = 500
+MAX_EXTRACTED_CHARS = 5_000_000
+
 
 @dataclass(frozen=True)
 class ExtractedPage:
@@ -96,6 +104,10 @@ def extract_pages(path: Path, media_type: str) -> list[ExtractedPage]:
             text = path.read_text(encoding="utf-8-sig")
         except UnicodeDecodeError as error:
             raise ValueError("文本文件必须使用 UTF-8 编码") from error
+        if len(text) > MAX_EXTRACTED_CHARS:
+            raise ValueError(
+                f"文件提取的文本超过 {MAX_EXTRACTED_CHARS} 字符上限，无法处理"
+            )
         return [ExtractedPage(text=text, page_number=None)]
 
     try:
@@ -103,13 +115,23 @@ def extract_pages(path: Path, media_type: str) -> list[ExtractedPage]:
     except fitz.FileDataError as error:
         raise ValueError("无法打开该 PDF") from error
 
+    if document.page_count > MAX_PDF_PAGES:
+        document.close()
+        raise ValueError(f"PDF 页数超过 {MAX_PDF_PAGES} 页上限，无法处理")
+
     try:
-        pages = [
-            ExtractedPage(
-                text=document.load_page(index).get_text("text"), page_number=index + 1
+        pages: list[ExtractedPage] = []
+        total_chars = 0
+        for index in range(document.page_count):
+            page_text = document.load_page(index).get_text("text")
+            total_chars += len(page_text)
+            if total_chars > MAX_EXTRACTED_CHARS:
+                raise ValueError(
+                    f"PDF 提取的文本超过 {MAX_EXTRACTED_CHARS} 字符上限，无法处理"
+                )
+            pages.append(
+                ExtractedPage(text=page_text, page_number=index + 1)
             )
-            for index in range(document.page_count)
-        ]
     finally:
         document.close()
     return pages

@@ -4,6 +4,7 @@ from sqlmodel import Session, select
 
 from app.core.security import get_password_hash, verify_password
 from app.models import User, UserCreate, UserUpdate, get_datetime_utc
+from app.utils import canonical_email
 
 
 def create_user(*, session: Session, user_create: UserCreate) -> User:
@@ -12,7 +13,11 @@ def create_user(*, session: Session, user_create: UserCreate) -> User:
         update={"email": user_create.email.strip().lower()}
     )
     db_obj = User.model_validate(
-        normalized, update={"hashed_password": get_password_hash(normalized.password)}
+        normalized,
+        update={
+            "hashed_password": get_password_hash(normalized.password),
+            "email_history": [canonical_email(normalized.email)],
+        },
     )
     session.add(db_obj)
     session.commit()

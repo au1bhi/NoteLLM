@@ -52,12 +52,15 @@ from app.services.provider_settings import (
 )
 from app.services.sources import delete_notebook_files
 from app.services.usage import (
+    QuotaError,
     quota_status,
+    reserve_usage,
     restore_tombstone_usage,
     save_usage_tombstone,
 )
 from app.utils import (
     allowed_email_domains_text,
+    canonical_email,
     generate_new_account_email,
     generate_verify_email_email,
     is_allowed_email,
@@ -191,12 +194,22 @@ def update_user_me(
             session=session, email=user_data["email"]
         )
         if existing_user and existing_user.id != current_user.id:
-            raise HTTPException(status_code=409, detail="该邮箱的用户已存在")
+            # Generic message: a distinguishable "already registered" 409 would
+            # let any authenticated user probe registered addresses (409 vs
+            # 200), an account-enumeration oracle.
+            raise HTTPException(status_code=422, detail="无法修改为指定邮箱")
         # The new address must be confirmed by its owner. When the mail backend
         # is configured we downgrade and ask for confirmation; otherwise the
         # account cannot prove anything, so the flag simply stays.
         if settings.emails_enabled:
             current_user.is_email_verified = False
+        # Track every canonical email this account has used, so the allowance
+        # tombstone on a later deletion covers the released address too.
+        history = list(current_user.email_history or [])
+        canonical = canonical_email(user_data["email"])
+        if canonical not in history:
+            history.append(canonical)
+        current_user.email_history = history
 
     current_user.sqlmodel_update(user_data)
     session.add(current_user)
@@ -206,7 +219,7 @@ def update_user_me(
         # A concurrent request claimed the target email between the check and
         # this commit (or the address collides with a legacy mixed-case row).
         session.rollback()
-        raise HTTPException(status_code=409, detail="该邮箱的用户已存在")
+        raise HTTPException(status_code=422, detail="无法修改为指定邮箱")
     session.refresh(current_user)
 
     if email_changed and settings.emails_enabled:
@@ -280,13 +293,16 @@ def delete_user_me(session: SessionDep, current_user: CurrentUser) -> Any:
     """
     if current_user.is_superuser:
         raise HTTPException(status_code=403, detail="超级管理员不能删除自己")
-    # Carry the free-allowance counters onto an email key before the UserUsage
-    # row cascades away, so deleting and re-registering cannot refresh the
-    # monthly allowance (unbounded operator LLM spend).
+    # Carry the free-allowance counters onto EVERY canonical email this account
+    # has used (incl. addresses it changed away from), so deleting and
+    # re-registering any of them cannot refresh the monthly allowance.
     usage = session.exec(
         select(UserUsage).where(UserUsage.user_id == current_user.id)
     ).first()
-    save_usage_tombstone(session=session, email=current_user.email, usage=usage)
+    history = list(current_user.email_history or []) or [
+        canonical_email(current_user.email)
+    ]
+    save_usage_tombstone(session=session, emails=history, usage=usage)
     # Unlink uploaded files before the DB rows cascade away, so deleting an
     # account leaves no residue on the uploads volume.
     notebook_ids = session.exec(
@@ -488,6 +504,21 @@ def fetch_available_models(
             status_code=422,
             detail="请先配置 API Key，或使用服务端默认配置",
         )
+    if not user_key:
+        # Server-billed probe (the operator's key is spent on a live /models
+        # request): account for it against the free allowance so repeated
+        # model-list probes cannot spend the operator's LLM budget outside
+        # quota. A nominal reservation is kept (the probe is not metered).
+        user_settings = load_user_provider_settings(session, current_user.id)
+        try:
+            reserve_usage(
+                session=session,
+                user_id=current_user.id,
+                user_settings=user_settings,
+                chat_tokens=2000,
+            )
+        except QuotaError as error:
+            raise HTTPException(status_code=429, detail=str(error)) from error
     root = resolve_api_base(base_url, body.api_format)
     # When the base URL has no version path, the service may still serve the
     # OpenAI API under /v1 (common for aggregator gateways) — probe it.
@@ -742,12 +773,13 @@ def delete_user(
         raise HTTPException(status_code=404, detail="用户不存在")
     if user == current_user:
         raise HTTPException(status_code=403, detail="超级管理员不能删除自己")
-    # Carry the free-allowance counters onto the email key before the usage
-    # row cascades away (same anti-allowance-farming protection as /me delete).
+    # Carry the free-allowance counters onto every canonical email the account
+    # has used before the usage row cascades away (anti-allowance-farming).
     usage = session.exec(
         select(UserUsage).where(UserUsage.user_id == user_id)
     ).first()
-    save_usage_tombstone(session=session, email=user.email, usage=usage)
+    history = list(user.email_history or []) or [canonical_email(user.email)]
+    save_usage_tombstone(session=session, emails=history, usage=usage)
     # Notebooks/sources/conversations cascade via their foreign keys.
     session.delete(user)
     session.commit()

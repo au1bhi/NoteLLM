@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
@@ -19,6 +20,7 @@ from app.services.provider_settings import (
     has_own_embedding_key,
     load_user_provider_settings,
 )
+from app.utils import canonical_email
 
 ProviderSource = Literal["server", "user", "none"]
 
@@ -116,28 +118,32 @@ def get_usage(session: Session, user_id: uuid.UUID) -> UserUsage:
 
 
 def save_usage_tombstone(
-    *, session: Session, email: str, usage: UserUsage | None
+    *, session: Session, emails: Iterable[str], usage: UserUsage | None
 ) -> None:
-    """Carry a deleted account's free-allowance counters onto an email key.
+    """Carry a deleted account's free-allowance counters onto every canonical
+    email the account has ever used.
 
-    Called right before a user row is deleted (their ``UserUsage`` row cascades
-    away). Without this, deleting and re-registering the same address would
-    reset the monthly allowance, letting anyone farm unlimited free LLM spend.
+    Keyed by ``canonical_email`` (lowercased, Gmail dots/``+tag`` stripped) and
+    written for ALL addresses in the account's history, so none of "change email
+    → delete → re-register the old address", a case-variant re-registration, or
+    a Gmail alias can mint a fresh monthly allowance.
     """
     if usage is None or (usage.chat_tokens == 0 and usage.embedding_chars == 0):
         return
-    tombstone = session.get(EmailUsageTombstone, email)
-    if tombstone is None:
-        tombstone = EmailUsageTombstone(email=email)
-    # Merge rather than overwrite so a repeated delete/register cycle cannot
-    # discard already-accumulated usage.
-    tombstone.chat_tokens = max(tombstone.chat_tokens, usage.chat_tokens)
-    tombstone.embedding_chars = max(
-        tombstone.embedding_chars, usage.embedding_chars
-    )
-    tombstone.period_start = usage.period_start
-    tombstone.updated_at = datetime.now(UTC)
-    session.add(tombstone)
+    for raw in emails:
+        email = canonical_email(raw)
+        tombstone = session.get(EmailUsageTombstone, email)
+        if tombstone is None:
+            tombstone = EmailUsageTombstone(email=email)
+        # Merge rather than overwrite so repeated delete/register cycles cannot
+        # discard already-accumulated usage.
+        tombstone.chat_tokens = max(tombstone.chat_tokens, usage.chat_tokens)
+        tombstone.embedding_chars = max(
+            tombstone.embedding_chars, usage.embedding_chars
+        )
+        tombstone.period_start = usage.period_start
+        tombstone.updated_at = datetime.now(UTC)
+        session.add(tombstone)
 
 
 def restore_tombstone_usage(
@@ -148,9 +154,10 @@ def restore_tombstone_usage(
     `ensure_period` rolls the counters to the current period if the tombstone
     belongs to an earlier one, so re-registering in the *same* month keeps the
     old usage (no allowance refresh), and in a later month gets a fresh
-    allowance as intended.
+    allowance as intended. Lookup is by canonical email so a case/subaddress
+    variant cannot escape the tombstone.
     """
-    tombstone = session.get(EmailUsageTombstone, email)
+    tombstone = session.get(EmailUsageTombstone, canonical_email(email))
     if tombstone is None:
         return
     usage = UserUsage(

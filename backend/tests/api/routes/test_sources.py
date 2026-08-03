@@ -152,3 +152,22 @@ def test_process_source_uses_user_embedding_key(
     assert config.api_key == "user-embed-key-999"
     assert config.base_url == "https://embed.example.com"
     assert config.model == "embed-model"
+
+
+def test_extract_pages_rejects_oversized_text(tmp_path: Path) -> None:
+    """A text source whose extracted content exceeds the cap is rejected
+    (bounds CPU/memory on decompression-bomb-style uploads)."""
+    import pytest
+
+    from app.services.sources import MAX_EXTRACTED_CHARS, extract_pages
+
+    huge = tmp_path / "huge.txt"
+    huge.write_text("a" * (MAX_EXTRACTED_CHARS + 1), encoding="utf-8")
+    with pytest.raises(ValueError):
+        extract_pages(huge, "text/plain")
+    # A file right at the limit is accepted.
+    ok = tmp_path / "ok.txt"
+    ok.write_text("b" * MAX_EXTRACTED_CHARS, encoding="utf-8")
+    pages = extract_pages(ok, "text/plain")
+    assert len(pages) == 1
+    assert len(pages[0].text) == MAX_EXTRACTED_CHARS
