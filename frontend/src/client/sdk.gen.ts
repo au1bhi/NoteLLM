@@ -194,11 +194,13 @@ export class LoginService {
 export class MetaService {
     /**
      * Get Watermark
-     * The frontend watermark text.
+     * The frontend watermark configuration.
      *
      * Public and unauthenticated: the watermark must render on login/signup too,
      * and the text is server-authoritative so a rebuilt frontend cannot silently
-     * change it without also changing this setting.
+     * change it without also changing this setting. `enabled=false` tells the
+     * frontend to remove the watermark entirely (operator toggled via
+     * `WATERMARK_ENABLED` in the environment).
      * @returns WatermarkPublic Successful Response
      * @throws ApiError
      */

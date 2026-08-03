@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     # shot branding). Served by GET /meta/watermark so a modified frontend
     # bundle still has to talk to the backend to know what to render.
     WATERMARK_TEXT: str = "notellm.au1bhi.com"
+    # Master switch. Set to false to disable the watermark entirely (e.g. an
+    # internal deployment that does not need anti-screenshot branding).
+    WATERMARK_ENABLED: bool = True
 
     BACKEND_CORS_ORIGINS: Annotated[
         list[AnyUrl] | str, BeforeValidator(parse_cors)

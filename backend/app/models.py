@@ -540,6 +540,7 @@ class Message(SQLModel):
 # Public, unauthenticated metadata served to the frontend. Kept minimal on
 # purpose — nothing here may depend on a logged-in user.
 class WatermarkPublic(SQLModel):
+    enabled: bool = True
     text: str
 
 

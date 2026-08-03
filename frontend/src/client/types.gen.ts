@@ -323,6 +323,7 @@ export type VerifyEmailRequest = {
 };
 
 export type WatermarkPublic = {
+    enabled?: boolean;
     text: string;
 };
 

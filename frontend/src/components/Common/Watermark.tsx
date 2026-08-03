@@ -70,6 +70,9 @@ export function Watermark() {
   useEffect(() => {
     let text = WM_FALLBACK_TEXT
     let disposed = false
+    // Set when the server says the watermark is disabled; all resilience and
+    // layer creation stop and both layers are removed.
+    let disabled = false
     const attrObservers = new Map<HTMLElement, MutationObserver>()
 
     // Canonical inline styles, all !important (beats any stylesheet rule).
@@ -186,7 +189,7 @@ export function Watermark() {
     }
 
     const ensureAll = () => {
-      if (disposed) return
+      if (disposed || disabled) return
 
       let staticEl = document.getElementById(STATIC_ID) as HTMLElement | null
       if (!staticEl) {
@@ -246,9 +249,19 @@ export function Watermark() {
 
     // Server-authoritative text; a failed request (or blank/whitespace
     // response) keeps the built-in default so the watermark is never blank.
+    // An explicit `enabled: false` from the server disables the watermark
+    // entirely (operator toggled via WATERMARK_ENABLED) — fail-closed: a
+    // missing/errored response still renders the mark.
     MetaService.getWatermark()
       .then((meta) => {
-        if (!disposed && meta.text && meta.text.trim()) text = meta.text.trim()
+        if (disposed) return
+        if (meta.enabled === false) {
+          disabled = true
+          document.getElementById(STATIC_ID)?.remove()
+          document.getElementById(DOC_ID)?.remove()
+          return
+        }
+        if (meta.text?.trim()) text = meta.text.trim()
       })
       .catch(() => undefined)
       .finally(() => ensureAll())

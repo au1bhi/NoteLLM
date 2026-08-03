@@ -380,6 +380,8 @@ write_env() {
   env_put STACK_NAME "$STACK_NAME"
   # 全屏截图水印文字（前端从 /meta/watermark 读取）。
   env_put WATERMARK_TEXT "${WATERMARK_TEXT:-$DOMAIN}"
+  # 水印总开关（false 则完全关闭）。
+  env_put WATERMARK_ENABLED "${WATERMARK_ENABLED:-true}"
   env_put BACKEND_CORS_ORIGINS "$BACKEND_CORS_ORIGINS"
   if [[ "$PROFILE" == "prod" ]]; then
     env_header "Let's Encrypt / Traefik（生产）"

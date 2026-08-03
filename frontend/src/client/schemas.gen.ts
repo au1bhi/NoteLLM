@@ -1486,6 +1486,11 @@ export const VerifyEmailRequestSchema = {
 
 export const WatermarkPublicSchema = {
     properties: {
+        enabled: {
+            type: 'boolean',
+            title: 'Enabled',
+            default: true
+        },
         text: {
             type: 'string',
             title: 'Text'
