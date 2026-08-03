@@ -125,6 +125,24 @@ bash install.sh --help                                       # 查看全部选�
 
 **没有配置过邮箱的新用户也能零准备完成部署**：`--prod --yes` 只需提供域名——Let's Encrypt 邮箱自动用 `admin@域名`，邮箱验证本次跳过（注册即时生效，适合试用）。想一并启用邮箱验证，加上 Resend 密钥（`RESEND_API_KEY` 或 `SMTP_PASSWORD` 二选一）：`DOMAIN=notellm.au1bhi.com RESEND_API_KEY=<你的Resend密钥> bash install.sh --prod --yes`。SMTP / 模型随时可在 `.env` 里补填后 `docker compose up -d`，无需重装。
 
+### 国内服务器 / 受限网络部署
+
+大陆服务器通常无法直连 Docker Hub（镜像拉取报 `not found` 或超时），`install.sh` 已内置**镜像加速**引导：
+
+- **交互模式**：询问是否使用代理镜像，从候选列表选择或自定义地址。
+- **`--yes` 非交互模式**：先自动探测直连 Docker Hub；不通则自动挑选第一个可用的代理镜像并写入配置。
+- 生效的镜像地址写入 `.env` 的 `REGISTRY_MIRROR`（末尾带 `/`，如 `docker.1ms.run/`）；同时默认配置 pip / npm 国内镜像（`PYPI_INDEX_URL` / `NPM_REGISTRY`，可分别用环境变量覆盖）。
+
+镜像代理代理的是 Docker Hub 的**完整命名空间**——包括 `pgvector/pgvector`、`traefik/traefik` 这类**非** `library/` 官方镜像（常见的 library-only 镜像源对它们无能为力），因此数据库、面板、Traefik 与构建基础镜像都能拉取；后端构建也不再依赖 `ghcr.io`（uv 改为 pip 安装），`uv sync` 走 `PYPI_INDEX_URL`。手工配置示例：
+
+```env
+REGISTRY_MIRROR=docker.1ms.run/
+PYPI_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+NPM_REGISTRY=https://registry.npmmirror.com
+```
+
+> 镜像代理是第三方公共服务，可能随时间失效；`install.sh` 每次安装都会做连通性校验，失效时编辑 `.env` 更换 `REGISTRY_MIRROR` 后重新 `docker compose up -d` 即可。
+
 ### 备选：Makefile（仅本地）
 
 ```bash

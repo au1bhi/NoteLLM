@@ -109,7 +109,12 @@ class Settings(BaseSettings):
     # in .env). Enforced before any message is queued, so an attacker can never
     # point the app at an inbox outside this list. Unset = this default list;
     # a literal `*` (or empty list in code) = any domain allowed.
-    ALLOWED_EMAIL_DOMAINS: Annotated[list[str], BeforeValidator(parse_cors)] = [
+    # The `| str` union mirrors BACKEND_CORS_ORIGINS: without it pydantic_settings
+    # tries to JSON-decode the env var for the list type and chokes on the
+    # comma-separated string.
+    ALLOWED_EMAIL_DOMAINS: Annotated[
+        list[str] | str, BeforeValidator(parse_cors)
+    ] = [
         "163.com",
         "qq.com",
         "gmail.com",

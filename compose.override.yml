@@ -6,7 +6,7 @@ services:
   # etc. To enable it, update .env, set:
   # DOMAIN=localhost.tiangolo.com
   proxy:
-    image: traefik:3.6
+    image: ${REGISTRY_MIRROR:-}traefik:3.6
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
@@ -97,8 +97,8 @@ services:
       args:
         # Empty → same-origin /api (nginx proxies to the backend service),
         # so a fresh `docker compose up` needs no CORS or published port.
-        - VITE_API_URL=
-        - NODE_ENV=development
+        VITE_API_URL: ""
+        NODE_ENV: development
 
 networks:
   traefik-public:

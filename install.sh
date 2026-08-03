@@ -202,9 +202,123 @@ profile_select() {
   ok "安装模式：$( [[ "$PROFILE" == "prod" ]] && echo 生产部署 || echo 本地开发 )"
 }
 
+# ---------- 网络与镜像加速 ----------
+# 候选 Docker Hub 代理镜像（国内服务器直连 Docker Hub 通常不通）。
+# 这些是完整 Hub 代理，能拉取 pgvector/pgvector、traefik/traefik 等非
+# library/ 命名空间镜像（仅代理 library 的镜像源对此类镜像无能为力）。
+# 镜像源可能随时间失效，安装时会对每个候选做连通性校验并自动跳过失效者。
+MIRRORS=(
+  "docker.1ms.run"
+  "docker.m.daocloud.io"
+  "docker.1panel.live"
+  "dockerproxy.net"
+  "docker.xuanyuan.me"
+)
+
+# 测试一个注册表路径是否可达：拉取一个不存在的 tag（alpine:notellm-probe）。
+# 可达时 daemon 立即返回“not found”（exit≠124）；被墙/挂起时由 timeout 杀掉
+# （exit=124）。不下载任何字节、不命中任何缓存、每次都是真实注册表往返。
+# 不能用 `docker manifest inspect`——部分镜像源/部分 docker 版本对它会挂起。
+probe_registry() {
+  timeout -k 3 20 docker pull "${1}library/alpine:notellm-probe" >/dev/null 2>&1
+  [[ $? != 124 ]]
+}
+
+# 直连 Docker Hub 是否可用（含 daemon 级 registry-mirror 的效果——compose 用
+# 普通镜像名时走的就是这条路径）。
+check_dockerhub_direct() {
+  probe_registry ""
+}
+
+# 测试镜像代理是否可用。
+check_mirror() {
+  probe_registry "$1"
+}
+
+# 选择镜像加速。已有 .env 配置时保留；交互模式让用户选择；--yes 非交互模式
+# 先测直连，不通则自动挑选第一个可用的代理镜像。镜像地址统一带尾部斜杠。
+select_registry_mirror() {
+  step "网络与镜像加速"
+  # 优先级：环境变量显式指定 > 已有 .env 配置 > 交互选择 / 自动探测。
+  local env_mirror="${REGISTRY_MIRROR:-}"
+  if [[ -n "$env_mirror" ]]; then
+    REGISTRY_MIRROR="$env_mirror"
+    ok "使用环境变量指定的镜像加速：$REGISTRY_MIRROR"
+  else
+    local existing; existing="$(env_get REGISTRY_MIRROR || true)"
+    if [[ -n "$existing" ]]; then
+      REGISTRY_MIRROR="$existing"
+      ok "保留已有镜像加速：$REGISTRY_MIRROR"
+    else
+      local direct=0
+      if check_dockerhub_direct; then
+        direct=1
+        info "可直连 Docker Hub。"
+      else
+        info "无法直连 Docker Hub，将使用代理镜像。"
+      fi
+      REGISTRY_MIRROR=""
+      if [[ "$direct" == "1" ]] && { [[ "$ASSUME_YES" == "1" ]] || [[ ! -t 0 ]]; }; then
+        : # 非交互 + 可直连 → 不加速
+      elif [[ "$ASSUME_YES" != "1" ]] && [[ -t 0 ]]; then
+        info "选择 Docker Hub 代理镜像（用于拉取 pgvector/traefik 等非官方命名空间镜像）："
+        info "  0) 直连 Docker Hub（不加速）"
+        local i=1 m
+        for m in "${MIRRORS[@]}"; do
+          info "  $i) $m"
+          i=$((i + 1))
+        done
+        info "  $i) 自定义地址"
+        local choice=""
+        while true; do
+          printf '请输入 [0-%d] [0] ' "$i" >&2
+          IFS= read -r choice || true
+          if [[ "$choice" == "" ]] || [[ "$choice" == "0" ]]; then
+            REGISTRY_MIRROR=""; break
+          fi
+          if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#MIRRORS[@]} )); then
+            REGISTRY_MIRROR="${MIRRORS[$((choice - 1))]}/"; break
+          fi
+          if [[ "$choice" == "$i" ]]; then
+            local custom=""
+            printf '请输入镜像地址（例如 docker.1ms.run）: ' >&2
+            IFS= read -r custom || true
+            REGISTRY_MIRROR="${custom%/}/"; break
+          fi
+          warn "无效输入，请输入 0-$i"
+        done
+      else
+        for m in "${MIRRORS[@]}"; do
+          if check_mirror "$m/"; then
+            REGISTRY_MIRROR="$m/"
+            break
+          fi
+        done
+      fi
+    fi
+  fi
+
+  # pip / npm 镜像：环境变量 > 已有 .env > 默认（有镜像时默认国内源，否则官方源）。
+  PYPI_INDEX_URL="${PYPI_INDEX_URL:-$(env_get PYPI_INDEX_URL || true)}"
+  NPM_REGISTRY="${NPM_REGISTRY:-$(env_get NPM_REGISTRY || true)}"
+  if [[ -n "$REGISTRY_MIRROR" ]]; then
+    if ! check_mirror "$REGISTRY_MIRROR"; then
+      warn "镜像 $REGISTRY_MIRROR 当前不可用（连通性测试失败）。"
+      warn "  已写入配置；部署失败时可编辑 .env 更换 REGISTRY_MIRROR，或留空直连。"
+    else
+      ok "Docker Hub 镜像加速：$REGISTRY_MIRROR"
+    fi
+    PYPI_INDEX_URL="${PYPI_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}"
+    NPM_REGISTRY="${NPM_REGISTRY:-https://registry.npmmirror.com}"
+  else
+    ok "直连 Docker Hub。"
+  fi
+}
+
 # ---------- 配置收集 ----------
 collect_config() {
   step "收集配置"
+  select_registry_mirror
 
   if [[ "$PROFILE" == "prod" ]]; then
     local def
@@ -386,6 +500,11 @@ write_env() {
   # 水印总开关（false 则完全关闭）。
   env_put WATERMARK_ENABLED "${WATERMARK_ENABLED:-true}"
   env_put BACKEND_CORS_ORIGINS "$BACKEND_CORS_ORIGINS"
+  # 国内服务器镜像加速：REGISTRY_MIRROR 留空 = 直连 Docker Hub；否则为代理
+  # 镜像地址（末尾带 /）。PYPI_INDEX_URL / NPM_REGISTRY 为空 = 用默认源。
+  env_put REGISTRY_MIRROR "$REGISTRY_MIRROR"
+  env_put PYPI_INDEX_URL "$PYPI_INDEX_URL"
+  env_put NPM_REGISTRY "$NPM_REGISTRY"
   if [[ "$PROFILE" == "prod" ]]; then
     env_header "Let's Encrypt / Traefik（生产）"
     env_put EMAIL "$EMAIL"

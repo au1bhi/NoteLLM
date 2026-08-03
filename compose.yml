@@ -2,7 +2,9 @@ services:
 
   db:
     # Includes the pgvector extension required for notebook-scoped similarity search.
-    image: pgvector/pgvector:pg18
+    # REGISTRY_MIRROR prefixes the image for regions where Docker Hub is
+    # unreachable (e.g. mainland China); empty = direct Docker Hub.
+    image: ${REGISTRY_MIRROR:-}pgvector/pgvector:pg18
     restart: always
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
@@ -21,7 +23,7 @@ services:
       - POSTGRES_DB=${POSTGRES_DB?Variable not set}
 
   adminer:
-    image: adminer
+    image: ${REGISTRY_MIRROR:-}library/adminer
     restart: always
     networks:
       - traefik-public
@@ -51,6 +53,12 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      args:
+        # Base images can be prefixed with a registry mirror (REGISTRY_MIRROR,
+        # e.g. docker.1ms.run/) when Docker Hub is unreachable; PYPI_INDEX_URL
+        # mirrors pip for uv (e.g. https://mirrors.aliyun.com/pypi/simple/).
+        PY_BASE: ${REGISTRY_MIRROR:-}library/python:3.14-slim
+        PIP_INDEX_URL: ${PYPI_INDEX_URL}
     networks:
       - traefik-public
       - default
@@ -129,6 +137,9 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      args:
+        PY_BASE: ${REGISTRY_MIRROR:-}library/python:3.14-slim
+        PIP_INDEX_URL: ${PYPI_INDEX_URL}
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik-public
@@ -153,14 +164,23 @@ services:
     networks:
       - traefik-public
       - default
+    depends_on:
+      # nginx resolves the `backend` upstream at startup; if it starts first it
+      # crash-loops with "host not found in upstream".
+      backend:
+        condition: service_started
     build:
       context: .
       dockerfile: frontend/Dockerfile
       args:
         # Same-origin /api proxy (nginx forwards to the backend service), so the
         # SPA works on the apex domain without CORS or a published backend port.
-        - VITE_API_URL=
-        - NODE_ENV=production
+        VITE_API_URL: ""
+        NODE_ENV: production
+        # Mirror overrides for restricted networks (see db comment).
+        BUN_IMAGE: ${REGISTRY_MIRROR:-}oven/bun:1
+        NGINX_IMAGE: ${REGISTRY_MIRROR:-}library/nginx:1
+        NPM_REGISTRY: ${NPM_REGISTRY}
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik-public
