@@ -245,7 +245,10 @@ collect_config() {
     USERNAME="${TRAEFIK_USER:-admin}"
     TRAEFIK_PASSWORD="$(gen_secret 16)"
     ask_secret_var TRAEFIK_PASSWORD "Traefik 面板登录密码" "$TRAEFIK_PASSWORD"
-    HASHED_PASSWORD="$(openssl passwd -apr1 "$TRAEFIK_PASSWORD")"
+    # Traefik basicauth 接受 {SHA}（base64(SHA-1)，不含 `$`）。apr1/bcrypt 哈希
+    # 里的 `$` 会被 Docker Compose 当作变量插值（WARN "X variable is not set"
+    # 且哈希被置空），{SHA} 无此问题，与本地 compose.override.yml 保持一致。
+    HASHED_PASSWORD="{SHA}$(printf '%s' "$TRAEFIK_PASSWORD" | openssl dgst -sha1 -binary | openssl base64 | tr -d '\n')"
   else
     DOMAIN="localhost"
     FRONTEND_HOST="http://localhost:5173"
