@@ -221,32 +221,18 @@ def test_update_user_me(client: TestClient, db: Session) -> None:
     )
     assert r.status_code == 200
     updated_user = r.json()
-    # The email change is staged (pending_email), not applied immediately.
-    assert updated_user["email"] == username
-    assert updated_user["pending_email"] == email.lower()
+    # With the mail backend off (this test fixture), the change applies
+    # immediately (nothing could verify a staged one).
+    assert updated_user["email"] == email.lower()
     assert updated_user["full_name"] == full_name
 
     # The PATCH wrote through the app's own session; expire the fixture session
-    # so this query observes the committed state.
-    db.expire_all()
-    user_db = db.exec(select(User).where(User.email == username)).first()
-    assert user_db
-    assert user_db.pending_email == email.lower()
-    assert user_db.full_name == full_name
-
-    # Verifying the new address applies the staged change.
-    from app.utils import generate_verify_email_token
-
-    vt = generate_verify_email_token(email)
-    vr = client.post(
-        f"{settings.API_V1_STR}/users/verify-email", json={"token": vt}
-    )
-    assert vr.status_code == 200
+    # so this query observes the committed email rather than a stale copy.
     db.expire_all()
     user_db = db.exec(select(User).where(User.email == email.lower())).first()
     assert user_db
     assert user_db.email == email.lower()
-    assert user_db.pending_email is None
+    assert user_db.full_name == full_name
 
 
 def test_update_password_me(
@@ -344,25 +330,10 @@ def test_update_user_me_email_exists(
         headers=headers,
         json=data,
     )
-    # The change is STAGED with a generic 200 (no existence check happens at
-    # PATCH time, so it is not an enumeration oracle). The conflict surfaces
-    # only when the target address is verified — which the actor cannot do.
-    assert r.status_code == 200
-    assert r.json()["pending_email"] == target_user.email.lower()
-    # Even if the actor somehow had a token, the apply is rejected (the target
-    # canonical is already held by another live account).
-    from app.utils import generate_verify_email_token
-
-    vt = generate_verify_email_token(target_user.email)
-    vr = client.post(
-        f"{settings.API_V1_STR}/users/verify-email", json={"token": vt}
-    )
-    assert vr.status_code == 400
-    db.expire_all()
-    actor_db = db.exec(
-        select(User).where(User.email == actor_email.lower())
-    ).first()
-    assert actor_db and actor_db.email == actor_email.lower()
+    # Mail backend off -> the change applies immediately, and the canonical
+    # uniqueness conflict surfaces as a generic 422 (no enumeration).
+    assert r.status_code == 422
+    assert r.json()["detail"] == "无法修改为指定邮箱"
 
 
 def test_update_password_me_same_password_error(
@@ -705,21 +676,14 @@ def test_email_change_then_delete_preserves_allowance(
     me = client.get(f"{settings.API_V1_STR}/users/me", headers=headers).json()
     db.add(UserUsage(user_id=me["id"], chat_tokens=99_000, embedding_chars=250_000))
     db.commit()
-    # Change email E1 -> E2 (password verified) — staged pending.
+    # Change email E1 -> E2 (password verified). Mail backend is off in this
+    # fixture, so the change applies immediately.
     r = client.patch(
         f"{settings.API_V1_STR}/users/me",
         headers=headers,
         json={"email": e2, "current_password": password},
     )
     assert r.status_code == 200
-    # Verify the new address so the staged change applies (email becomes E2).
-    from app.utils import generate_verify_email_token
-
-    vt = generate_verify_email_token(e2)
-    vr = client.post(
-        f"{settings.API_V1_STR}/users/verify-email", json={"token": vt}
-    )
-    assert vr.status_code == 200
     db.expire_all()
     # Delete the account (tombstone must cover BOTH canonical emails).
     r = client.delete(f"{settings.API_V1_STR}/users/me", headers=headers)
@@ -858,17 +822,9 @@ def test_email_change_to_taken_canonical_is_rejected(
             "current_password": actor_password,
         },
     )
-    # Staged with a generic 200 (no existence check -> no enumeration oracle).
-    assert r.status_code == 200
-    assert r.json()["pending_email"] == f"{raw}@gmail.com"
-    # Applying via verification is rejected (the target canonical is taken).
-    from app.utils import generate_verify_email_token
-
-    vt = generate_verify_email_token(f"{raw.upper()}@gmail.com")
-    vr = client.post(
-        f"{settings.API_V1_STR}/users/verify-email", json={"token": vt}
-    )
-    assert vr.status_code == 400
+    # Mail backend off -> immediate apply; the canonical conflict returns a
+    # generic 422 and the account's email did not change.
+    assert r.status_code == 422
     me = client.get(f"{settings.API_V1_STR}/users/me", headers=headers).json()
     assert me["email"] == actor_email
     assert canonical_email(me["email"]) != canonical_email(base)

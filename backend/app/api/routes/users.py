@@ -189,17 +189,30 @@ def update_user_me(
         )
         if not verified:
             raise HTTPException(status_code=400, detail="当前密码错误")
-        # The change is STAGED, not applied: the email only moves once the NEW
-        # address verifies (see verify_email). This closes the
-        # account-enumeration/email-squatting oracle — a PATCH returns the same
-        # result whether or not the target is taken, because no existence check
-        # happens here and the response never confirms an immediate change.
-        current_user.pending_email = user_data["email"].lower()
         if settings.emails_enabled:
+            # The change is STAGED, not applied: the email only moves once the
+            # NEW address verifies (see verify_email). This closes the
+            # account-enumeration/email-squatting oracle — a PATCH returns the
+            # same result whether or not the target is taken, because no
+            # existence check happens here and the response never confirms an
+            # immediate change.
+            current_user.pending_email = user_data["email"].lower()
             current_user.is_email_verified = False
-        # Remove email so sqlmodel_update does not apply it yet; history and
-        # email_canonical are updated only when the change is verified.
-        user_data.pop("email")
+            # Remove email so sqlmodel_update does not apply it yet; history and
+            # email_canonical are updated only when the change is verified.
+            user_data.pop("email")
+        else:
+            # No mail backend: there is nothing that could verify a staged
+            # change, so apply it immediately (matching how signup auto-verifies).
+            new_email = user_data["email"].lower()
+            current_user.email = new_email
+            current_user.email_canonical = canonical_email(new_email)
+            history = list(current_user.email_history or [])
+            canonical = canonical_email(new_email)
+            if canonical not in history:
+                history.append(canonical)
+            current_user.email_history = history
+            user_data.pop("email")
 
     current_user.sqlmodel_update(user_data)
     session.add(current_user)
