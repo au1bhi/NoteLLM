@@ -3,6 +3,7 @@ from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import HttpUrl
 from sqlmodel import Session, delete
 
 from app.core.config import settings
@@ -13,13 +14,42 @@ from tests.utils.user import authentication_token_from_email
 from tests.utils.utils import get_superuser_token_headers
 
 
+@pytest.fixture(autouse=True)
+def _pin_external_service_test_defaults() -> Generator[None]:
+    """Make the suite independent of the developer's root ``.env``.
+
+    Email-flow tests opt in by patching ``SMTP_HOST`` and therefore also need a
+    sender address. Quota tests model server-billed usage and therefore need
+    complete (fake) chat and embedding provider configs. No test may contact
+    these placeholder endpoints; provider calls are mocked at their interface.
+    """
+    from app.core.config import settings as app_settings
+
+    with (
+        patch.object(app_settings, "EMAILS_FROM_EMAIL", "info@example.com"),
+        patch.object(
+            app_settings, "LLM_BASE_URL", HttpUrl("https://provider.example/v1")
+        ),
+        patch.object(app_settings, "LLM_API_KEY", "ci-fake-chat-key"),
+        patch.object(app_settings, "LLM_MODEL", "ci-fake-chat-model"),
+        patch.object(
+            app_settings,
+            "EMBEDDING_BASE_URL",
+            HttpUrl("https://provider.example/v1"),
+        ),
+        patch.object(app_settings, "EMBEDDING_API_KEY", "ci-fake-embedding-key"),
+        patch.object(app_settings, "EMBEDDING_MODEL", "ci-fake-embedding-model"),
+    ):
+        yield
+
+
 @pytest.fixture(scope="session", autouse=True)
 def db() -> Generator[Session]:
     with Session(engine) as session:
         init_db(session)
         yield session
         statement = delete(User)
-        session.execute(statement)
+        session.exec(statement)
         session.commit()
 
 

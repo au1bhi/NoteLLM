@@ -62,7 +62,7 @@
 
 2026-08 迭代验收证据：后端全套 pytest 131 项通过（含 SSRF 绕过表单、原子额度预留、会话删除、SSE 越权、API 格式等新增用例），mypy 与 Ruff 通过；前端 `bun run --filter frontend build` 与 lint 通过。2026-08-04 已根据此后 Git 历史与当前代码再次同步 `AGENTS.md`，补充邮箱身份/验证、令牌撤销、配额预留—结算、固定公网 IP 的 provider 请求、一键部署与低内存构建约束。
 
-2026-08-04 CI 修复验收：使用独立临时 `pgvector/pgvector:pg18` 完整执行迁移和 183 项后端测试，全部通过，覆盖率 84%（门槛 80%），HTML 覆盖率报告可生成；仅使用 `.env.example` 的干净环境通过 `docker compose config`，确认后端 8000、前端 5173 端口及本地非 external 网络配置；修改后的工作流通过 YAML/TOML 检查和 Zizmor 审计。完整 Docker 镜像构建已进入依赖安装阶段，但本机直连 PyPI 长时间停滞后主动终止，最终结果以推送后的 GitHub-hosted Runner 为准。
+2026-08-04 CI 修复验收：测试夹具现固定发件地址及完全虚假的服务端聊天/嵌入配置，不再读取开发者根目录 `.env`；在无 `.env` 的临时源码副本和独立 `pgvector/pgvector:pg18` 中完整执行迁移及 183 项后端测试，全部通过，覆盖率 84%（门槛 80%），HTML 覆盖率报告可生成。仅使用 `.env.example` 的干净环境通过 `docker compose config`，确认后端 8000、前端 5173 端口及本地非 external 网络配置；修改后的工作流通过 YAML/TOML 检查和 Zizmor 审计。完整 Docker 镜像构建已进入依赖安装阶段，但本机直连 PyPI 长时间停滞后主动终止，最终结果以推送后的 GitHub-hosted Runner 为准。
 
 2026-08-04 生产部署验收：在 2 核、约 1.6 GiB 内存的 Ubuntu 22.04 ECS 上验证 `install.sh --prod --yes --dry-run` 会自动选择低内存 Compose；当前 `compose.yml + compose.traefik.yml + compose.lowmem.yml` 配置合法，后端与 PostgreSQL 健康且无重启/OOM，Alembic 位于 `46a98a434c83 (head)`，pgvector 为 0.8.5。公网前端与 API 健康检查返回 200，生产 `/docs` 返回 404，Adminer/Traefik 返回 401，TLS 与 CSP/HSTS 等响应头有效。服务器 Git 已通过离线 bundle 重建为干净、可追踪的 `master`，旧目录完整备份于 `/root/NoteLLM.backup.20260804-221139`。Cloudflare Bot Fight Mode 注入脚本现使用 nginx 每响应 nonce，CSP 同时精确允许 Web Analytics 域名而未放开 `unsafe-inline` / `unsafe-eval`；线上已验证 CSP nonce 与注入脚本 nonce 一致。仍待处理：安装总结展示已关闭的生产 `/docs` 链接；SSH 仍允许 root 密码登录。
 
