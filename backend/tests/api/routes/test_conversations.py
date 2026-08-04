@@ -1,8 +1,11 @@
+from datetime import date
+
 from fastapi.testclient import TestClient
 from pytest import MonkeyPatch
 from sqlmodel import Session
 
 from app.core.config import settings
+from app.models import StudyPlan, StudyTask
 from app.services.answers import GroundedAnswer
 from tests.utils.notebook import create_random_notebook
 from tests.utils.user import authentication_token_from_email, create_random_user
@@ -231,6 +234,48 @@ def test_delete_conversation(client: TestClient, db: Session) -> None:
         headers=headers,
     )
     assert listed.json()["data"] == []
+
+
+def test_delete_conversation_cascades_study_plan_and_tasks(
+    client: TestClient, db: Session
+) -> None:
+    user = create_random_user(db)
+    notebook = create_random_notebook(db=db, owner_id=user.id)
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+    conversation = client.post(
+        f"{settings.API_V1_STR}/notebooks/{notebook.id}/conversations/",
+        headers=headers,
+        json={"title": "有计划的会话"},
+    ).json()
+    plan = StudyPlan(
+        conversation_id=conversation["id"],
+        title="学习计划",
+        summary="验证删除级联",
+        difficulty="beginner",
+        start_date=date.today(),
+        end_date=date.today(),
+        timezone="Asia/Shanghai",
+    )
+    db.add(plan)
+    db.flush()
+    db.add(
+        StudyTask(
+            plan_id=plan.id,
+            title="任务",
+            description="完成验证",
+            start_date=date.today(),
+            end_date=date.today(),
+        )
+    )
+    db.commit()
+
+    deleted = client.delete(
+        f"{settings.API_V1_STR}/conversations/{conversation['id']}",
+        headers=headers,
+    )
+
+    assert deleted.status_code == 200, deleted.text
+    assert db.get(StudyPlan, plan.id) is None
 
 
 def test_user_cannot_delete_another_users_conversation(
