@@ -71,13 +71,15 @@ Notice that everytime the backend changes (changing the OpenAPI schema), you sho
 
 ## Using a Remote API
 
-If you want to use a remote API, you can set the environment variable `VITE_API_URL` to the URL of the remote API. For example, you can set it in the `frontend/.env` file:
+If you want to use a remote API, set the environment variable `VITE_API_URL` to the URL of the remote API — but put it in the **git-ignored** `frontend/.env.local`, never in the tracked `frontend/.env`:
 
 ```env
+# frontend/.env.local  (git-ignored — release artifacts must stay same-origin,
+# so the tracked frontend/.env must NOT set VITE_API_URL)
 VITE_API_URL=https://api.my-domain.example.com
 ```
 
-Then, when you run the frontend, it will use that URL as the base URL for the API.
+Then, when you run the frontend, it will use that URL as the base URL for the API. Release artifacts (in-image Docker build, `scripts/build-frontend-dist.sh`) always build with an empty `VITE_API_URL` so they target the same origin.
 
 ## Code Structure
 

@@ -23,7 +23,13 @@ cd "$(dirname "$0")/../frontend"
 
 echo "==> Installing dependencies + building SPA ..."
 bun install
-bun run build
+# CRITICAL: the release artifact MUST target the same origin. A local
+# frontend/.env.local (or a locally-added VITE_API_URL) would otherwise bake a
+# machine-specific URL into the artifact, making every user's browser send all
+# API/auth traffic to a wrong host (app broken + credential-exfiltration
+# surface). Empty string = same-origin /api (nginx proxies to the backend),
+# matching the in-image build (compose.yml passes VITE_API_URL: "").
+VITE_API_URL="" bun run build
 
 OUT="../frontend-dist.tar.gz"
 tar -czf "$OUT" -C dist .

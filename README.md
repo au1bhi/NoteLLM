@@ -276,6 +276,8 @@ POSTGRES_PORT=5433 uv run alembic upgrade head
 
 # 3. 启动后端与前端（两个终端）
 POSTGRES_PORT=5433 uv run fastapi dev app/main.py
+# 前端 vite 开发服务器默认同源（BASE=""）；本地开发需把 API 指到后端 :8000：
+echo 'VITE_API_URL=http://localhost:8000' > frontend/.env.local   # 已被 git 忽略，也可用环境变量
 bun run --filter frontend dev
 ```
 
