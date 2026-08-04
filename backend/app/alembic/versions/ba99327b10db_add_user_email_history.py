@@ -5,6 +5,8 @@ Revises: 143734b60086
 Create Date: 2026-08-04 06:02:32.823931
 
 """
+import json
+
 from alembic import op
 import sqlalchemy as sa
 import sqlmodel.sql.sqltypes
@@ -55,7 +57,7 @@ def upgrade():
     for row_id, email in rows:
         conn.execute(
             sa.text("UPDATE \"user\" SET email_history = :hist WHERE id = :id"),
-            {"hist": [_canonical(email)], "id": row_id},
+            {"hist": json.dumps([_canonical(email)]), "id": row_id},
         )
 
 
