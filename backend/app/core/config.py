@@ -69,6 +69,10 @@ class Settings(BaseSettings):
     EMBEDDING_API_KEY: str | None = None
     EMBEDDING_MODEL: str | None = None
     EMBEDDING_DIMENSIONS: int = 1024
+    # Optional, operator-controlled proxy used only by server-configured model
+    # providers. It supports local Clash/Fake-IP development environments
+    # without weakening SSRF validation for user-supplied provider URLs.
+    SERVER_PROVIDER_PROXY_URL: HttpUrl | None = None
 
     # Free-tier allowance, applied only to usage billed to the server's own
     # keys. Users who bring their own API key are not limited by these.

@@ -149,3 +149,30 @@ def pinned_request(
             extensions={"sni_hostname": parsed.host},
             **kwargs,
         )
+
+
+def trusted_provider_request(
+    method: str,
+    url: str,
+    *,
+    proxy_url: str,
+    headers: dict[str, str] | None = None,
+    **kwargs: Any,
+) -> httpx.Response:
+    """Call an operator-configured provider through an operator proxy.
+
+    This deliberately does not resolve/pin ``url`` locally: Fake-IP proxy
+    modes return reserved addresses such as ``198.18.0.0/15`` to the client,
+    while the proxy resolves the real public destination itself. It is only
+    used for server environment configuration, never for a user's BYOK URL,
+    which continues to use :func:`pinned_request`.
+    """
+    parsed = _parse_base_url(url)
+    kwargs.pop("trust_env", None)
+    with httpx.Client(proxy=proxy_url, trust_env=False) as client:
+        return client.request(
+            method,
+            str(parsed),
+            headers=headers,
+            **kwargs,
+        )

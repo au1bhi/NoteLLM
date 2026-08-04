@@ -5,7 +5,7 @@ from typing import Protocol
 import httpx
 
 from app.core.config import settings
-from app.core.ssrf import pinned_request
+from app.core.ssrf import pinned_request, trusted_provider_request
 from app.services.provider_settings import ProviderConfig, resolve_api_base
 
 
@@ -40,16 +40,28 @@ class OpenAICompatibleEmbeddingProvider:
         )
         try:
             with _PROVIDER_SEMAPHORE:
-                response = pinned_request(
-                    "POST",
-                    endpoint,
-                    headers={"Authorization": f"Bearer {self.config.api_key}"},
-                    json={
-                        "model": self.config.model,
-                        "input": list(texts),
-                        "dimensions": settings.EMBEDDING_DIMENSIONS,
-                    },
-                    timeout=30.0,
+                request_body = {
+                    "model": self.config.model,
+                    "input": list(texts),
+                    "dimensions": settings.EMBEDDING_DIMENSIONS,
+                }
+                response = (
+                    trusted_provider_request(
+                        "POST",
+                        endpoint,
+                        proxy_url=self.config.server_proxy_url,
+                        headers={"Authorization": f"Bearer {self.config.api_key}"},
+                        json=request_body,
+                        timeout=30.0,
+                    )
+                    if self.config.server_proxy_url
+                    else pinned_request(
+                        "POST",
+                        endpoint,
+                        headers={"Authorization": f"Bearer {self.config.api_key}"},
+                        json=request_body,
+                        timeout=30.0,
+                    )
                 )
             response.raise_for_status()
             data = response.json()["data"]
@@ -79,5 +91,10 @@ def get_embedding_provider(
             else "",
             api_key=settings.EMBEDDING_API_KEY or "",
             model=settings.EMBEDDING_MODEL or "",
+            server_proxy_url=(
+                str(settings.SERVER_PROVIDER_PROXY_URL)
+                if settings.SERVER_PROVIDER_PROXY_URL
+                else ""
+            ),
         )
     return OpenAICompatibleEmbeddingProvider(config)

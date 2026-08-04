@@ -70,6 +70,8 @@
 
 2026-08-04 学习计划与发布验收：Alembic 从空库完整升级至 `8f2c1a7e9d04`；在独立 `pgvector/pgvector:pg18` 中通过 189 项后端测试，覆盖率 84%（门槛 80%），包括计划生成、跨用户隔离、邮箱验证门槛、9:00 投递、主动关闭与同日去重。前端 lint 和生产构建通过；普通及低内存 Compose 配置解析通过；完整 pre-commit（Biome、Ruff、mypy、ty、OpenAPI 客户端一致性与 Zizmor）通过。Release 工作流生成版本化 `frontend-dist-<tag>.tar.gz` 与 SHA-256 校验和，供 `install.sh` 自动发现。
 
+2026-08-05 上传服务商连通性修复：为仅由部署者配置的服务端聊天/嵌入模型增加可选 `SERVER_PROVIDER_PROXY_URL`。它解决 Clash Fake-IP 将公网域名解析为保留地址而触发 SSRF 防护的误判；用户 BYOK 地址继续走 DNS 解析、公网地址校验与 IP 固定请求，不能使用此代理。已在独立 pgvector 数据库通过嵌入 provider 代理分支与 SSRF 测试，并通过 Ruff、mypy、ty 和 Compose 配置检查。
+
 完成条件：可复现演示和论文所需证据齐全。
 
 ## 当前下一步

@@ -24,6 +24,9 @@ class ProviderConfig:
     #   "openai"     — base already contains the version path (e.g. .../v1).
     #   "openai_v1"  — base is a root domain; ensure a trailing /v1.
     api_format: str = "openai"
+    # Set only for an operator-configured provider. User BYOK URLs always stay
+    # on the strict DNS-pinned request path.
+    server_proxy_url: str = ""
 
 
 def resolve_api_base(base_url: str, api_format: str) -> str:
@@ -121,6 +124,11 @@ def effective_chat_config(
             if user_settings and user_settings.chat_api_format
             else "openai"
         ),
+        server_proxy_url=(
+            str(settings.SERVER_PROVIDER_PROXY_URL)
+            if not user_base_url and settings.SERVER_PROVIDER_PROXY_URL
+            else ""
+        ),
     )
 
 
@@ -158,5 +166,10 @@ def effective_embedding_config(
             user_settings.embedding_api_format
             if user_settings and user_settings.embedding_api_format
             else "openai"
+        ),
+        server_proxy_url=(
+            str(settings.SERVER_PROVIDER_PROXY_URL)
+            if not user_base_url and settings.SERVER_PROVIDER_PROXY_URL
+            else ""
         ),
     )

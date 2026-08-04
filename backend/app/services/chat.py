@@ -7,7 +7,7 @@ from typing import Protocol
 import httpx
 
 from app.core.config import settings
-from app.core.ssrf import pinned_request
+from app.core.ssrf import pinned_request, trusted_provider_request
 from app.services.provider_settings import ProviderConfig, resolve_api_base
 
 # Hard cap on a single answer's output tokens. Besides bounding latency, this
@@ -80,18 +80,30 @@ class OpenAICompatibleChatProvider:
         messages.append({"role": "user", "content": prompt})
         try:
             with _PROVIDER_SEMAPHORE:
-                response = pinned_request(
-                    "POST",
-                    endpoint,
-                    headers={"Authorization": f"Bearer {self.config.api_key}"},
-                    json={
-                        "model": self.config.model,
-                        "messages": messages,
-                        "response_format": {"type": "json_object"},
-                        "temperature": 0,
-                        "max_tokens": MAX_OUTPUT_TOKENS,
-                    },
-                    timeout=60.0,
+                request_body = {
+                    "model": self.config.model,
+                    "messages": messages,
+                    "response_format": {"type": "json_object"},
+                    "temperature": 0,
+                    "max_tokens": MAX_OUTPUT_TOKENS,
+                }
+                response = (
+                    trusted_provider_request(
+                        "POST",
+                        endpoint,
+                        proxy_url=self.config.server_proxy_url,
+                        headers={"Authorization": f"Bearer {self.config.api_key}"},
+                        json=request_body,
+                        timeout=60.0,
+                    )
+                    if self.config.server_proxy_url
+                    else pinned_request(
+                        "POST",
+                        endpoint,
+                        headers={"Authorization": f"Bearer {self.config.api_key}"},
+                        json=request_body,
+                        timeout=60.0,
+                    )
                 )
             response.raise_for_status()
             payload = response.json()
@@ -151,5 +163,10 @@ def get_chat_provider(config: ProviderConfig | None = None) -> ChatProvider:
             base_url=str(settings.LLM_BASE_URL) if settings.LLM_BASE_URL else "",
             api_key=settings.LLM_API_KEY or "",
             model=settings.LLM_MODEL or "",
+            server_proxy_url=(
+                str(settings.SERVER_PROVIDER_PROXY_URL)
+                if settings.SERVER_PROVIDER_PROXY_URL
+                else ""
+            ),
         )
     return OpenAICompatibleChatProvider(config)
