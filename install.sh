@@ -57,11 +57,20 @@ EOF
 # 因此同一命令即可“安装”，重复运行即为“更新 + 重装”。
 if [[ ! -f "$PWD/compose.yml" ]]; then
   INSTALL_DIR="${NOTELLM_DIR:-$HOME/NoteLLM}"
+  REPO_URL="${NOTELLM_REPO:-https://github.com/au1bhi/NoteLLM.git}"
+  BRANCH="${NOTELLM_BRANCH:-master}"
+  # 大陆服务器常无法直连 github.com / raw.githubusercontent.com，但
+  # codeload.github.com 的源码包通常可达——git 克隆失败时用源码包兜底。
+  TARBALL_URL="${NOTELLM_TARBALL:-https://codeload.github.com/au1bhi/NoteLLM/tar.gz/refs/heads/$BRANCH}"
+  # 禁止 git 弹交互式凭据提示（网络受限时挂起/等待输入）。
+  export GIT_TERMINAL_PROMPT=0
+
   if [[ -f "$INSTALL_DIR/compose.yml" ]]; then
     if command -v git >/dev/null 2>&1; then
       echo "==> 更新 $INSTALL_DIR ..."
-      git -C "$INSTALL_DIR" pull --ff-only >/dev/null 2>&1 \
-        || warn "git pull 失败（可能有本地改动），使用现有代码继续。"
+      # timeout 防止被墙网络让 git pull 无限挂起。
+      timeout 60 git -C "$INSTALL_DIR" pull --ff-only >/dev/null 2>&1 \
+        || warn "git pull 失败或超时（网络受限/本地改动），使用现有代码继续。"
     fi
     cd "$INSTALL_DIR"
   else
@@ -76,7 +85,14 @@ if [[ ! -f "$PWD/compose.yml" ]]; then
       exit 1
     }
     echo "==> 克隆 NoteLLM 到 $INSTALL_DIR ..."
-    git clone --depth 1 "${NOTELLM_REPO:-https://github.com/au1bhi/NoteLLM.git}" "$INSTALL_DIR"
+    if ! timeout 120 git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$INSTALL_DIR" 2>/dev/null; then
+      # git 克隆失败（github.com 被墙/不可达）→ 改用 codeload 源码包。
+      warn "git clone 失败（可能无法访问 github.com），改用源码包下载 ..."
+      mkdir -p "$INSTALL_DIR"
+      curl -fLsS --max-time 300 "$TARBALL_URL" -o /tmp/notellm-src.tar.gz
+      tar -xzf /tmp/notellm-src.tar.gz --strip-components=1 -C "$INSTALL_DIR"
+      rm -f /tmp/notellm-src.tar.gz
+    fi
     cd "$INSTALL_DIR"
   fi
   exec bash install.sh "$@"
@@ -737,7 +753,9 @@ build_and_start() {
   # 健康检查
   local health_url
   if [[ "$PROFILE" == "prod" ]]; then
-    health_url="https://api.${DOMAIN}/api/v1/utils/health-check/"
+    # DOMAIN 在保留已有 .env（SKIP_CONFIG）路径下不会由 collect_config 赋值，
+    # 这里从 .env 兜底读取，避免 set -u 下 unbound variable。
+    health_url="https://api.${DOMAIN:-$(env_get DOMAIN || true)}/api/v1/utils/health-check/"
   else
     health_url="http://localhost:8000/api/v1/utils/health-check/"
   fi
