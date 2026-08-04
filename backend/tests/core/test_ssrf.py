@@ -64,3 +64,28 @@ def test_allows_public_host(monkeypatch: pytest.MonkeyPatch) -> None:
         validate_outbound_url("https://api.example.com/v1")
         == "https://api.example.com/v1"
     )
+
+
+def test_blocks_ipv4_mapped_ipv6_private_forms() -> None:
+    """IPv4-mapped IPv6 forms of private/CGNAT/loopback addresses must be
+    blocked just like their plain IPv4 equivalents (a mapped-IPv6 address was
+    previously classified as a plain IPv6Address, skipping the CGNAT check)."""
+    from app.core.ssrf import validate_outbound_url
+
+    for bad in (
+        "http://[::ffff:100.64.0.1]:8080/v1",  # CGNAT / Tailscale
+        "http://[::ffff:100.127.255.255]:80/",
+        "http://[::ffff:127.0.0.1]:8000/",  # loopback
+        "http://[::ffff:10.0.0.1]:8000/",  # RFC1918
+        "http://[::ffff:169.254.169.254]:80/",  # link-local/metadata
+    ):
+        try:
+            validate_outbound_url(bad)
+        except Exception:
+            continue
+        raise AssertionError(f"{bad} was not blocked")
+
+    # A genuinely public IPv4-mapped address still passes.
+    assert validate_outbound_url("http://[::ffff:1.1.1.1]:8080/v1") == (
+        "http://[::ffff:1.1.1.1]:8080/v1"
+    )

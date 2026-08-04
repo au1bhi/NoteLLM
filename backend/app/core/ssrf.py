@@ -29,6 +29,13 @@ _BLOCKED_DETAIL = "base_url 必须指向公网地址"
 def _is_blocked_address(
     address: ipaddress.IPv4Address | ipaddress.IPv6Address,
 ) -> bool:
+    # IPv4-mapped IPv6 (::ffff:a.b.c.d) must be classified as its embedded IPv4,
+    # otherwise the CGNAT (100.64.0.0/10) check — which is IPv4Address-only —
+    # and other IPv4-range rules are silently skipped. Verified bypass:
+    # 'http://[::ffff:100.64.0.1]' passed validation while 'http://100.64.0.1'
+    # was correctly blocked.
+    if isinstance(address, ipaddress.IPv6Address) and address.ipv4_mapped is not None:
+        address = address.ipv4_mapped
     return any(
         (
             address.is_private,
