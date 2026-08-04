@@ -268,6 +268,7 @@ def test_delete_conversation_cascades_study_plan_and_tasks(
         )
     )
     db.commit()
+    plan_id = plan.id
 
     deleted = client.delete(
         f"{settings.API_V1_STR}/conversations/{conversation['id']}",
@@ -275,7 +276,8 @@ def test_delete_conversation_cascades_study_plan_and_tasks(
     )
 
     assert deleted.status_code == 200, deleted.text
-    assert db.get(StudyPlan, plan.id) is None
+    db.expire_all()
+    assert db.get(StudyPlan, plan_id) is None
 
 
 def test_user_cannot_delete_another_users_conversation(
