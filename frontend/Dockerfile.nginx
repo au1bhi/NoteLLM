@@ -1,0 +1,12 @@
+# Minimal nginx runtime for the frontend service in LOW-MEMORY mode
+# (compose.lowmem.yml). The SPA is NOT built in this image — it is served
+# from the `frontend-dist` volume that install.sh populates from a pre-built
+# artifact, so a small server never has to run `bun install` (which OOMs under
+# ~2GB RAM). See install.sh's low-memory mode.
+#
+# Base image overridable for regions where Docker Hub is unreachable (e.g.
+# mainland China): compose passes NGINX_IMAGE prefixed with a registry mirror.
+ARG NGINX_IMAGE=library/nginx:1
+FROM ${NGINX_IMAGE}
+
+COPY ./frontend/nginx.conf /etc/nginx/conf.d/default.conf

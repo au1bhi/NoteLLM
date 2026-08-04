@@ -1,0 +1,26 @@
+# Low-memory production override: serve the frontend SPA from a named volume
+# instead of building it inside the image.
+#
+# Why: the SPA build (`bun install` + `vite build`) needs ~2GB+ RAM and OOMs on
+# small servers (e.g. 1–2GB Aliyun). With this override the `frontend` image is
+# just nginx + the SPA route config (fast, tiny build), and the pre-built
+# `dist/` is injected into the `frontend-dist` volume by install.sh — either
+# downloaded from a GitHub release / FRONTEND_DIST_URL, or uploaded by the
+# developer who built it locally (`bash scripts/build-frontend-dist.sh`).
+#
+# Activate: `bash install.sh --prod --low-mem` (or auto-detected on <2GB RAM).
+# Local development keeps the in-image build (compose.override.yml) — dev
+# machines have the RAM and benefit from zero extra steps.
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile.nginx
+    # The nginx image already serves /usr/share/nginx/html; mounting the
+    # pre-built SPA there decouples the static assets from the image so the
+    # server never runs the heavy frontend build.
+    volumes:
+      - frontend-dist:/usr/share/nginx/html
+
+volumes:
+  frontend-dist:

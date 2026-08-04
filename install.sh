@@ -2,48 +2,25 @@
 #
 # NoteLLM 一键安装向导
 #
+#   仓库内运行：
 #   bash install.sh               交互式安装（本地 / 生产二选一）
 #   bash install.sh --local       本地开发（localhost，快速体验）
 #   bash install.sh --prod        生产部署（公网域名 + HTTPS）
 #   bash install.sh --yes         全自动：所有问题取默认值、密钥自动生成
 #   bash install.sh --force       已有 .env 时也重新生成（旧文件备份为 .env.bak.*）
 #   bash install.sh --dry-run     只生成 .env 并打印将要执行的命令，不启动服务
+#   bash install.sh --low-mem     低内存模式：前端 SPA 不在服务器上构建（注入预构建 dist）
+#   bash install.sh --no-low-mem  强制镜像内构建前端（覆盖低内存自动检测）
+#
+#   远程一键（3x-ui 风格，无需先克隆仓库）：
+#   bash <(curl -Ls https://raw.githubusercontent.com/au1bhi/NoteLLM/master/install.sh)
+#   自动克隆/更新到 $NOTELLM_DIR（默认 ~/NoteLLM）后继续；重复运行即升级。
 #
 # 首次运行会交互式收集配置并生成 .env，然后构建并启动整套服务。
 # 已有 .env 时默认保留并直接启动，不会覆盖你的配置。
 # =============================================================================
 # shellcheck disable=SC1111  # 中文全角引号“ ”是界面文案，不是 shell 引号
 set -euo pipefail
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
-
-ENV_FILE="$SCRIPT_DIR/.env"
-
-# ---------- 参数 ----------
-ASSUME_YES=0
-FORCE=0
-DRY_RUN=0
-PROFILE=""
-ARGS_DOMAIN="${DOMAIN:-}"
-
-usage() {
-  sed -n '3,11p' "$0"
-  exit 0
-}
-
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --local) PROFILE="local" ;;
-    --prod) PROFILE="prod" ;;
-    --yes) ASSUME_YES=1 ;;
-    --force) FORCE=1 ;;
-    --dry-run) DRY_RUN=1 ;;
-    --help|-h) usage ;;
-    *) echo "✘ 未知参数: $1"; usage ;;
-  esac
-  shift
-done
 
 # ---------- 输出样式 ----------
 if [[ -t 1 ]]; then
@@ -66,10 +43,77 @@ banner() {
 ==============================================================================
    NoteLLM · 一键安装向导
    本地开发 / 生产部署 二合一，交互式配置，自动生成安全密钥
+   支持远程执行：bash <(curl -Ls https://raw.githubusercontent.com/au1bhi/NoteLLM/master/install.sh)
 ==============================================================================
 EOF
   echo
 }
+
+# ---------- 远程一键安装引导（3x-ui 风格） ----------
+# 支持 `bash <(curl -Ls https://raw.githubusercontent.com/au1bhi/NoteLLM/master/install.sh)`
+# 直接运行：当脚本不在 NoteLLM 仓库内时，把仓库克隆到 $NOTELLM_DIR（默认
+# ~/NoteLLM），已存在则先 git pull 更新，然后重新执行磁盘上的 install.sh
+# （此时 $PWD/compose.yml 存在，会跳过本引导段直接进入主流程）。
+# 因此同一命令即可“安装”，重复运行即为“更新 + 重装”。
+if [[ ! -f "$PWD/compose.yml" ]]; then
+  INSTALL_DIR="${NOTELLM_DIR:-$HOME/NoteLLM}"
+  if [[ -f "$INSTALL_DIR/compose.yml" ]]; then
+    if command -v git >/dev/null 2>&1; then
+      echo "==> 更新 $INSTALL_DIR ..."
+      git -C "$INSTALL_DIR" pull --ff-only >/dev/null 2>&1 \
+        || warn "git pull 失败（可能有本地改动），使用现有代码继续。"
+    fi
+    cd "$INSTALL_DIR"
+  else
+    if [[ -d "$INSTALL_DIR" ]]; then
+      err "$INSTALL_DIR 已存在但不是有效的 NoteLLM 仓库（缺少 compose.yml）。"
+      err "请删除该目录，或设置 NOTELLM_DIR 指向正确位置后重试。"
+      exit 1
+    fi
+    command -v git >/dev/null 2>&1 || {
+      err "需要 git 来获取 NoteLLM（将克隆到 $INSTALL_DIR）。"
+      info "安装 git：sudo apt-get update && sudo apt-get install -y git"
+      exit 1
+    }
+    echo "==> 克隆 NoteLLM 到 $INSTALL_DIR ..."
+    git clone --depth 1 "${NOTELLM_REPO:-https://github.com/au1bhi/NoteLLM.git}" "$INSTALL_DIR"
+    cd "$INSTALL_DIR"
+  fi
+  exec bash install.sh "$@"
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+
+ENV_FILE="$SCRIPT_DIR/.env"
+
+# ---------- 参数 ----------
+ASSUME_YES=0
+FORCE=0
+DRY_RUN=0
+PROFILE=""
+ARGS_DOMAIN="${DOMAIN:-}"
+LOW_MEM_FORCED=""
+
+usage() {
+  sed -n '3,18p' "$0"
+  exit 0
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --local) PROFILE="local" ;;
+    --prod) PROFILE="prod" ;;
+    --yes) ASSUME_YES=1 ;;
+    --force) FORCE=1 ;;
+    --dry-run) DRY_RUN=1 ;;
+    --low-mem) LOW_MEM_FORCED=1 ;;
+    --no-low-mem) LOW_MEM_FORCED=0 ;;
+    --help|-h) usage ;;
+    *) echo "✘ 未知参数: $1"; usage ;;
+  esac
+  shift
+done
 
 # ---------- 交互工具 ----------
 # 提问并读入答案；回车取默认值。非交互环境 / --yes 时直接取默认值。
@@ -200,6 +244,43 @@ profile_select() {
     DOMAIN="$ARGS_DOMAIN"
   fi
   ok "安装模式：$( [[ "$PROFILE" == "prod" ]] && echo 生产部署 || echo 本地开发 )"
+}
+
+# ---------- 低内存模式（前端不在服务器上构建） ----------
+# 前端 SPA 的构建（bun install + vite build）需要约 2GB 内存，在 1–2GB 的
+# 小服务器上会被 OOM 杀掉。低内存模式下 `frontend` 服务改用纯 nginx 镜像
+# （frontend/Dockerfile.nginx + compose.lowmem.yml），并把预构建的 dist 注入
+# `frontend-dist` 卷——dist 来源依次为：FRONTEND_DIST_URL → 仓库内
+# frontend-dist.tar.gz → GitHub Release 的 frontend-dist-* 资产。
+LOW_MEM_MB="${LOW_MEM_MB:-2048}"
+
+mem_mb() {
+  awk '/MemTotal/{printf "%.0f", $2 / 1024}' /proc/meminfo 2>/dev/null || echo 0
+}
+
+select_low_mem() {
+  if [[ "$LOW_MEM_FORCED" == "1" ]]; then
+    LOW_MEM=1
+    ok "已启用低内存模式（--low-mem）：前端 SPA 不在服务器上构建。"
+    return 0
+  fi
+  if [[ "$LOW_MEM_FORCED" == "0" ]]; then
+    LOW_MEM=0
+    ok "已强制使用镜像内构建（--no-low-mem）。"
+    return 0
+  fi
+  local mem
+  mem="$(mem_mb)"
+  LOW_MEM=0
+  if (( mem > 0 && mem < LOW_MEM_MB )); then
+    warn "检测到内存不足（${mem}MB < ${LOW_MEM_MB}MB）：前端 SPA 若在服务器上构建可能 OOM。"
+    if [[ "$ASSUME_YES" == "1" ]] || [[ ! -t 0 ]] || confirm "启用低内存模式（前端改用预构建 dist）？" "y"; then
+      LOW_MEM=1
+      ok "已启用低内存模式。"
+    else
+      warn "继续使用镜像内构建（若构建 OOM，请改用 --low-mem）。"
+    fi
+  fi
 }
 
 # ---------- 网络与镜像加速 ----------
@@ -505,6 +586,9 @@ write_env() {
   env_put REGISTRY_MIRROR "$REGISTRY_MIRROR"
   env_put PYPI_INDEX_URL "$PYPI_INDEX_URL"
   env_put NPM_REGISTRY "$NPM_REGISTRY"
+  # 低内存模式前端产物来源（留空则依次尝试仓库内 frontend-dist.tar.gz →
+  # GitHub Release；也可仅在运行时用环境变量提供，不落盘）。
+  env_put FRONTEND_DIST_URL "${FRONTEND_DIST_URL:-}"
   if [[ "$PROFILE" == "prod" ]]; then
     env_header "Let's Encrypt / Traefik（生产）"
     env_put EMAIL "$EMAIL"
@@ -568,6 +652,61 @@ prepare_network() {
   fi
 }
 
+# ---------- 低内存模式：注入预构建的前端 dist ----------
+# 从 FRONTEND_DIST_URL / 仓库内 frontend-dist.tar.gz / GitHub Release 资产
+# 获取预构建的 SPA，解包进 frontend 容器挂载的 frontend-dist 卷（nginx 直接
+# 从这个目录提供服务，无需重启容器）。
+sync_frontend_dist() {
+  [[ "$LOW_MEM" == "1" ]] || return 0
+  if [[ "$DRY_RUN" == "1" ]]; then
+    info "  [dry-run] 将把前端 dist 注入 frontend-dist 卷（来源见 --low-mem 说明）"
+    return 0
+  fi
+
+  local tar=""
+  # 1) 显式指定 URL
+  if [[ -n "${FRONTEND_DIST_URL:-}" ]]; then
+    info "下载前端 dist：$FRONTEND_DIST_URL"
+    if curl -fLsS --max-time 300 "$FRONTEND_DIST_URL" -o /tmp/notellm-dist.tar.gz; then
+      tar=/tmp/notellm-dist.tar.gz
+    else
+      warn "FRONTEND_DIST_URL 下载失败，尝试其他来源。"
+    fi
+  fi
+  # 2) 仓库内的本地产物（开发者上传）
+  if [[ -z "$tar" ]] && [[ -f "$SCRIPT_DIR/frontend-dist.tar.gz" ]]; then
+    tar="$SCRIPT_DIR/frontend-dist.tar.gz"
+    info "使用本地产物：$tar"
+  fi
+  # 3) GitHub Release 最新版本的 frontend-dist-* 资产（3x-ui 风格）
+  if [[ -z "$tar" ]]; then
+    local release_url=""
+    release_url="$(curl -fsSL --max-time 20 \
+      "https://api.github.com/repos/au1bhi/NoteLLM/releases/latest" 2>/dev/null \
+      | grep -oE '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*frontend-dist[^"]*"' \
+      | head -n 1 | sed -E 's/.*"([^"]*)"/\1/' || true)"
+    if [[ -n "$release_url" ]]; then
+      info "从 GitHub Release 下载前端产物：$release_url"
+      curl -fLsS --max-time 300 "$release_url" -o /tmp/notellm-dist.tar.gz \
+        && tar=/tmp/notellm-dist.tar.gz
+    fi
+  fi
+
+  if [[ -z "$tar" ]]; then
+    err "低内存模式需要预构建的前端产物，但未找到任何来源。"
+    info "  在内存充足的机器上运行：bash scripts/build-frontend-dist.sh"
+    info "  然后上传产物（frontend-dist.tar.gz 放到仓库根目录，或设置 FRONTEND_DIST_URL），"
+    info "  再重新运行 install.sh。"
+    return 1
+  fi
+
+  step "注入前端静态资源到 frontend-dist 卷"
+  "${compose_cmd[@]}" cp "$tar" "frontend:/tmp/notellm-dist.tar.gz"
+  "${compose_cmd[@]}" exec frontend sh -c \
+    'tar -xzf /tmp/notellm-dist.tar.gz -C /usr/share/nginx/html && rm /tmp/notellm-dist.tar.gz'
+  ok "前端静态资源已注入（低内存模式，未在服务器上构建）。"
+}
+
 # ---------- 构建并启动 ----------
 build_and_start() {
   local compose_cmd
@@ -575,17 +714,25 @@ build_and_start() {
     # 生产：显式指定文件，跳过 compose.override.yml 的本地端口映射。
     compose_cmd=(docker compose -f compose.yml -f compose.traefik.yml)
   else
-    # 本地：裸 docker compose 会自动合并 compose.override.yml（端口 5173/8000）。
-    compose_cmd=(docker compose)
+    # 本地：显式列出 override，避免与低内存文件合并时顺序混乱。
+    compose_cmd=(docker compose -f compose.yml -f compose.override.yml)
+  fi
+  if [[ "$LOW_MEM" == "1" ]]; then
+    # 低内存：frontend 改用纯 nginx 镜像 + frontend-dist 卷（SPA 不在此构建）。
+    compose_cmd+=(-f compose.lowmem.yml)
   fi
 
   if [[ "$DRY_RUN" == "1" ]]; then
     info "  [dry-run] 将执行: ${compose_cmd[*]} up -d --build"
+    sync_frontend_dist
     return 0
   fi
 
   step "构建并启动服务（首次构建需要几分钟）"
   "${compose_cmd[@]}" up -d --build
+
+  # 低内存模式：前端 dist 由外部注入（构建时已跳过 SPA）。
+  sync_frontend_dist
 
   # 健康检查
   local health_url
@@ -677,7 +824,17 @@ print_summary() {
   info "    查看日志    docker compose logs -f"
   info "    停止        docker compose down"
   info "    重启        docker compose up -d"
-  info "    升级        git pull && bash install.sh   （保留 .env，只重新构建）"
+  if [[ "$LOW_MEM" == "1" ]]; then
+    info "    更新前端    在内存充足的机器上运行 scripts/build-frontend-dist.sh，"
+    info "                上传 frontend-dist.tar.gz 后重跑本脚本"
+    info "    升级        重新运行 install.sh（保留 .env，只重新构建/注入）"
+    echo
+    warn "  低内存模式：前端 SPA 不在服务器上构建。"
+    info "    dist 来源优先级：FRONTEND_DIST_URL > 仓库内 frontend-dist.tar.gz > GitHub Release。"
+    info "    想回到镜像内构建：--no-low-mem（需内存 ≥ ${LOW_MEM_MB}MB，可用 LOW_MEM_MB 调整阈值）。"
+  else
+    info "    升级        git pull && bash install.sh   （保留 .env，只重新构建）"
+  fi
   echo
   warn ".env 含有真实密钥，请勿提交到版本库。"
 }
@@ -690,6 +847,7 @@ main() {
   }
   check_prereqs
   profile_select
+  select_low_mem
   local SKIP_CONFIG=0
   if [[ -f "$ENV_FILE" ]] && [[ "$FORCE" != "1" ]]; then
     if confirm "检测到已有 .env。保留现有配置并直接启动？" "y"; then
