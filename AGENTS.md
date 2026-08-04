@@ -61,6 +61,7 @@ Notebook overview generation is lazy and persisted; regeneration replaces the st
 - Upload/retry toasts are status-aware (ready / processing / failed) — a fresh upload returns `processing`, not an error.
 - `OpenAPI.BASE` is build-time configuration. Local Vite development may use an ignored `frontend/.env.local` with `VITE_API_URL=http://localhost:8000`; production and release artifacts must keep `VITE_API_URL=""` for same-origin `/api` proxying. Use `scripts/build-frontend-dist.sh` for low-memory deployment artifacts; do not bake a developer URL into a release bundle.
 - The full-page watermark is server-controlled by `WATERMARK_ENABLED` / `WATERMARK_TEXT` through the public `/api/v1/meta/watermark` endpoint and intentionally covers unauthenticated pages too. Keep its static and JavaScript-managed layers aligned.
+- Production CSP uses an nginx `$request_id` nonce so Cloudflare Bot Fight Mode can nonce its edge-injected JavaScript Detection snippet; `static.cloudflareinsights.com` is explicitly allowed for Web Analytics. Keep `unsafe-inline` and `unsafe-eval` out of `script-src`. Console violations attributed to browser-extension `content.js` are extension-side and must not be fixed by weakening the site's CSP.
 
 ## Development Commands
 

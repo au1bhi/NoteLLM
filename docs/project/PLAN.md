@@ -61,7 +61,7 @@
 
 2026-08 迭代验收证据：后端全套 pytest 131 项通过（含 SSRF 绕过表单、原子额度预留、会话删除、SSE 越权、API 格式等新增用例），mypy 与 Ruff 通过；前端 `bun run --filter frontend build` 与 lint 通过。2026-08-04 已根据此后 Git 历史与当前代码再次同步 `AGENTS.md`，补充邮箱身份/验证、令牌撤销、配额预留—结算、固定公网 IP 的 provider 请求、一键部署与低内存构建约束。
 
-2026-08-04 生产部署验收：在 2 核、约 1.6 GiB 内存的 Ubuntu 22.04 ECS 上验证 `install.sh --prod --yes --dry-run` 会自动选择低内存 Compose；当前 `compose.yml + compose.traefik.yml + compose.lowmem.yml` 配置合法，后端与 PostgreSQL 健康且无重启/OOM，Alembic 位于 `46a98a434c83 (head)`，pgvector 为 0.8.5。公网前端与 API 健康检查返回 200，生产 `/docs` 返回 404，Adminer/Traefik 返回 401，TLS 与 CSP/HSTS 等响应头有效。待处理的运维问题：服务器 Git 工作树为旧 HEAD 加手工覆盖，`git pull --ff-only` 无法可靠升级；安装总结仍展示生产环境已关闭的 `/docs` 链接；SSH 仍允许 root 密码登录。
+2026-08-04 生产部署验收：在 2 核、约 1.6 GiB 内存的 Ubuntu 22.04 ECS 上验证 `install.sh --prod --yes --dry-run` 会自动选择低内存 Compose；当前 `compose.yml + compose.traefik.yml + compose.lowmem.yml` 配置合法，后端与 PostgreSQL 健康且无重启/OOM，Alembic 位于 `46a98a434c83 (head)`，pgvector 为 0.8.5。公网前端与 API 健康检查返回 200，生产 `/docs` 返回 404，Adminer/Traefik 返回 401，TLS 与 CSP/HSTS 等响应头有效。服务器 Git 已通过离线 bundle 重建为干净、可追踪的 `master`，旧目录完整备份于 `/root/NoteLLM.backup.20260804-221139`。Cloudflare Bot Fight Mode 注入脚本现使用 nginx 每响应 nonce，CSP 同时精确允许 Web Analytics 域名而未放开 `unsafe-inline` / `unsafe-eval`；线上已验证 CSP nonce 与注入脚本 nonce 一致。仍待处理：安装总结展示已关闭的生产 `/docs` 链接；SSH 仍允许 root 密码登录。
 
 完成条件：可复现演示和论文所需证据齐全。
 
