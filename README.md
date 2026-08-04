@@ -53,6 +53,14 @@
 bash <(curl -Ls https://raw.githubusercontent.com/au1bhi/NoteLLM/master/install.sh)
 ```
 
+> **大陆服务器**：`raw.githubusercontent.com` 常被墙。改用 codeload 源码包形式（服务器实测可达）：
+>
+> ```bash
+> bash <(curl -Ls https://codeload.github.com/au1bhi/NoteLLM/tar.gz/refs/heads/master | tar -xzO NoteLLM-master/install.sh)
+> ```
+>
+> 两种形式内部都会在 `git clone` 失败（github.com 不可达）时自动改用 codeload 源码包兜底，`NOTELLM_DIR` 指定安装目录（默认 `~/NoteLLM`）。
+
 脚本会自动把仓库克隆/更新到 `~/NoteLLM`（可用 `NOTELLM_DIR` 覆盖）并进入交互式向导。重复运行同一命令即为"更新 + 重装"。也可以在仓库内直接运行：
 
 ```bash
