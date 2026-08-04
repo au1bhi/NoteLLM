@@ -235,17 +235,57 @@ def generate_verify_email_token(email: str) -> str:
     )
 
 
+def generate_email_change_token(pending_email: str, current_email: str) -> str:
+    """Signed token binding a STAGED email change to the account that staged it.
+
+    Two accounts can stage the same pending email (there is deliberately no
+    existence check at PATCH time, to avoid an enumeration oracle). Binding the
+    verification link to the staging account's CURRENT email means a link can
+    only apply the change to the account that actually requested it — a victim's
+    click can never redirect their change onto another account that happened to
+    stage the same target first.
+    """
+    delta = timedelta(hours=settings.EMAIL_VERIFY_TOKEN_EXPIRE_HOURS)
+    now = datetime.now(UTC)
+    claims = {
+        "exp": (now + delta).timestamp(),
+        "nbf": now,
+        "sub": pending_email.strip().lower(),
+        "purpose": "email_verify",
+        "cur": current_email.strip().lower(),
+    }
+    return jwt.encode(claims, settings.SECRET_KEY, algorithm=security.ALGORITHM)
+
+
+def email_change_token_account(token: str) -> str | None:
+    """The staging account's current email bound to an email-change verify
+    token, or None if the token is a plain (signup) verification token."""
+    try:
+        decoded = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
+        )
+    except InvalidTokenError:
+        return None
+    if decoded.get("purpose") != "email_verify":
+        return None
+    cur = decoded.get("cur")
+    return str(cur) if isinstance(cur, str) else None
+
+
 def verify_email_token(token: str) -> str | None:
     """Return the email bound to a valid verification token, or None."""
     return _decode_purpose_token(token, "email_verify")
 
 
-def generate_verify_email_email(email_to: str) -> EmailData:
+def generate_verify_email_email(
+    email_to: str, token: str | None = None
+) -> EmailData:
     # URL fragment (see generate_reset_password_email): the verify JWT never
-    # reaches the server, logs, or Referer.
+    # reaches the server, logs, or Referer. A pre-generated token (e.g. a
+    # staged email change bound to the staging account) can be supplied.
     link = (
         f"{settings.FRONTEND_HOST}/verify-email"
-        f"#token={generate_verify_email_token(email_to)}"
+        f"#token={token or generate_verify_email_token(email_to)}"
     )
     subject = f"验证你的邮箱 - {settings.PROJECT_NAME}"
     html_content = render_email_template(
@@ -313,8 +353,16 @@ def canonical_email(email: str) -> str:
     # Cross-domain aliases that deliver to the same physical mailbox.
     if domain == "googlemail.com":
         domain = "gmail.com"
-    if domain in {"hotmail.com", "live.com", "msn.com"}:
+    if domain in {"hotmail.com", "live.com", "msn.com"} or domain.startswith(
+        ("hotmail.", "live.", "msn.", "outlook.")
+    ):
+        # Microsoft delivers hotmail/live/msn/outlook (incl. country TLDs like
+        # hotmail.co.uk, live.fr) to the same Outlook account.
         domain = "outlook.com"
+    if domain in {"ymail.com", "rocketmail.com"}:
+        domain = "yahoo.com"
+    if domain in {"me.com", "mac.com"}:
+        domain = "icloud.com"
     # Strip +tag subaddressing for ALL domains. Tradeoff: a provider that
     # treats `+tag` as a literal distinct mailbox would be over-collapsed —
     # acceptable, since subaddressing collapse is the anti-farming default and

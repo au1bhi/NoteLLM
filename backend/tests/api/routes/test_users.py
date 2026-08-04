@@ -828,3 +828,63 @@ def test_email_change_to_taken_canonical_is_rejected(
     me = client.get(f"{settings.API_V1_STR}/users/me", headers=headers).json()
     assert me["email"] == actor_email
     assert canonical_email(me["email"]) != canonical_email(base)
+
+
+def test_pending_email_collision_applies_to_staging_account(
+    client: TestClient, db: Session
+) -> None:
+    """Round-5 fix: when two accounts stage the SAME target pending email, a
+    victim's bound verification link applies the change to the victim's own
+    account — never to the other account that staged it first."""
+    from unittest.mock import patch
+
+    from app.utils import generate_email_change_token
+
+    with patch("app.core.config.settings.SMTP_HOST", "smtp.example.com"):
+        target = random_email()
+        # Attacker account A.
+        a_email, a_pw = random_email(), random_lower_string()
+        assert client.post(
+            f"{settings.API_V1_STR}/users/signup",
+            json={"email": a_email, "password": a_pw},
+        ).status_code == 200
+        a_headers = user_authentication_headers(
+            client=client, email=a_email, password=a_pw
+        )
+        # Victim account V.
+        v_email, v_pw = random_email(), random_lower_string()
+        assert client.post(
+            f"{settings.API_V1_STR}/users/signup",
+            json={"email": v_email, "password": v_pw},
+        ).status_code == 200
+        v_headers = user_authentication_headers(
+            client=client, email=v_email, password=v_pw
+        )
+        # A stages the target first.
+        assert client.patch(
+            f"{settings.API_V1_STR}/users/me",
+            headers=a_headers,
+            json={"email": target, "current_password": a_pw},
+        ).status_code == 200
+        # V stages the SAME target.
+        assert client.patch(
+            f"{settings.API_V1_STR}/users/me",
+            headers=v_headers,
+            json={"email": target, "current_password": v_pw},
+        ).status_code == 200
+        # V's own BOUND link applies the change to V, not A.
+        v_bound = generate_email_change_token(
+            pending_email=target, current_email=v_email
+        )
+        r = client.post(
+            f"{settings.API_V1_STR}/users/verify-email", json={"token": v_bound}
+        )
+        assert r.status_code == 200
+        db.expire_all()
+        v_db = crud.get_user_by_email(session=db, email=target.lower())
+        assert v_db is not None
+        assert v_db.email == target.lower()
+        # A's account is untouched (still has its own email).
+        a_db = crud.get_user_by_email(session=db, email=a_email.lower())
+        assert a_db is not None
+        assert a_db.email == a_email.lower()

@@ -62,6 +62,8 @@ from app.services.usage import (
 from app.utils import (
     allowed_email_domains_text,
     canonical_email,
+    email_change_token_account,
+    generate_email_change_token,
     generate_new_account_email,
     generate_verify_email_email,
     is_allowed_email,
@@ -226,10 +228,16 @@ def update_user_me(
     session.refresh(current_user)
 
     if email_changed and settings.emails_enabled and current_user.pending_email:
-        # The verification link goes to the NEW (pending) address — only its
-        # owner can complete the change.
+        # The verification link goes to the NEW (pending) address and is BOUND
+        # to this staging account (current email in the token), so a link can
+        # only apply the change to the account that staged it — even if another
+        # account staged the same target first.
+        bound_token = generate_email_change_token(
+            pending_email=current_user.pending_email,
+            current_email=current_user.email,
+        )
         email_data = generate_verify_email_email(
-            email_to=current_user.pending_email
+            email_to=current_user.pending_email, token=bound_token
         )
         if recipient_send_cooldown(current_user.pending_email):
             send_email_safely(
@@ -680,13 +688,23 @@ def verify_email(session: SessionDep, body: VerifyEmailRequest) -> Any:
     if not email:
         raise HTTPException(status_code=400, detail="验证链接无效或已过期")
     email = email.strip().lower()
-    # The token may refer to the current email (initial signup verification) or
-    # to a pending email change whose account still holds its old address.
-    user = session.exec(
-        select(User).where(User.pending_email == email)
-    ).first()
-    if user is None:
-        user = crud.get_user_by_email(session=session, email=email)
+    # A staged email change's link is bound to the staging account's CURRENT
+    # email; resolve THAT account so a token can never be applied to another
+    # account that happens to have staged the same target.
+    staging_account_email = email_change_token_account(body.token)
+    if staging_account_email is not None:
+        user = crud.get_user_by_email(
+            session=session, email=staging_account_email
+        )
+        if user is None or not (user.pending_email or "").lower() == email:
+            raise HTTPException(status_code=400, detail="验证链接无效或已过期")
+    else:
+        # Plain signup verification token (or a pending change with no binding).
+        user = session.exec(
+            select(User).where(User.pending_email == email)
+        ).first()
+        if user is None:
+            user = crud.get_user_by_email(session=session, email=email)
     if not user or not user.is_active:
         raise HTTPException(status_code=400, detail="验证链接无效或已过期")
 

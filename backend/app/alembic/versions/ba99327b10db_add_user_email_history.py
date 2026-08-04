@@ -25,8 +25,14 @@ def _canonical(email: str) -> str:
     domain = domain.strip().lower()
     if domain == "googlemail.com":
         domain = "gmail.com"
-    if domain in {"hotmail.com", "live.com", "msn.com"}:
+    if domain in {"hotmail.com", "live.com", "msn.com"} or domain.startswith(
+        ("hotmail.", "live.", "msn.", "outlook.")
+    ):
         domain = "outlook.com"
+    if domain in {"ymail.com", "rocketmail.com"}:
+        domain = "yahoo.com"
+    if domain in {"me.com", "mac.com"}:
+        domain = "icloud.com"
     local = local.split("+", 1)[0]
     if domain == "gmail.com":
         local = local.replace(".", "")
