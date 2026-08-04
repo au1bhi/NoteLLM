@@ -289,8 +289,14 @@ def test_update_email_requires_current_password(
         mock_send.assert_called_once()
         assert mock_send.call_args.kwargs["email_to"] == new_email.lower()
 
-        # Verify the new address -> the staged change is applied.
-        verify_token = generate_verify_email_token(new_email)
+        # Verify the new address -> the staged change is applied. The link the
+        # app emails is BOUND to the staging account (a plain token cannot
+        # apply a pending change).
+        from app.utils import generate_email_change_token
+
+        verify_token = generate_email_change_token(
+            pending_email=new_email, current_email=email
+        )
         r = client.post(
             f"{settings.API_V1_STR}/users/verify-email",
             json={"token": verify_token},

@@ -699,12 +699,11 @@ def verify_email(session: SessionDep, body: VerifyEmailRequest) -> Any:
         if user is None or not (user.pending_email or "").lower() == email:
             raise HTTPException(status_code=400, detail="验证链接无效或已过期")
     else:
-        # Plain signup verification token (or a pending change with no binding).
-        user = session.exec(
-            select(User).where(User.pending_email == email)
-        ).first()
-        if user is None:
-            user = crud.get_user_by_email(session=session, email=email)
+        # A plain (cur-less) token is a SIGNUP verification only: resolve the
+        # account by its CURRENT email. A staged email change can ONLY be
+        # applied via a cur-bound token — an unbound token must never resolve a
+        # pending_email (that fallback is how a collision hijacks the change).
+        user = crud.get_user_by_email(session=session, email=email)
     if not user or not user.is_active:
         raise HTTPException(status_code=400, detail="验证链接无效或已过期")
 
@@ -775,12 +774,24 @@ def resend_verification_me(current_user: CurrentUser) -> Any:
     banner in the app, so no address has to be typed).
     """
     # A staged email change takes priority: the pending address needs its
-    # verification link re-sent.
+    # verification link re-sent, BOUND to this staging account (same as the
+    # initial staging in update_user_me) so a resent link can never apply the
+    # change to a different account that staged the same target.
     target = current_user.pending_email or current_user.email
     if current_user.is_email_verified and not current_user.pending_email:
         return Message(message="邮箱已验证")
     if settings.emails_enabled:
-        email_data = generate_verify_email_email(email_to=target)
+        token = (
+            generate_email_change_token(
+                pending_email=current_user.pending_email,
+                current_email=current_user.email,
+            )
+            if current_user.pending_email
+            else None
+        )
+        email_data = generate_verify_email_email(
+            email_to=target, token=token
+        )
         if recipient_send_cooldown(target):
             send_email_safely(
                 email_to=target,
