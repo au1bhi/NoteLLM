@@ -26,9 +26,7 @@ class FakeChatProvider:
     def answer(self, *, prompt: str, system: str | None = None) -> ModelAnswer:
         return self.answer_result
 
-    def complete_json(
-        self, *, prompt: str, system: str | None = None
-    ) -> dict:
+    def complete_json(self, *, prompt: str, system: str | None = None) -> dict:
         # The suggestions request is the one whose system rules mention
         # "questions"; the answer request's rules do not.
         if "questions" in (system or ""):
@@ -227,9 +225,7 @@ def test_suggestions_are_best_effort_on_failure(monkeypatch: MonkeyPatch) -> Non
     monkeypatch.setattr("app.services.answers.retrieve_chunks", lambda **_: retrieved)
 
     class BrokenSuggestionsProvider(FakeChatProvider):
-        def complete_json(
-            self, *, prompt: str, system: str | None = None
-        ) -> dict:
+        def complete_json(self, *, prompt: str, system: str | None = None) -> dict:
             raise AttributeError("no suggestions today")
 
     answer = answer_question(

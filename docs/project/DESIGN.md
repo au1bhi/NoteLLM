@@ -28,6 +28,8 @@ All identifiers are UUIDs. All timestamps are UTC. Deleting a parent deletes its
 User 1 ── * Notebook 1 ── * Source 1 ── * Chunk
                     │
                     └── * Conversation 1 ── * Message 1 ── * Citation ── 1 Chunk
+                                      │
+                                      └── 0..1 StudyPlan 1 ── * StudyTask
 ```
 
 | Entity | Required fields | Notes |
@@ -38,6 +40,8 @@ User 1 ── * Notebook 1 ── * Source 1 ── * Chunk
 | `Conversation` | `id`, `notebook_id`, `title`, `created_at`, `updated_at` | Title may initially derive from the first question |
 | `Message` | `id`, `conversation_id`, `role`, `content`, `created_at` | Roles are `user` or `assistant` |
 | `Citation` | `id`, `message_id`, `chunk_id`, `ordinal`, `quote` | Only assistant messages have citations; `quote` is a bounded excerpt stored for stable display |
+| `StudyPlan` | `id`, `conversation_id`, `title`, `difficulty`, `start_date`, `end_date`, `timezone` | One current plan per conversation; reminder opt-in defaults to false |
+| `StudyTask` | `id`, `plan_id`, `title`, `description`, `start_date`, `end_date`, `estimated_minutes` | Stages cover the plan period and expose a persisted completion flag |
 
 Ownership is checked by joining every notebook-scoped entity back to `Notebook.owner_id`; never trust an ID supplied by the client without this check.
 

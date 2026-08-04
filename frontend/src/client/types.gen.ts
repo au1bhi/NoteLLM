@@ -196,9 +196,52 @@ export type StudyGuidePublic = {
     faqs: Array<StudyFaqPublic>;
 };
 
+export type StudyPlanGenerateRequest = {
+    timezone?: string;
+};
+
+export type StudyPlanPublic = {
+    id: string;
+    conversation_id: string;
+    title: string;
+    summary: string;
+    difficulty: 'beginner' | 'intermediate' | 'advanced';
+    start_date: string;
+    end_date: string;
+    timezone: string;
+    reminder_enabled: boolean;
+    reminder_time?: string;
+    email_reminder_available: boolean;
+    created_at: string;
+    updated_at: string;
+    tasks: Array<StudyTaskPublic>;
+};
+
+export type difficulty = 'beginner' | 'intermediate' | 'advanced';
+
+export type StudyPlanUpdate = {
+    reminder_enabled?: (boolean | null);
+    timezone?: (string | null);
+};
+
 export type StudySectionPublic = {
     title: string;
     content: string;
+};
+
+export type StudyTaskPublic = {
+    id: string;
+    title: string;
+    description: string;
+    start_date: string;
+    end_date: string;
+    estimated_minutes: number;
+    sort_order: number;
+    is_completed: boolean;
+};
+
+export type StudyTaskUpdate = {
+    is_completed: boolean;
 };
 
 export type Token = {
@@ -488,6 +531,42 @@ export type NotebooksRetrySourceData = {
 };
 
 export type NotebooksRetrySourceResponse = (SourcePublic);
+
+export type StudyPlansReadConversationStudyPlanData = {
+    conversationId: string;
+};
+
+export type StudyPlansReadConversationStudyPlanResponse = ((StudyPlanPublic | null));
+
+export type StudyPlansCreateOrRegenerateStudyPlanData = {
+    conversationId: string;
+    requestBody: StudyPlanGenerateRequest;
+};
+
+export type StudyPlansCreateOrRegenerateStudyPlanResponse = (StudyPlanPublic);
+
+export type StudyPlansUpdateStudyPlanData = {
+    planId: string;
+    requestBody: StudyPlanUpdate;
+};
+
+export type StudyPlansUpdateStudyPlanResponse = (StudyPlanPublic);
+
+export type StudyPlansDeleteStudyPlanData = {
+    planId: string;
+};
+
+export type StudyPlansDeleteStudyPlanResponse = ({
+    [key: string]: (string);
+});
+
+export type StudyPlansUpdateStudyTaskData = {
+    planId: string;
+    requestBody: StudyTaskUpdate;
+    taskId: string;
+};
+
+export type StudyPlansUpdateStudyTaskResponse = (StudyTaskPublic);
 
 export type UsersReadUsersData = {
     limit?: number;

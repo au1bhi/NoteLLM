@@ -7,6 +7,9 @@ flowchart LR
     API --> Notebook[笔记本与会话服务]
     API --> Ingest[上传、提取与分块服务]
     API --> Answer[检索与受控问答服务]
+    API --> Plan[对话学习计划服务]
+    Scheduler[09:00 独立调度进程] --> DB
+    Scheduler --> Mail[SMTP 邮件服务]
     Ingest --> Files[本地上传 Volume]
     Ingest --> Embed[Embedding Provider]
     Answer --> Embed
@@ -14,6 +17,8 @@ flowchart LR
     Notebook --> DB[(PostgreSQL + pgvector)]
     Ingest --> DB
     Answer --> DB
+    Plan --> Chat
+    Plan --> DB
 ```
 
 ## 一次问答的数据流
@@ -24,12 +29,21 @@ flowchart LR
 4. 提问时后端在当前笔记本内以 pgvector cosine distance 取 Top-5 分块，把原文作为不可信证据构造提示词。
 5. chat provider 返回 JSON 答案与候选 chunk ID；后端只保留本次检索集合中的引用，写入 `Message` 与 `Citation`，再通过 SSE 发送答案、引用与完成事件。
 
+## 学习计划与提醒数据流
+
+1. 用户从自己的某个会话请求生成计划；后端截取最近的对话上下文，并把对话内容作为不可信输入交给 chat provider。
+2. 模型返回难度、3—60 天周期和阶段任务；后端校验范围、补齐未覆盖日期，并保存为一份会话级 `StudyPlan` 与多个 `StudyTask`。
+3. 浏览器按实际日期绘制甘特图，任务完成状态单独持久化；重新生成会替换任务，但保留用户的提醒选择。
+4. 邮件提醒默认关闭。只有服务器 SMTP 可用且账户邮箱已验证时，用户才能主动开启。
+5. 独立 scheduler 按计划的 IANA 时区在每天 09:00 选择当日未完成任务；数据库原子认领 `last_reminder_date`，避免重启或并发造成重复发送。
+
 ## 安全边界
 
 - provider 密钥仅由后端从环境变量读取，浏览器不会获得密钥或直接调用模型。
 - 上传资料被视为不可信文本，不能覆盖后端的系统指令或决定引用。
 - 所有笔记本范围的查询都按当前用户过滤；跨用户对象返回 404。
 - 删除来源会删除文件、分块和向量；删除笔记本会级联清理来源与会话数据。
+- 学习计划经会话回溯到 `Notebook.owner_id`；未验证邮箱不能开启提醒，计划文本在进入 HTML 邮件前转义。
 
 ## 可复现实验边界
 

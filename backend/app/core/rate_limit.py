@@ -34,9 +34,7 @@ def _evict_oldest() -> None:
     of wiping every bucket (which would momentarily open all limits)."""
     with _lock:
         while len(_buckets) > _MAX_ENTRIES:
-            oldest_key = min(
-                _buckets, key=lambda k: _buckets[k][1]
-            )
+            oldest_key = min(_buckets, key=lambda k: _buckets[k][1])
             del _buckets[oldest_key]
 
 

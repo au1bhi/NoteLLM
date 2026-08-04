@@ -1,0 +1,8 @@
+[default.extend-words]
+# Alembic revision prefix, not the English abbreviation typo.
+ba = "ba"
+# PDF stream filter name used by the specification.
+Flate = "Flate"
+# Existing workflow job id and Python package name.
+alls = "alls"
+certifi = "certifi"

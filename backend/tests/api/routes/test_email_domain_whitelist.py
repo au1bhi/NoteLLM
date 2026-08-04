@@ -147,9 +147,7 @@ def test_signup_malformed_email_cannot_bypass(client: TestClient) -> None:
 def _known_user(db: Session) -> tuple[str, str]:
     email = random_lower_string() + "@qq.com"
     password = random_lower_string()
-    crud.create_user(
-        session=db, user_create=UserCreate(email=email, password=password)
-    )
+    crud.create_user(session=db, user_create=UserCreate(email=email, password=password))
     return email, password
 
 
@@ -157,9 +155,7 @@ def test_update_email_me_rejects_disallowed_and_sends_nothing(
     client: TestClient, db: Session
 ) -> None:
     email, password = _known_user(db)
-    headers = user_authentication_headers(
-        client=client, email=email, password=password
-    )
+    headers = user_authentication_headers(client=client, email=email, password=password)
     sent: list[dict] = []
 
     def fake_send(**kwargs: object) -> None:
@@ -183,9 +179,7 @@ def test_update_email_me_allows_whitelisted_domain(
     client: TestClient, db: Session
 ) -> None:
     email, password = _known_user(db)
-    headers = user_authentication_headers(
-        client=client, email=email, password=password
-    )
+    headers = user_authentication_headers(client=client, email=email, password=password)
     with _patch_allowlist(), patch("app.utils.send_email", return_value=None):
         r = client.patch(
             _url("/users/me"),
@@ -237,9 +231,7 @@ def test_recovery_password_registered_returns_sent(
     client: TestClient, db: Session
 ) -> None:
     email, _password = _known_user(db)
-    with _patch_allowlist(), patch(
-        "app.utils.send_email", return_value=None
-    ):
+    with _patch_allowlist(), patch("app.utils.send_email", return_value=None):
         r = client.post(_url(f"/password-recovery/{email}"))
     assert r.status_code == 200
     assert r.json() == {"message": "密码重置链接已发送，请查收"}

@@ -191,9 +191,7 @@ def test_oversized_upload_does_not_erase_embedding_usage(
 
     monkeypatch.setattr(settings, "UPLOADS_DIR", tmp_path)
     # Make the embedding dimension server-billed so the allowance applies.
-    monkeypatch.setattr(
-        settings, "EMBEDDING_BASE_URL", "https://api.example.com/v1"
-    )
+    monkeypatch.setattr(settings, "EMBEDDING_BASE_URL", "https://api.example.com/v1")
     monkeypatch.setattr(settings, "EMBEDDING_API_KEY", "server-embed-key")
     monkeypatch.setattr(settings, "EMBEDDING_MODEL", "embed-3")
     monkeypatch.setattr(
@@ -202,9 +200,7 @@ def test_oversized_upload_does_not_erase_embedding_usage(
     )
     # A fresh user avoids the module-scoped shared EMAIL_TEST_USER.
     user = create_random_user(db)
-    headers = authentication_token_from_email(
-        client=client, email=user.email, db=db
-    )
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
     quota = settings.FREE_QUOTA_EMBEDDING_CHARS
     # Sit just under the monthly allowance: the upload pre-check passes, the
     # reservation then exceeds the cap and raises QuotaError.

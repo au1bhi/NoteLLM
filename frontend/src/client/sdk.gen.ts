@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ConversationsReadConversationData, ConversationsReadConversationResponse, ConversationsUpdateConversationData, ConversationsUpdateConversationResponse, ConversationsDeleteConversationData, ConversationsDeleteConversationResponse, ConversationsStreamMessageData, ConversationsStreamMessageResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, MetaGetWatermarkResponse, NotebooksReadNotebooksData, NotebooksReadNotebooksResponse, NotebooksCreateNotebookData, NotebooksCreateNotebookResponse, NotebooksReadNotebookData, NotebooksReadNotebookResponse, NotebooksUpdateNotebookData, NotebooksUpdateNotebookResponse, NotebooksDeleteNotebookData, NotebooksDeleteNotebookResponse, NotebooksReadSourcesData, NotebooksReadSourcesResponse, NotebooksUploadSourceData, NotebooksUploadSourceResponse, NotebooksReadConversationsData, NotebooksReadConversationsResponse, NotebooksCreateConversationData, NotebooksCreateConversationResponse, NotebooksSearchNotebookData, NotebooksSearchNotebookResponse, NotebooksReadNotebookOverviewData, NotebooksReadNotebookOverviewResponse, NotebooksRegenerateNotebookOverviewData, NotebooksRegenerateNotebookOverviewResponse, NotebooksGenerateNotebookStudyGuideData, NotebooksGenerateNotebookStudyGuideResponse, NotebooksRemoveSourceData, NotebooksRemoveSourceResponse, NotebooksRetrySourceData, NotebooksRetrySourceResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersReadUserUsageResponse, UsersReadUserProviderSettingsResponse, UsersUpsertUserProviderSettingsData, UsersUpsertUserProviderSettingsResponse, UsersDeleteUserProviderSettingsResponse, UsersFetchAvailableModelsData, UsersFetchAvailableModelsResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersVerifyEmailData, UsersVerifyEmailResponse, UsersResendVerificationData, UsersResendVerificationResponse, UsersResendVerificationMeResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsHealthCheckResponse } from './types.gen';
+import type { ConversationsReadConversationData, ConversationsReadConversationResponse, ConversationsUpdateConversationData, ConversationsUpdateConversationResponse, ConversationsDeleteConversationData, ConversationsDeleteConversationResponse, ConversationsStreamMessageData, ConversationsStreamMessageResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, MetaGetWatermarkResponse, NotebooksReadNotebooksData, NotebooksReadNotebooksResponse, NotebooksCreateNotebookData, NotebooksCreateNotebookResponse, NotebooksReadNotebookData, NotebooksReadNotebookResponse, NotebooksUpdateNotebookData, NotebooksUpdateNotebookResponse, NotebooksDeleteNotebookData, NotebooksDeleteNotebookResponse, NotebooksReadSourcesData, NotebooksReadSourcesResponse, NotebooksUploadSourceData, NotebooksUploadSourceResponse, NotebooksReadConversationsData, NotebooksReadConversationsResponse, NotebooksCreateConversationData, NotebooksCreateConversationResponse, NotebooksSearchNotebookData, NotebooksSearchNotebookResponse, NotebooksReadNotebookOverviewData, NotebooksReadNotebookOverviewResponse, NotebooksRegenerateNotebookOverviewData, NotebooksRegenerateNotebookOverviewResponse, NotebooksGenerateNotebookStudyGuideData, NotebooksGenerateNotebookStudyGuideResponse, NotebooksRemoveSourceData, NotebooksRemoveSourceResponse, NotebooksRetrySourceData, NotebooksRetrySourceResponse, StudyPlansReadConversationStudyPlanData, StudyPlansReadConversationStudyPlanResponse, StudyPlansCreateOrRegenerateStudyPlanData, StudyPlansCreateOrRegenerateStudyPlanResponse, StudyPlansUpdateStudyPlanData, StudyPlansUpdateStudyPlanResponse, StudyPlansDeleteStudyPlanData, StudyPlansDeleteStudyPlanResponse, StudyPlansUpdateStudyTaskData, StudyPlansUpdateStudyTaskResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersReadUserUsageResponse, UsersReadUserProviderSettingsResponse, UsersUpsertUserProviderSettingsData, UsersUpsertUserProviderSettingsResponse, UsersDeleteUserProviderSettingsResponse, UsersFetchAvailableModelsData, UsersFetchAvailableModelsResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersVerifyEmailData, UsersVerifyEmailResponse, UsersResendVerificationData, UsersResendVerificationResponse, UsersResendVerificationMeResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsHealthCheckResponse } from './types.gen';
 
 export class ConversationsService {
     /**
@@ -25,7 +25,7 @@ export class ConversationsService {
             }
         });
     }
-    
+
     /**
      * Update Conversation
      * @param data The data for the request.
@@ -48,7 +48,7 @@ export class ConversationsService {
             }
         });
     }
-    
+
     /**
      * Delete Conversation
      * Delete a conversation and its messages/citations (cascade).
@@ -69,7 +69,7 @@ export class ConversationsService {
             }
         });
     }
-    
+
     /**
      * Stream Message
      * @param data The data for the request.
@@ -114,7 +114,7 @@ export class LoginService {
             }
         });
     }
-    
+
     /**
      * Test Token
      * Test access token
@@ -127,7 +127,7 @@ export class LoginService {
             url: '/api/v1/login/test-token'
         });
     }
-    
+
     /**
      * Recover Password
      * Password Recovery
@@ -148,7 +148,7 @@ export class LoginService {
             }
         });
     }
-    
+
     /**
      * Reset Password
      * Reset password
@@ -168,7 +168,7 @@ export class LoginService {
             }
         });
     }
-    
+
     /**
      * Recover Password Html Content
      * HTML Content for Password Recovery
@@ -234,7 +234,7 @@ export class NotebooksService {
             }
         });
     }
-    
+
     /**
      * Create Notebook
      * @param data The data for the request.
@@ -253,7 +253,7 @@ export class NotebooksService {
             }
         });
     }
-    
+
     /**
      * Read Notebook
      * @param data The data for the request.
@@ -273,7 +273,7 @@ export class NotebooksService {
             }
         });
     }
-    
+
     /**
      * Update Notebook
      * @param data The data for the request.
@@ -296,7 +296,7 @@ export class NotebooksService {
             }
         });
     }
-    
+
     /**
      * Delete Notebook
      * @param data The data for the request.
@@ -316,7 +316,7 @@ export class NotebooksService {
             }
         });
     }
-    
+
     /**
      * Read Sources
      * @param data The data for the request.
@@ -342,7 +342,7 @@ export class NotebooksService {
             }
         });
     }
-    
+
     /**
      * Upload Source
      * @param data The data for the request.
@@ -365,7 +365,7 @@ export class NotebooksService {
             }
         });
     }
-    
+
     /**
      * Read Conversations
      * @param data The data for the request.
@@ -391,7 +391,7 @@ export class NotebooksService {
             }
         });
     }
-    
+
     /**
      * Create Conversation
      * @param data The data for the request.
@@ -414,7 +414,7 @@ export class NotebooksService {
             }
         });
     }
-    
+
     /**
      * Search Notebook
      * @param data The data for the request.
@@ -437,7 +437,7 @@ export class NotebooksService {
             }
         });
     }
-    
+
     /**
      * Read Notebook Overview
      * Return the notebook overview, generating it lazily on first view.
@@ -458,7 +458,7 @@ export class NotebooksService {
             }
         });
     }
-    
+
     /**
      * Regenerate Notebook Overview
      * @param data The data for the request.
@@ -478,7 +478,7 @@ export class NotebooksService {
             }
         });
     }
-    
+
     /**
      * Generate Notebook Study Guide
      * Generate a printable study guide (sections + FAQs) from the notebook.
@@ -499,7 +499,7 @@ export class NotebooksService {
             }
         });
     }
-    
+
     /**
      * Remove Source
      * @param data The data for the request.
@@ -521,7 +521,7 @@ export class NotebooksService {
             }
         });
     }
-    
+
     /**
      * Retry Source
      * @param data The data for the request.
@@ -538,6 +538,119 @@ export class NotebooksService {
                 notebook_id: data.notebookId,
                 source_id: data.sourceId
             },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+}
+
+export class StudyPlansService {
+    /**
+     * Read Conversation Study Plan
+     * @param data The data for the request.
+     * @param data.conversationId
+     * @returns unknown Successful Response
+     * @throws ApiError
+     */
+    public static readConversationStudyPlan(data: StudyPlansReadConversationStudyPlanData): CancelablePromise<StudyPlansReadConversationStudyPlanResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/conversations/{conversation_id}/study-plan',
+            path: {
+                conversation_id: data.conversationId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+
+    /**
+     * Create Or Regenerate Study Plan
+     * @param data The data for the request.
+     * @param data.conversationId
+     * @param data.requestBody
+     * @returns StudyPlanPublic Successful Response
+     * @throws ApiError
+     */
+    public static createOrRegenerateStudyPlan(data: StudyPlansCreateOrRegenerateStudyPlanData): CancelablePromise<StudyPlansCreateOrRegenerateStudyPlanResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/conversations/{conversation_id}/study-plan',
+            path: {
+                conversation_id: data.conversationId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+
+    /**
+     * Update Study Plan
+     * @param data The data for the request.
+     * @param data.planId
+     * @param data.requestBody
+     * @returns StudyPlanPublic Successful Response
+     * @throws ApiError
+     */
+    public static updateStudyPlan(data: StudyPlansUpdateStudyPlanData): CancelablePromise<StudyPlansUpdateStudyPlanResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/study-plans/{plan_id}',
+            path: {
+                plan_id: data.planId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+
+    /**
+     * Delete Study Plan
+     * @param data The data for the request.
+     * @param data.planId
+     * @returns string Successful Response
+     * @throws ApiError
+     */
+    public static deleteStudyPlan(data: StudyPlansDeleteStudyPlanData): CancelablePromise<StudyPlansDeleteStudyPlanResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/study-plans/{plan_id}',
+            path: {
+                plan_id: data.planId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+
+    /**
+     * Update Study Task
+     * @param data The data for the request.
+     * @param data.planId
+     * @param data.taskId
+     * @param data.requestBody
+     * @returns StudyTaskPublic Successful Response
+     * @throws ApiError
+     */
+    public static updateStudyTask(data: StudyPlansUpdateStudyTaskData): CancelablePromise<StudyPlansUpdateStudyTaskResponse> {
+        return __request(OpenAPI, {
+            method: 'PATCH',
+            url: '/api/v1/study-plans/{plan_id}/tasks/{task_id}',
+            path: {
+                plan_id: data.planId,
+                task_id: data.taskId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
             errors: {
                 422: 'Validation Error'
             }
@@ -568,7 +681,7 @@ export class UsersService {
             }
         });
     }
-    
+
     /**
      * Create User
      * Create new user.
@@ -588,7 +701,7 @@ export class UsersService {
             }
         });
     }
-    
+
     /**
      * Read User Me
      * Get current user.
@@ -601,7 +714,7 @@ export class UsersService {
             url: '/api/v1/users/me'
         });
     }
-    
+
     /**
      * Delete User Me
      * Delete own user.
@@ -614,7 +727,7 @@ export class UsersService {
             url: '/api/v1/users/me'
         });
     }
-    
+
     /**
      * Update User Me
      * Update own user. Changing the email requires the current password and marks
@@ -635,7 +748,7 @@ export class UsersService {
             }
         });
     }
-    
+
     /**
      * Update Password Me
      * Update own password.
@@ -655,7 +768,7 @@ export class UsersService {
             }
         });
     }
-    
+
     /**
      * Read User Usage
      * Get the current user's usage plus the free allowance that applies to each
@@ -670,7 +783,7 @@ export class UsersService {
             url: '/api/v1/users/me/usage'
         });
     }
-    
+
     /**
      * Read User Provider Settings
      * Get the current user's own LLM/embedding provider settings (keys masked).
@@ -683,7 +796,7 @@ export class UsersService {
             url: '/api/v1/users/me/provider-settings'
         });
     }
-    
+
     /**
      * Upsert User Provider Settings
      * Save the current user's provider settings. An empty API key keeps the
@@ -704,7 +817,7 @@ export class UsersService {
             }
         });
     }
-    
+
     /**
      * Delete User Provider Settings
      * Clear the current user's provider settings, reverting to server defaults.
@@ -718,7 +831,7 @@ export class UsersService {
             url: '/api/v1/users/me/provider-settings'
         });
     }
-    
+
     /**
      * Fetch Available Models
      * Fetch the model IDs available on an OpenAI-compatible endpoint. Empty
@@ -741,7 +854,7 @@ export class UsersService {
             }
         });
     }
-    
+
     /**
      * Register User
      * Create new user without the need to be logged in.
@@ -772,7 +885,7 @@ export class UsersService {
             }
         });
     }
-    
+
     /**
      * Verify Email
      * Confirm email ownership with the signed link token. The endpoint is
@@ -795,7 +908,7 @@ export class UsersService {
             }
         });
     }
-    
+
     /**
      * Resend Verification
      * Re-send the verification email to a given address. The response is generic
@@ -816,7 +929,7 @@ export class UsersService {
             }
         });
     }
-    
+
     /**
      * Resend Verification Me
      * Re-send the verification email to the signed-in user (used by the reminder
@@ -830,7 +943,7 @@ export class UsersService {
             url: '/api/v1/users/me/resend-verification'
         });
     }
-    
+
     /**
      * Read User By Id
      * Get a specific user by id.
@@ -851,7 +964,7 @@ export class UsersService {
             }
         });
     }
-    
+
     /**
      * Update User
      * Update a user.
@@ -875,7 +988,7 @@ export class UsersService {
             }
         });
     }
-    
+
     /**
      * Delete User
      * Delete a user.

@@ -27,7 +27,6 @@ def _public_dns(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.core.ssrf._resolve", fake_resolve)
 
 
-
 def _auth(client: TestClient, db: Session):
     user = create_random_user(db)
     headers = authentication_token_from_email(client=client, email=user.email, db=db)
@@ -323,8 +322,14 @@ def test_provider_settings_returns_cooldown_until(
 def test_resolve_api_base_formats() -> None:
     from app.services.provider_settings import resolve_api_base
 
-    assert resolve_api_base("https://provider.example.com", "openai") == "https://provider.example.com"
-    assert resolve_api_base("https://provider.example.com", "openai_v1") == "https://provider.example.com/v1"
+    assert (
+        resolve_api_base("https://provider.example.com", "openai")
+        == "https://provider.example.com"
+    )
+    assert (
+        resolve_api_base("https://provider.example.com", "openai_v1")
+        == "https://provider.example.com/v1"
+    )
     assert (
         resolve_api_base("https://api.openai.com/v1", "openai_v1")
         == "https://api.openai.com/v1"
@@ -414,7 +419,10 @@ def test_fetch_models_falls_back_to_v1(
         json={"base_url": "https://provider.example.com", "api_key": "sk-probe-123456"},
     )
     assert response.status_code == 200
-    assert calls == ["https://provider.example.com/models", "https://provider.example.com/v1/models"]
+    assert calls == [
+        "https://provider.example.com/models",
+        "https://provider.example.com/v1/models",
+    ]
     assert response.json() == [{"id": "deepseek-v4-flash"}]
 
 
@@ -423,9 +431,7 @@ def test_fetch_models_uses_stored_key_when_key_empty(
 ) -> None:
     _public_dns(monkeypatch)
     user, headers = _auth(client, db)
-    client.put(
-        _url(), headers=headers, json={"chat_api_key": "sk-stored-key-123456"}
-    )
+    client.put(_url(), headers=headers, json={"chat_api_key": "sk-stored-key-123456"})
     auth_headers: list[str] = []
 
     def fake_request(_method: str, _url: str, **_kwargs):

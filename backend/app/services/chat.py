@@ -48,9 +48,7 @@ class ModelAnswer:
 
 
 class ChatProvider(Protocol):
-    def answer(
-        self, *, prompt: str, system: str | None = None
-    ) -> ModelAnswer: ...
+    def answer(self, *, prompt: str, system: str | None = None) -> ModelAnswer: ...
     def complete_json(
         self, *, prompt: str, system: str | None = None
     ) -> dict[str, object]: ...

@@ -77,6 +77,9 @@ class Settings(BaseSettings):
     # How long a user must wait before switching their provider billing back
     # to the server's default after configuring their own API key.
     PROVIDER_SWITCH_COOLDOWN_HOURS: int = 24
+    # Dedicated scheduler process checks opt-in study-plan reminders at this
+    # interval. Delivery is fixed at 09:00 in each plan's IANA timezone.
+    STUDY_REMINDER_POLL_SECONDS: int = 60
     # Whether brute-force protection is active on auth endpoints.
     RATE_LIMIT_ENABLED: bool = True
     POSTGRES_SERVER: str
@@ -112,9 +115,7 @@ class Settings(BaseSettings):
     # The `| str` union mirrors BACKEND_CORS_ORIGINS: without it pydantic_settings
     # tries to JSON-decode the env var for the list type and chokes on the
     # comma-separated string.
-    ALLOWED_EMAIL_DOMAINS: Annotated[
-        list[str] | str, BeforeValidator(parse_cors)
-    ] = [
+    ALLOWED_EMAIL_DOMAINS: Annotated[list[str] | str, BeforeValidator(parse_cors)] = [
         "163.com",
         "qq.com",
         "gmail.com",
@@ -168,7 +169,7 @@ class Settings(BaseSettings):
             message = (
                 "SECRET_KEY must be at least 32 characters — it signs JWTs and "
                 "derives the key that encrypts stored API keys. Generate one "
-                "with e.g. `python -c \"import secrets; print(secrets.token_urlsafe(48))\"`."
+                'with e.g. `python -c "import secrets; print(secrets.token_urlsafe(48))"`.'
             )
             if self.ENVIRONMENT == "local":
                 warnings.warn(message, stacklevel=1)

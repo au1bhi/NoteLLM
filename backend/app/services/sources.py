@@ -130,9 +130,7 @@ def extract_pages(path: Path, media_type: str) -> list[ExtractedPage]:
                 raise ValueError(
                     f"PDF 提取的文本超过 {MAX_EXTRACTED_CHARS} 字符上限，无法处理"
                 )
-            pages.append(
-                ExtractedPage(text=page_text, page_number=index + 1)
-            )
+            pages.append(ExtractedPage(text=page_text, page_number=index + 1))
     finally:
         document.close()
     return pages
@@ -347,7 +345,10 @@ def user_storage_bytes(*, session: Session, owner_id: uuid.UUID) -> int:
 
 def enforce_user_storage_limit(*, session: Session, owner_id: uuid.UUID) -> None:
     """Reject the upload if the user would exceed their total storage quota."""
-    if user_storage_bytes(session=session, owner_id=owner_id) > settings.MAX_USER_STORAGE_BYTES:
+    if (
+        user_storage_bytes(session=session, owner_id=owner_id)
+        > settings.MAX_USER_STORAGE_BYTES
+    ):
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail=(

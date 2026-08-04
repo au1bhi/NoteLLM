@@ -705,7 +705,7 @@ sync_frontend_dist() {
     local release_url=""
     release_url="$(curl -fsSL --max-time 20 \
       "https://api.github.com/repos/au1bhi/NoteLLM/releases/latest" 2>/dev/null \
-      | grep -oE '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*frontend-dist[^"]*"' \
+      | grep -oE '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*frontend-dist[^"]*\.tar\.gz"' \
       | head -n 1 | sed -E 's/.*"([^"]*)"/\1/' || true)"
     if [[ -n "$release_url" ]]; then
       info "从 GitHub Release 下载前端产物：$release_url"

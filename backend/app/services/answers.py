@@ -166,14 +166,10 @@ def answer_question(
             tokens_used=getattr(chat_provider, "total_tokens_used", 0),
         )
 
-    user_block = build_user_block(
-        question=query, evidence=build_evidence(retrieved)
-    )
+    user_block = build_user_block(question=query, evidence=build_evidence(retrieved))
     system = build_system_rules(mode=mode)
     pool = ThreadPoolExecutor(max_workers=2)
-    answer_future = pool.submit(
-        chat_provider.answer, prompt=user_block, system=system
-    )
+    answer_future = pool.submit(chat_provider.answer, prompt=user_block, system=system)
     suggestions_future = pool.submit(
         suggest_questions,
         chat_provider=chat_provider,

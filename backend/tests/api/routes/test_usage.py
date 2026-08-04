@@ -165,9 +165,7 @@ def test_reserve_usage_is_atomic_and_stops_at_quota(
     assert body["chat_tokens"] <= settings.FREE_QUOTA_CHAT_TOKENS
 
 
-def test_reserve_with_own_key_is_unlimited(
-    client: TestClient, db: Session
-) -> None:
+def test_reserve_with_own_key_is_unlimited(client: TestClient, db: Session) -> None:
     from app.core.db import engine
     from app.services.usage import reserve_usage
 

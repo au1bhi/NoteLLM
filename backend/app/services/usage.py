@@ -371,7 +371,7 @@ def reserve_usage(
     error = _quota_error_for(status, chat_tokens, embedding_chars)
     if error is not None:
         raise error
-    result = session.execute(
+    result = session.execute(  # ty: ignore[deprecated] -- raw SQL returns Row
         _RESERVE_SQL,
         {
             "id": uuid.uuid4(),
@@ -416,7 +416,7 @@ def settle_usage(
     """
     if not chat_tokens and not embedding_chars:
         return
-    session.execute(
+    session.execute(  # ty: ignore[deprecated] -- raw SQL is intentional
         _SETTLE_SQL,
         {
             "user_id": user_id,

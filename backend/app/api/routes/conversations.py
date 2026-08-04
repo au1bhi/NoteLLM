@@ -176,9 +176,7 @@ def persist_answer(
                     answer.tokens_used - chat_reserved if chat_reserved else 0
                 ),
                 embedding_chars=(
-                    embedding_reserve - embedding_reserved
-                    if embedding_reserved
-                    else 0
+                    embedding_reserve - embedding_reserved if embedding_reserved else 0
                 ),
             )
         assistant_message = ConversationMessage(

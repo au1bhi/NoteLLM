@@ -325,8 +325,7 @@ def _generate_and_store_overview(
         settle_usage(
             session=session,
             user_id=current_user.id,
-            chat_tokens=getattr(chat_provider, "total_tokens_used", 0)
-            - chat_reserved,
+            chat_tokens=getattr(chat_provider, "total_tokens_used", 0) - chat_reserved,
         )
 
 
@@ -410,8 +409,7 @@ def generate_notebook_study_guide(
         settle_usage(
             session=session,
             user_id=current_user.id,
-            chat_tokens=getattr(chat_provider, "total_tokens_used", 0)
-            - chat_reserved,
+            chat_tokens=getattr(chat_provider, "total_tokens_used", 0) - chat_reserved,
         )
     return StudyGuidePublic(
         sections=[

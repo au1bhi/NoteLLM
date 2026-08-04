@@ -235,9 +235,7 @@ def test_update_user_me(client: TestClient, db: Session) -> None:
     assert user_db.full_name == full_name
 
 
-def test_update_password_me(
-    client: TestClient, db: Session
-) -> None:
+def test_update_password_me(client: TestClient, db: Session) -> None:
     # Use a dedicated account: password rotation now bumps password_changed_at
     # and revokes every previously issued JWT, which would invalidate the
     # module-scoped superuser token used by the rest of this file.
@@ -310,9 +308,7 @@ def test_update_password_me_incorrect_password(
     assert updated_user["detail"] == "密码错误"
 
 
-def test_update_user_me_email_exists(
-    client: TestClient, db: Session
-) -> None:
+def test_update_user_me_email_exists(client: TestClient, db: Session) -> None:
     # A second registered account whose address the actor tries to claim.
     target_user = create_random_user(db)
     actor_email = random_email()
@@ -354,9 +350,7 @@ def test_update_password_me_same_password_error(
 
 
 @patch("app.utils.send_email", return_value=None)
-def test_register_user(
-    _mock_send_email, client: TestClient, db: Session
-) -> None:
+def test_register_user(_mock_send_email, client: TestClient, db: Session) -> None:
     username = random_email()
     password = random_lower_string()
     full_name = random_lower_string()
@@ -604,7 +598,10 @@ def test_admin_password_reset_revokes_existing_jwts(
     )
     headers = user_authentication_headers(client=client, email=email, password=password)
     # The pre-reset token authenticates before the reset.
-    assert client.get(f"{settings.API_V1_STR}/users/me", headers=headers).status_code == 200
+    assert (
+        client.get(f"{settings.API_V1_STR}/users/me", headers=headers).status_code
+        == 200
+    )
     new_password = random_lower_string()
     r = client.patch(
         f"{settings.API_V1_STR}/users/{user.id}",
@@ -629,9 +626,7 @@ def test_delete_and_reregister_preserves_allowance(
     crud.create_user(session=db, user_create=UserCreate(email=email, password=password))
     headers = user_authentication_headers(client=client, email=email, password=password)
     me = client.get(f"{settings.API_V1_STR}/users/me", headers=headers).json()
-    db.add(
-        UserUsage(user_id=me["id"], chat_tokens=42_000, embedding_chars=200_000)
-    )
+    db.add(UserUsage(user_id=me["id"], chat_tokens=42_000, embedding_chars=200_000))
     db.commit()
     # Delete the account.
     r = client.delete(f"{settings.API_V1_STR}/users/me", headers=headers)
@@ -645,9 +640,7 @@ def test_delete_and_reregister_preserves_allowance(
     assert r.status_code == 200
     user = crud.get_user_by_email(session=db, email=email)
     assert user is not None
-    usage = db.exec(
-        select(UserUsage).where(UserUsage.user_id == user.id)
-    ).first()
+    usage = db.exec(select(UserUsage).where(UserUsage.user_id == user.id)).first()
     # The allowance is NOT refreshed: the restored counters leave the quota
     # exhausted for the current period.
     assert usage is not None
@@ -844,34 +837,46 @@ def test_pending_email_collision_applies_to_staging_account(
         target = random_email()
         # Attacker account A.
         a_email, a_pw = random_email(), random_lower_string()
-        assert client.post(
-            f"{settings.API_V1_STR}/users/signup",
-            json={"email": a_email, "password": a_pw},
-        ).status_code == 200
+        assert (
+            client.post(
+                f"{settings.API_V1_STR}/users/signup",
+                json={"email": a_email, "password": a_pw},
+            ).status_code
+            == 200
+        )
         a_headers = user_authentication_headers(
             client=client, email=a_email, password=a_pw
         )
         # Victim account V.
         v_email, v_pw = random_email(), random_lower_string()
-        assert client.post(
-            f"{settings.API_V1_STR}/users/signup",
-            json={"email": v_email, "password": v_pw},
-        ).status_code == 200
+        assert (
+            client.post(
+                f"{settings.API_V1_STR}/users/signup",
+                json={"email": v_email, "password": v_pw},
+            ).status_code
+            == 200
+        )
         v_headers = user_authentication_headers(
             client=client, email=v_email, password=v_pw
         )
         # A stages the target first.
-        assert client.patch(
-            f"{settings.API_V1_STR}/users/me",
-            headers=a_headers,
-            json={"email": target, "current_password": a_pw},
-        ).status_code == 200
+        assert (
+            client.patch(
+                f"{settings.API_V1_STR}/users/me",
+                headers=a_headers,
+                json={"email": target, "current_password": a_pw},
+            ).status_code
+            == 200
+        )
         # V stages the SAME target.
-        assert client.patch(
-            f"{settings.API_V1_STR}/users/me",
-            headers=v_headers,
-            json={"email": target, "current_password": v_pw},
-        ).status_code == 200
+        assert (
+            client.patch(
+                f"{settings.API_V1_STR}/users/me",
+                headers=v_headers,
+                json={"email": target, "current_password": v_pw},
+            ).status_code
+            == 200
+        )
         # V's own BOUND link applies the change to V, not A.
         v_bound = generate_email_change_token(
             pending_email=target, current_email=v_email
@@ -903,31 +908,43 @@ def test_plain_token_cannot_apply_staged_change(
     with patch("app.core.config.settings.SMTP_HOST", "smtp.example.com"):
         target = random_email()
         a_email, a_pw = random_email(), random_lower_string()
-        assert client.post(
-            f"{settings.API_V1_STR}/users/signup",
-            json={"email": a_email, "password": a_pw},
-        ).status_code == 200
+        assert (
+            client.post(
+                f"{settings.API_V1_STR}/users/signup",
+                json={"email": a_email, "password": a_pw},
+            ).status_code
+            == 200
+        )
         a_headers = user_authentication_headers(
             client=client, email=a_email, password=a_pw
         )
         v_email, v_pw = random_email(), random_lower_string()
-        assert client.post(
-            f"{settings.API_V1_STR}/users/signup",
-            json={"email": v_email, "password": v_pw},
-        ).status_code == 200
+        assert (
+            client.post(
+                f"{settings.API_V1_STR}/users/signup",
+                json={"email": v_email, "password": v_pw},
+            ).status_code
+            == 200
+        )
         v_headers = user_authentication_headers(
             client=client, email=v_email, password=v_pw
         )
-        assert client.patch(
-            f"{settings.API_V1_STR}/users/me",
-            headers=a_headers,
-            json={"email": target, "current_password": a_pw},
-        ).status_code == 200
-        assert client.patch(
-            f"{settings.API_V1_STR}/users/me",
-            headers=v_headers,
-            json={"email": target, "current_password": v_pw},
-        ).status_code == 200
+        assert (
+            client.patch(
+                f"{settings.API_V1_STR}/users/me",
+                headers=a_headers,
+                json={"email": target, "current_password": a_pw},
+            ).status_code
+            == 200
+        )
+        assert (
+            client.patch(
+                f"{settings.API_V1_STR}/users/me",
+                headers=v_headers,
+                json={"email": target, "current_password": v_pw},
+            ).status_code
+            == 200
+        )
         # A PLAIN token for the target (as the resend path used to emit) must
         # not apply the change to the first staging account (attacker A).
         plain = generate_verify_email_token(target)

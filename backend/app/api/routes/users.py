@@ -87,14 +87,14 @@ def _require_allowed_email(email: str) -> None:
     if not is_allowed_email(email):
         domains = allowed_email_domains_text()
         detail = (
-            f"暂不支持该邮箱域名，当前仅支持：{domains}" if domains else "暂不支持该邮箱域名"
+            f"暂不支持该邮箱域名，当前仅支持：{domains}"
+            if domains
+            else "暂不支持该邮箱域名"
         )
         raise HTTPException(status_code=400, detail=detail)
 
 
-def _tombstone_released_email(
-    session: Session, user_id: uuid.UUID, email: str
-) -> None:
+def _tombstone_released_email(session: Session, user_id: uuid.UUID, email: str) -> None:
     """Carry the account's usage onto a canonical identity it is releasing.
 
     An email change frees the OLD address for re-registration; without a
@@ -103,9 +103,7 @@ def _tombstone_released_email(
     deletion path (`save_usage_tombstone`), keyed by canonical email, and is a
     no-op when the account has no usage yet.
     """
-    usage = session.exec(
-        select(UserUsage).where(UserUsage.user_id == user_id)
-    ).first()
+    usage = session.exec(select(UserUsage).where(UserUsage.user_id == user_id)).first()
     save_usage_tombstone(session=session, emails=[email], usage=usage)
 
 
@@ -193,19 +191,13 @@ def update_user_me(
     if "email" in user_data and user_data["email"] is None:
         raise HTTPException(status_code=422, detail="邮箱不能为空")
 
-    email_changed = (
-        "email" in user_data and user_data["email"] != current_user.email
-    )
+    email_changed = "email" in user_data and user_data["email"] != current_user.email
     if email_changed:
         _require_allowed_email(user_data["email"])
         # Verify the current password first (an anti-enumeration ordering).
         if not provided_password:
-            raise HTTPException(
-                status_code=422, detail="修改邮箱需要验证当前密码"
-            )
-        verified, _ = verify_password(
-            provided_password, current_user.hashed_password
-        )
+            raise HTTPException(status_code=422, detail="修改邮箱需要验证当前密码")
+        verified, _ = verify_password(provided_password, current_user.hashed_password)
         if not verified:
             raise HTTPException(status_code=400, detail="当前密码错误")
         if settings.emails_enabled:
@@ -656,9 +648,7 @@ def register_user(session: SessionDep, user_in: UserRegister) -> SignupResult:
             # A deleted account's usage tombstone (if any) is restored so the
             # monthly allowance does not refresh by deleting + re-registering
             # the same address. ensure_period rolls it over if it is old.
-            restore_tombstone_usage(
-                session=session, user_id=user.id, email=email
-            )
+            restore_tombstone_usage(session=session, user_id=user.id, email=email)
             session.commit()
             if settings.emails_enabled:
                 email_data = generate_verify_email_email(email_to=user.email)
@@ -692,9 +682,7 @@ def register_user(session: SessionDep, user_in: UserRegister) -> SignupResult:
                     html_content=email_data.html_content,
                     text_content=email_data.text_content,
                 )
-    return SignupResult(
-        email=email, is_email_verified=not settings.emails_enabled
-    )
+    return SignupResult(email=email, is_email_verified=not settings.emails_enabled)
 
 
 @router.post(
@@ -718,9 +706,7 @@ def verify_email(session: SessionDep, body: VerifyEmailRequest) -> Any:
     # account that happens to have staged the same target.
     staging_account_email = email_change_token_account(body.token)
     if staging_account_email is not None:
-        user = crud.get_user_by_email(
-            session=session, email=staging_account_email
-        )
+        user = crud.get_user_by_email(session=session, email=staging_account_email)
         if user is None or not (user.pending_email or "").lower() == email:
             raise HTTPException(status_code=400, detail="验证链接无效或已过期")
     else:
@@ -771,9 +757,7 @@ def verify_email(session: SessionDep, body: VerifyEmailRequest) -> Any:
     response_model=Message,
     dependencies=[Depends(rate_limit(limit=3, window=300))],
 )
-def resend_verification(
-    session: SessionDep, body: ResendVerificationRequest
-) -> Any:
+def resend_verification(session: SessionDep, body: ResendVerificationRequest) -> Any:
     """
     Re-send the verification email to a given address. The response is generic
     so this endpoint cannot be used to enumerate registered emails.
@@ -817,9 +801,7 @@ def resend_verification_me(current_user: CurrentUser) -> Any:
             if current_user.pending_email
             else None
         )
-        email_data = generate_verify_email_email(
-            email_to=target, token=token
-        )
+        email_data = generate_verify_email_email(email_to=target, token=token)
         if recipient_send_cooldown(target):
             send_email_safely(
                 email_to=target,
@@ -901,9 +883,7 @@ def delete_user(
         raise HTTPException(status_code=403, detail="超级管理员不能删除自己")
     # Carry the free-allowance counters onto every canonical email the account
     # has used before the usage row cascades away (anti-allowance-farming).
-    usage = session.exec(
-        select(UserUsage).where(UserUsage.user_id == user_id)
-    ).first()
+    usage = session.exec(select(UserUsage).where(UserUsage.user_id == user_id)).first()
     history = list(user.email_history or []) or [canonical_email(user.email)]
     save_usage_tombstone(session=session, emails=history, usage=usage)
     # Notebooks/sources/conversations cascade via their foreign keys.

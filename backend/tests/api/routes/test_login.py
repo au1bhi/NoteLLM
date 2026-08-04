@@ -218,9 +218,7 @@ def test_welcome_email_reset_token_is_single_use(
         email_to=email, username=email, password_changed_at=user.password_changed_at
     )
     # Extract the token from the URL fragment in the welcome email.
-    link = next(
-        part for part in email_data.html_content.split() if "token=" in part
-    )
+    link = next(part for part in email_data.html_content.split() if "token=" in part)
     token = link.split("token=")[1].split('"')[0]
 
     new_password = random_lower_string()

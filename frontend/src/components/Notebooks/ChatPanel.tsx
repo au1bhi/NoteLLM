@@ -27,6 +27,7 @@ import { sortPinnedFirst } from "@/utils"
 import { Citations } from "./Citations"
 import { Markdown } from "./Markdown"
 import { PinButton } from "./PinButton"
+import { StudyPlanDialog } from "./StudyPlanDialog"
 
 const ANSWER_MODES: { value: AnswerMode; label: string; hint: string }[] = [
   {
@@ -292,6 +293,13 @@ export function ChatPanel({
                   !activeConversation.is_pinned,
                 )
               }
+            />
+          ) : null}
+          {activeConversation ? (
+            <StudyPlanDialog
+              conversationId={activeConversation.id}
+              hasConversationContent={Boolean(messages?.length)}
+              disabled={isStreaming}
             />
           ) : null}
           <Button

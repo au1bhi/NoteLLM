@@ -117,7 +117,9 @@ def generate_reset_password_email(email_to: str, email: str, token: str) -> Emai
         f"如果链接无法点击，请将以上地址复制到浏览器打开。\n\n"
         f"如果你没有请求重置密码，请忽略这封邮件。\n"
     )
-    return EmailData(html_content=html_content, subject=subject, text_content=text_content)
+    return EmailData(
+        html_content=html_content, subject=subject, text_content=text_content
+    )
 
 
 def generate_new_account_email(
@@ -157,7 +159,9 @@ def generate_new_account_email(
         f"设置完成后即可用 {username} 登录 {project_name}。\n\n"
         f"如果你没有请求创建账号，请忽略并删除这封邮件。\n"
     )
-    return EmailData(html_content=html_content, subject=subject, text_content=text_content)
+    return EmailData(
+        html_content=html_content, subject=subject, text_content=text_content
+    )
 
 
 def _encode_purpose_token(
@@ -277,9 +281,7 @@ def verify_email_token(token: str) -> str | None:
     return _decode_purpose_token(token, "email_verify")
 
 
-def generate_verify_email_email(
-    email_to: str, token: str | None = None
-) -> EmailData:
+def generate_verify_email_email(email_to: str, token: str | None = None) -> EmailData:
     # URL fragment (see generate_reset_password_email): the verify JWT never
     # reaches the server, logs, or Referer. A pre-generated token (e.g. a
     # staged email change bound to the staging account) can be supplied.
@@ -307,7 +309,9 @@ def generate_verify_email_email(
         f"如果链接无法点击，请将以上地址复制到浏览器打开。\n\n"
         f"如果你没有注册 {settings.PROJECT_NAME}，请忽略这封邮件，你的邮箱不会发生任何变更。\n"
     )
-    return EmailData(html_content=html_content, subject=subject, text_content=text_content)
+    return EmailData(
+        html_content=html_content, subject=subject, text_content=text_content
+    )
 
 
 def send_email_safely(
@@ -328,9 +332,7 @@ def send_email_safely(
             text_content=text_content,
         )
     except Exception:  # noqa: BLE001 - the mail backend failure must not 500 an API call
-        logger.exception(
-            "Failed to send email to %s (subject: %s)", email_to, subject
-        )
+        logger.exception("Failed to send email to %s (subject: %s)", email_to, subject)
         return False
 
 
@@ -382,9 +384,7 @@ def is_allowed_email(email: str) -> bool:
     subdomains, prefix-suffix lookalikes and `@qq.com@evil.com` tricks never
     match.
     """
-    allowed = {
-        d.strip().lower() for d in settings.ALLOWED_EMAIL_DOMAINS if d.strip()
-    }
+    allowed = {d.strip().lower() for d in settings.ALLOWED_EMAIL_DOMAINS if d.strip()}
     if not allowed or "*" in allowed:
         return True
     try:

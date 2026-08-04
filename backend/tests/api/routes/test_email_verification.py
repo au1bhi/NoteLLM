@@ -27,9 +27,7 @@ def _email_enabled() -> Generator[Mock]:
     with (
         patch("app.core.config.settings.SMTP_HOST", "smtp.example.com"),
         patch("app.utils.send_email", return_value=None) as mock_send,
-        patch(
-            "app.api.routes.users.recipient_send_cooldown", return_value=True
-        ),
+        patch("app.api.routes.users.recipient_send_cooldown", return_value=True),
     ):
         yield mock_send
 
@@ -90,9 +88,7 @@ def test_verify_email_success(client: TestClient, db: Session) -> None:
     assert _user_from_db(db, email).is_email_verified is False
 
     token = generate_verify_email_token(email)
-    r = client.post(
-        f"{settings.API_V1_STR}/users/verify-email", json={"token": token}
-    )
+    r = client.post(f"{settings.API_V1_STR}/users/verify-email", json={"token": token})
     assert r.status_code == 200
     assert r.json()["message"] == "邮箱验证成功"
     assert _user_from_db(db, email).is_email_verified is True
@@ -134,15 +130,11 @@ def test_verify_email_expired_token(client: TestClient, db: Session) -> None:
 
 def test_verify_email_unknown_user_does_not_verify(client: TestClient) -> None:
     token = generate_verify_email_token(random_email())
-    r = client.post(
-        f"{settings.API_V1_STR}/users/verify-email", json={"token": token}
-    )
+    r = client.post(f"{settings.API_V1_STR}/users/verify-email", json={"token": token})
     assert r.status_code == 400
 
 
-def test_verify_token_is_purpose_scoped(
-    client: TestClient, db: Session
-) -> None:
+def test_verify_token_is_purpose_scoped(client: TestClient, db: Session) -> None:
     """A password-reset token must not work as an email-verification token."""
     with _email_enabled():
         email, _ = _signup(client)
@@ -194,9 +186,7 @@ def test_resend_verification_skips_verified_account(
     with _email_enabled() as mock_send:
         email, _ = _signup(client)
         token = generate_verify_email_token(email)
-        client.post(
-            f"{settings.API_V1_STR}/users/verify-email", json={"token": token}
-        )
+        client.post(f"{settings.API_V1_STR}/users/verify-email", json={"token": token})
         assert _user_from_db(db, email).is_email_verified is True
         mock_send.reset_mock()
         r = client.post(
@@ -246,9 +236,7 @@ def test_update_email_requires_current_password(
         email, password = _signup(client)
         # First prove ownership, then change the address.
         token = generate_verify_email_token(email)
-        client.post(
-            f"{settings.API_V1_STR}/users/verify-email", json={"token": token}
-        )
+        client.post(f"{settings.API_V1_STR}/users/verify-email", json={"token": token})
         assert _user_from_db(db, email).is_email_verified is True
         headers = user_authentication_headers(
             client=client, email=email, password=password
@@ -380,9 +368,7 @@ def test_user_public_exposes_verification_flag(
     assert r.json()["is_email_verified"] is False
 
 
-def test_signup_normalizes_email_case(
-    client: TestClient, db: Session
-) -> None:
+def test_signup_normalizes_email_case(client: TestClient, db: Session) -> None:
     """Mailbox delivery is case-insensitive, so case variants of the same
     address must resolve to a single account (no duplicate registration)."""
     mixed = "MixedCase@Example.COM"
@@ -417,9 +403,7 @@ def test_login_is_case_insensitive(client: TestClient) -> None:
     assert "access_token" in r.json()
 
 
-def test_server_quota_requires_verified_email(
-    client: TestClient, db: Session
-) -> None:
+def test_server_quota_requires_verified_email(client: TestClient, db: Session) -> None:
     """With the mail backend on, server-billed free usage is gated on email
     verification (bring-your-own-key usage is not)."""
     with _email_enabled():
@@ -448,9 +432,7 @@ def test_recover_password_never_500s_when_smtp_disabled(
         registered = client.post(
             f"{settings.API_V1_STR}/password-recovery/{user.email}"
         )
-        ghost = client.post(
-            f"{settings.API_V1_STR}/password-recovery/{random_email()}"
-        )
+        ghost = client.post(f"{settings.API_V1_STR}/password-recovery/{random_email()}")
     assert registered.status_code == 200
     assert registered.json() == {"message": "密码重置链接已发送，请查收"}
     assert ghost.status_code == 200
@@ -470,13 +452,9 @@ def test_purpose_token_as_bearer_is_403_not_500(
     assert r.json()["detail"] == "无法验证凭据"
 
 
-def test_update_email_null_is_rejected(
-    client: TestClient, db: Session
-) -> None:
+def test_update_email_null_is_rejected(client: TestClient, db: Session) -> None:
     email, password = _signup(client)
-    headers = user_authentication_headers(
-        client=client, email=email, password=password
-    )
+    headers = user_authentication_headers(client=client, email=email, password=password)
     r = client.patch(
         f"{settings.API_V1_STR}/users/me",
         headers=headers,

@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Literal
 
 from pgvector.sqlalchemy import Vector
@@ -335,7 +335,9 @@ class Notebook(NotebookBase, table=True):
         sa_type=DateTime(timezone=True),  # type: ignore
     )
     owner: User | None = Relationship(back_populates="notebooks")
-    sources: list["Source"] = Relationship(back_populates="notebook", cascade_delete=True)
+    sources: list["Source"] = Relationship(
+        back_populates="notebook", cascade_delete=True
+    )
     conversations: list["Conversation"] = Relationship(
         back_populates="notebook", cascade_delete=True
     )
@@ -472,6 +474,9 @@ class Conversation(SQLModel, table=True):
     messages: list["ConversationMessage"] = Relationship(
         back_populates="conversation", cascade_delete=True
     )
+    study_plans: list["StudyPlan"] = Relationship(
+        back_populates="conversation", cascade_delete=True
+    )
 
 
 class ConversationPublic(SQLModel):
@@ -486,6 +491,105 @@ class ConversationPublic(SQLModel):
 class ConversationsPublic(SQLModel):
     data: list[ConversationPublic]
     count: int
+
+
+StudyPlanDifficulty = Literal["beginner", "intermediate", "advanced"]
+
+
+class StudyPlanGenerateRequest(SQLModel):
+    timezone: str = Field(default="Asia/Shanghai", min_length=1, max_length=64)
+
+
+class StudyPlanUpdate(SQLModel):
+    reminder_enabled: bool | None = None
+    timezone: str | None = Field(default=None, min_length=1, max_length=64)
+
+
+class StudyTaskUpdate(SQLModel):
+    is_completed: bool
+
+
+class StudyPlan(SQLModel, table=True):
+    __tablename__ = "study_plan"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    conversation_id: uuid.UUID = Field(
+        foreign_key="conversation.id",
+        nullable=False,
+        ondelete="CASCADE",
+        index=True,
+        unique=True,
+    )
+    title: str = Field(max_length=255)
+    summary: str
+    difficulty: str = Field(max_length=16)
+    start_date: date
+    end_date: date
+    timezone: str = Field(default="Asia/Shanghai", max_length=64)
+    reminder_enabled: bool = False
+    last_reminder_date: date | None = None
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+    updated_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+    conversation: Conversation | None = Relationship(back_populates="study_plans")
+    tasks: list["StudyTask"] = Relationship(back_populates="plan", cascade_delete=True)
+
+
+class StudyTask(SQLModel, table=True):
+    __tablename__ = "study_task"
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    plan_id: uuid.UUID = Field(
+        foreign_key="study_plan.id",
+        nullable=False,
+        ondelete="CASCADE",
+        index=True,
+    )
+    title: str = Field(max_length=255)
+    description: str
+    start_date: date
+    end_date: date
+    estimated_minutes: int = Field(default=45, ge=15, le=480)
+    sort_order: int = Field(default=0, ge=0)
+    is_completed: bool = False
+    created_at: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
+    plan: StudyPlan | None = Relationship(back_populates="tasks")
+
+
+class StudyTaskPublic(SQLModel):
+    id: uuid.UUID
+    title: str
+    description: str
+    start_date: date
+    end_date: date
+    estimated_minutes: int
+    sort_order: int
+    is_completed: bool
+
+
+class StudyPlanPublic(SQLModel):
+    id: uuid.UUID
+    conversation_id: uuid.UUID
+    title: str
+    summary: str
+    difficulty: StudyPlanDifficulty
+    start_date: date
+    end_date: date
+    timezone: str
+    reminder_enabled: bool
+    reminder_time: str = "09:00"
+    email_reminder_available: bool
+    created_at: datetime
+    updated_at: datetime
+    tasks: list[StudyTaskPublic]
 
 
 AnswerMode = Literal["grounded", "hybrid", "knowledge"]

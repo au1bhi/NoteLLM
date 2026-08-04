@@ -66,9 +66,7 @@ def _parse_base_url(base_url: str) -> URL:
     except httpx.InvalidURL as error:
         raise HTTPException(status_code=422, detail=_BLOCKED_DETAIL) from error
     if parsed.scheme not in {"http", "https"} or not parsed.host:
-        raise HTTPException(
-            status_code=422, detail="base_url 必须是 http(s) URL"
-        )
+        raise HTTPException(status_code=422, detail="base_url 必须是 http(s) URL")
     return parsed
 
 

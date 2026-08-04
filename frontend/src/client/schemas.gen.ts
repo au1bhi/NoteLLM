@@ -849,6 +849,126 @@ export const StudyGuidePublicSchema = {
     title: 'StudyGuidePublic'
 } as const;
 
+export const StudyPlanGenerateRequestSchema = {
+    properties: {
+        timezone: {
+            type: 'string',
+            maxLength: 64,
+            minLength: 1,
+            title: 'Timezone',
+            default: 'Asia/Shanghai'
+        }
+    },
+    type: 'object',
+    title: 'StudyPlanGenerateRequest'
+} as const;
+
+export const StudyPlanPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        conversation_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Conversation Id'
+        },
+        title: {
+            type: 'string',
+            title: 'Title'
+        },
+        summary: {
+            type: 'string',
+            title: 'Summary'
+        },
+        difficulty: {
+            type: 'string',
+            enum: ['beginner', 'intermediate', 'advanced'],
+            title: 'Difficulty'
+        },
+        start_date: {
+            type: 'string',
+            format: 'date',
+            title: 'Start Date'
+        },
+        end_date: {
+            type: 'string',
+            format: 'date',
+            title: 'End Date'
+        },
+        timezone: {
+            type: 'string',
+            title: 'Timezone'
+        },
+        reminder_enabled: {
+            type: 'boolean',
+            title: 'Reminder Enabled'
+        },
+        reminder_time: {
+            type: 'string',
+            title: 'Reminder Time',
+            default: '09:00'
+        },
+        email_reminder_available: {
+            type: 'boolean',
+            title: 'Email Reminder Available'
+        },
+        created_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Created At'
+        },
+        updated_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Updated At'
+        },
+        tasks: {
+            items: {
+                '$ref': '#/components/schemas/StudyTaskPublic'
+            },
+            type: 'array',
+            title: 'Tasks'
+        }
+    },
+    type: 'object',
+    required: ['id', 'conversation_id', 'title', 'summary', 'difficulty', 'start_date', 'end_date', 'timezone', 'reminder_enabled', 'email_reminder_available', 'created_at', 'updated_at', 'tasks'],
+    title: 'StudyPlanPublic'
+} as const;
+
+export const StudyPlanUpdateSchema = {
+    properties: {
+        reminder_enabled: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Reminder Enabled'
+        },
+        timezone: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 64,
+                    minLength: 1
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Timezone'
+        }
+    },
+    type: 'object',
+    title: 'StudyPlanUpdate'
+} as const;
+
 export const StudySectionPublicSchema = {
     properties: {
         title: {
@@ -863,6 +983,61 @@ export const StudySectionPublicSchema = {
     type: 'object',
     required: ['title', 'content'],
     title: 'StudySectionPublic'
+} as const;
+
+export const StudyTaskPublicSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        title: {
+            type: 'string',
+            title: 'Title'
+        },
+        description: {
+            type: 'string',
+            title: 'Description'
+        },
+        start_date: {
+            type: 'string',
+            format: 'date',
+            title: 'Start Date'
+        },
+        end_date: {
+            type: 'string',
+            format: 'date',
+            title: 'End Date'
+        },
+        estimated_minutes: {
+            type: 'integer',
+            title: 'Estimated Minutes'
+        },
+        sort_order: {
+            type: 'integer',
+            title: 'Sort Order'
+        },
+        is_completed: {
+            type: 'boolean',
+            title: 'Is Completed'
+        }
+    },
+    type: 'object',
+    required: ['id', 'title', 'description', 'start_date', 'end_date', 'estimated_minutes', 'sort_order', 'is_completed'],
+    title: 'StudyTaskPublic'
+} as const;
+
+export const StudyTaskUpdateSchema = {
+    properties: {
+        is_completed: {
+            type: 'boolean',
+            title: 'Is Completed'
+        }
+    },
+    type: 'object',
+    required: ['is_completed'],
+    title: 'StudyTaskUpdate'
 } as const;
 
 export const TokenSchema = {

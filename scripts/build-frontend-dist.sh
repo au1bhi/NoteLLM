@@ -22,7 +22,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../frontend"
 
 echo "==> Installing dependencies + building SPA ..."
-bun install
+bun install --frozen-lockfile
 # CRITICAL: the release artifact MUST target the same origin. A local
 # frontend/.env.local (or a locally-added VITE_API_URL) would otherwise bake a
 # machine-specific URL into the artifact, making every user's browser send all
