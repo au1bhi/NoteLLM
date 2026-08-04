@@ -1,3 +1,4 @@
+import threading
 from collections.abc import Sequence
 from typing import Protocol
 
@@ -10,6 +11,11 @@ from app.services.provider_settings import ProviderConfig, resolve_api_base
 
 class EmbeddingError(Exception):
     """Raised when a source cannot be embedded by the configured provider."""
+
+
+# Bounds concurrent outbound embedding calls per process (see chat.py — without
+# it a BYOK user pointing at a slow endpoint can pin the whole worker pool).
+_PROVIDER_SEMAPHORE = threading.Semaphore(8)
 
 
 class EmbeddingProvider(Protocol):
@@ -33,17 +39,18 @@ class OpenAICompatibleEmbeddingProvider:
             "/embeddings"
         )
         try:
-            response = pinned_request(
-                "POST",
-                endpoint,
-                headers={"Authorization": f"Bearer {self.config.api_key}"},
-                json={
-                    "model": self.config.model,
-                    "input": list(texts),
-                    "dimensions": settings.EMBEDDING_DIMENSIONS,
-                },
-                timeout=30.0,
-            )
+            with _PROVIDER_SEMAPHORE:
+                response = pinned_request(
+                    "POST",
+                    endpoint,
+                    headers={"Authorization": f"Bearer {self.config.api_key}"},
+                    json={
+                        "model": self.config.model,
+                        "input": list(texts),
+                        "dimensions": settings.EMBEDDING_DIMENSIONS,
+                    },
+                    timeout=30.0,
+                )
             response.raise_for_status()
             data = response.json()["data"]
             vectors = [

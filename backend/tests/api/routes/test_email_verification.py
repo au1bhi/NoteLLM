@@ -272,8 +272,9 @@ def test_update_email_requires_current_password(
         assert wrong_pw.status_code == 400
         assert _user_from_db(db, email).email == email  # unchanged
 
-        # Correct password -> email changes, the account drops back to
-        # unverified, and a verification message goes to the new address.
+        # Correct password -> the change is STAGED (pending_email), the account
+        # drops back to unverified, and a verification message goes to the NEW
+        # address. The email itself only moves once the new address verifies.
         with patch("app.utils.send_email", return_value=None) as mock_send:
             ok = client.patch(
                 f"{settings.API_V1_STR}/users/me",
@@ -281,11 +282,24 @@ def test_update_email_requires_current_password(
                 json={"email": new_email, "current_password": password},
             )
         assert ok.status_code == 200
-        user = _user_from_db(db, new_email)
-        assert user.email == new_email
+        user = _user_from_db(db, email)  # current email unchanged
+        assert user.email == email
+        assert user.pending_email == new_email.lower()
         assert user.is_email_verified is False
         mock_send.assert_called_once()
-        assert mock_send.call_args.kwargs["email_to"] == new_email
+        assert mock_send.call_args.kwargs["email_to"] == new_email.lower()
+
+        # Verify the new address -> the staged change is applied.
+        verify_token = generate_verify_email_token(new_email)
+        r = client.post(
+            f"{settings.API_V1_STR}/users/verify-email",
+            json={"token": verify_token},
+        )
+        assert r.status_code == 200
+        user = _user_from_db(db, new_email.lower())
+        assert user.email == new_email.lower()
+        assert user.pending_email is None
+        assert user.is_email_verified is True
 
 
 def test_email_change_cannot_take_over_with_stolen_session(

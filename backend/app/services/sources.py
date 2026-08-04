@@ -15,7 +15,7 @@ from app.services.provider_settings import (
     effective_embedding_config,
     load_user_provider_settings,
 )
-from app.services.usage import QuotaError, reserve_usage
+from app.services.usage import QuotaError, reserve_usage, settle_usage
 
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 150
@@ -193,15 +193,17 @@ def process_source(*, session: Session, source: Source) -> None:
             if notebook
             else None
         )
+        embedded_chars = 0
         if notebook:
             # Reserve the exact embedding char count atomically before calling
             # the provider, so a single oversized upload cannot blow past the
             # monthly allowance and concurrent uploads serialize correctly.
+            embedded_chars = sum(len(chunk.content) for chunk in chunks)
             reserve_usage(
                 session=session,
                 user_id=notebook.owner_id,
                 user_settings=user_settings,
-                embedding_chars=sum(len(chunk.content) for chunk in chunks),
+                embedding_chars=embedded_chars,
             )
         embedding_provider = get_embedding_provider(
             effective_embedding_config(user_settings)
@@ -241,6 +243,14 @@ def process_source(*, session: Session, source: Source) -> None:
         QuotaError,
         fitz.FileDataError,
     ) as error:
+        # Refund the embedding reservation when the provider call failed, so a
+        # burst of failed uploads cannot drain the monthly allowance.
+        if notebook and embedded_chars:
+            settle_usage(
+                session=session,
+                user_id=notebook.owner_id,
+                embedding_chars=-embedded_chars,
+            )
         mark_failed(str(error))
     except Exception as error:
         # Never leave the source stuck in "processing" on an unexpected error.

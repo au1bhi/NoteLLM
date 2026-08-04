@@ -23,8 +23,13 @@ def _canonical(email: str) -> str:
     if not sep:
         return email.strip().lower()
     domain = domain.strip().lower()
-    if domain in {"gmail.com", "googlemail.com"}:
-        local = local.split("+", 1)[0].replace(".", "")
+    if domain == "googlemail.com":
+        domain = "gmail.com"
+    if domain in {"hotmail.com", "live.com", "msn.com"}:
+        domain = "outlook.com"
+    local = local.split("+", 1)[0]
+    if domain == "gmail.com":
+        local = local.replace(".", "")
     return f"{local.lower()}@{domain}"
 
 

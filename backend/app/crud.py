@@ -43,7 +43,15 @@ def update_user(*, session: Session, db_user: User, user_in: UserUpdate) -> Any:
         user_data["email"] = user_data["email"].strip().lower()
         # Keep the unique canonical identity in sync with the current email
         # (one live account per physical mailbox).
-        extra_data["email_canonical"] = canonical_email(user_data["email"])
+        canonical = canonical_email(user_data["email"])
+        extra_data["email_canonical"] = canonical
+        # Track every canonical email the account has used so the allowance
+        # tombstone on a later deletion covers the admin-assigned address too
+        # (mirrors the self-service path in users.py update_user_me).
+        history = list(db_user.email_history or [])
+        if canonical not in history:
+            history.append(canonical)
+        extra_data["email_history"] = history
     db_user.sqlmodel_update(user_data, update=extra_data)
     session.add(db_user)
     session.commit()

@@ -137,6 +137,12 @@ class User(UserBase, table=True):
     # so a physical mailbox can never hold more than one live account (kills
     # concurrent allowance farming). Set in crud.create_user / update paths.
     email_canonical: str = Field(max_length=255, unique=True, index=True)
+    # A requested email change is NOT applied immediately: it is staged here and
+    # only moves to `email` when the NEW address verifies. This keeps the email
+    # change from being an account-enumeration/squatting oracle (a PATCH always
+    # returns the same generic result; whether the address is free is only
+    # revealed to the person who can verify it).
+    pending_email: str | None = Field(default=None, max_length=255)
     created_at: datetime | None = Field(
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),  # type: ignore
@@ -151,6 +157,9 @@ class UserPublic(UserBase):
     id: uuid.UUID
     created_at: datetime | None = None
     is_email_verified: bool = False
+    # A staged email change awaiting verification of the new address; the
+    # account's `email` stays unchanged until then.
+    pending_email: str | None = None
 
 
 class UsersPublic(SQLModel):

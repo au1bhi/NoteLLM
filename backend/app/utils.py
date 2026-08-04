@@ -297,28 +297,32 @@ def send_email_safely(
 def canonical_email(email: str) -> str:
     """Canonical mailbox identity used for allowance/anti-farming keys.
 
-    Mailbox delivery is case-insensitive, Gmail/Googlemail treat dots in the
-    local part and ``+tag`` subaddressing as the same inbox, and Outlook/Hotmail/
-    Live/iCloud treat ``+tag`` subaddressing the same way. Without normalization,
-    one physical mailbox could register concurrent subaddress/dot-variant
-    accounts — or delete/re-register under a different spelling — and mint a
-    fresh monthly allowance every time.
+    Mailbox delivery is case-insensitive; ``+tag`` subaddressing is broadly
+    supported (Gmail, Outlook/Hotmail/Live, iCloud, ProtonMail, Fastmail, Zoho,
+    Google-Workspace domains, and most modern providers deliver to the same
+    inbox), Gmail additionally ignores dots in the local part, and Googlemail /
+    Hotmail / Live are aliases of Gmail / Outlook. Normalizing all of these —
+    provider-agnostically, not a hardcoded list — is what makes the
+    one-live-account-per-mailbox and allowance-tombstone guarantees hold for
+    ANY domain an operator allows (including a `*` allowlist).
     """
     local, sep, domain = email.rpartition("@")
     if not sep:
         return email.strip().lower()
     domain = domain.strip().lower()
-    if domain in {"gmail.com", "googlemail.com"}:
-        # Gmail ignores dots and everything after '+' in the local part.
-        local = local.split("+", 1)[0].replace(".", "")
-    elif domain in {
-        "outlook.com",
-        "hotmail.com",
-        "live.com",
-        "icloud.com",
-    }:
-        # These providers treat '+tag' subaddressing as the same mailbox.
-        local = local.split("+", 1)[0]
+    # Cross-domain aliases that deliver to the same physical mailbox.
+    if domain == "googlemail.com":
+        domain = "gmail.com"
+    if domain in {"hotmail.com", "live.com", "msn.com"}:
+        domain = "outlook.com"
+    # Strip +tag subaddressing for ALL domains. Tradeoff: a provider that
+    # treats `+tag` as a literal distinct mailbox would be over-collapsed —
+    # acceptable, since subaddressing collapse is the anti-farming default and
+    # the operators can read this caveat.
+    local = local.split("+", 1)[0]
+    if domain == "gmail.com":
+        # Gmail ignores dots in the local part.
+        local = local.replace(".", "")
     return f"{local.lower()}@{domain}"
 
 

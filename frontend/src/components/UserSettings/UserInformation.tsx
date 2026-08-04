@@ -57,8 +57,16 @@ const UserInformation = () => {
   const mutation = useMutation({
     mutationFn: (data: UserUpdateMe) =>
       UsersService.updateUserMe({ requestBody: data }),
-    onSuccess: () => {
-      showSuccessToast("个人信息已更新")
+    onSuccess: (updated) => {
+      // An email change is staged until the NEW address verifies; tell the
+      // user to click the link in the verification mail.
+      if (updated?.pending_email) {
+        showSuccessToast(
+          `验证邮件已发送到 ${updated.pending_email}，点击链接后邮箱才会修改`,
+        )
+      } else {
+        showSuccessToast("个人信息已更新")
+      }
       toggleEditMode()
     },
     onError: (error: Error) => {
@@ -164,7 +172,12 @@ const UserInformation = () => {
                   <FormLabel>邮箱</FormLabel>
                   <div className="flex items-center gap-2 py-2">
                     <p className="truncate max-w-sm">{field.value}</p>
-                    {currentUser?.is_email_verified ? (
+                    {currentUser?.pending_email ? (
+                      <p className="text-xs text-primary">
+                        待验证：{currentUser.pending_email}
+                        （点击邮件中的链接完成修改）
+                      </p>
+                    ) : currentUser?.is_email_verified ? (
                       <Badge>已验证</Badge>
                     ) : (
                       <>

@@ -404,6 +404,8 @@ export const NewPasswordSchema = {
     properties: {
         token: {
             type: 'string',
+            maxLength: 2048,
+            minLength: 1,
             title: 'Token'
         },
         new_password: {
@@ -1197,6 +1199,17 @@ export const UserPublicSchema = {
             type: 'boolean',
             title: 'Is Email Verified',
             default: false
+        },
+        pending_email: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Pending Email'
         }
     },
     type: 'object',

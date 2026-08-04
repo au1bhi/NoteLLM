@@ -179,9 +179,7 @@ def update_user_me(
     )
     if email_changed:
         _require_allowed_email(user_data["email"])
-        # Verify the current password BEFORE revealing whether the target
-        # address is taken: checking existence first would let any authenticated
-        # caller probe registered addresses (409 vs 422).
+        # Verify the current password first (an anti-enumeration ordering).
         if not provided_password:
             raise HTTPException(
                 status_code=422, detail="修改邮箱需要验证当前密码"
@@ -191,30 +189,17 @@ def update_user_me(
         )
         if not verified:
             raise HTTPException(status_code=400, detail="当前密码错误")
-        existing_user = crud.get_user_by_email(
-            session=session, email=user_data["email"]
-        )
-        if existing_user and existing_user.id != current_user.id:
-            # Generic message: a distinguishable "already registered" 409 would
-            # let any authenticated user probe registered addresses (409 vs
-            # 200), an account-enumeration oracle.
-            raise HTTPException(status_code=422, detail="无法修改为指定邮箱")
-        # The new address must be confirmed by its owner. When the mail backend
-        # is configured we downgrade and ask for confirmation; otherwise the
-        # account cannot prove anything, so the flag simply stays.
+        # The change is STAGED, not applied: the email only moves once the NEW
+        # address verifies (see verify_email). This closes the
+        # account-enumeration/email-squatting oracle — a PATCH returns the same
+        # result whether or not the target is taken, because no existence check
+        # happens here and the response never confirms an immediate change.
+        current_user.pending_email = user_data["email"].lower()
         if settings.emails_enabled:
             current_user.is_email_verified = False
-        # Track every canonical email this account has used, so the allowance
-        # tombstone on a later deletion covers the released address too.
-        history = list(current_user.email_history or [])
-        canonical = canonical_email(user_data["email"])
-        if canonical not in history:
-            history.append(canonical)
-        current_user.email_history = history
-        # The unique email_canonical column enforces one live account per
-        # mailbox at the DB level (blocks concurrent subaddress farming); a
-        # conflict surfaces as an IntegrityError at commit -> generic 422.
-        current_user.email_canonical = canonical
+        # Remove email so sqlmodel_update does not apply it yet; history and
+        # email_canonical are updated only when the change is verified.
+        user_data.pop("email")
 
     current_user.sqlmodel_update(user_data)
     session.add(current_user)
@@ -227,11 +212,15 @@ def update_user_me(
         raise HTTPException(status_code=422, detail="无法修改为指定邮箱")
     session.refresh(current_user)
 
-    if email_changed and settings.emails_enabled:
-        email_data = generate_verify_email_email(email_to=current_user.email)
-        if recipient_send_cooldown(current_user.email):
+    if email_changed and settings.emails_enabled and current_user.pending_email:
+        # The verification link goes to the NEW (pending) address — only its
+        # owner can complete the change.
+        email_data = generate_verify_email_email(
+            email_to=current_user.pending_email
+        )
+        if recipient_send_cooldown(current_user.pending_email):
             send_email_safely(
-                email_to=current_user.email,
+                email_to=current_user.pending_email,
                 subject=email_data.subject,
                 html_content=email_data.html_content,
                 text_content=email_data.text_content,
@@ -671,18 +660,51 @@ def verify_email(session: SessionDep, body: VerifyEmailRequest) -> Any:
     """
     Confirm email ownership with the signed link token. The endpoint is
     idempotent and reveals nothing beyond "invalid or expired" whether the token
-    is malformed, expired, or refers to a removed account.
+    is malformed, expired, or refers to a removed account. If the token matches
+    a STAGED email change (pending_email), the change is applied here.
     """
     email = verify_email_token(token=body.token)
     if not email:
         raise HTTPException(status_code=400, detail="验证链接无效或已过期")
-    user = crud.get_user_by_email(session=session, email=email)
+    email = email.strip().lower()
+    # The token may refer to the current email (initial signup verification) or
+    # to a pending email change whose account still holds its old address.
+    user = session.exec(
+        select(User).where(User.pending_email == email)
+    ).first()
+    if user is None:
+        user = crud.get_user_by_email(session=session, email=email)
     if not user or not user.is_active:
         raise HTTPException(status_code=400, detail="验证链接无效或已过期")
-    if not user.is_email_verified:
+
+    if user.pending_email and user.pending_email.lower() == email:
+        # Apply the staged email change. One live account per canonical mailbox
+        # is re-checked here (a variant of the target may have been registered
+        # since the change was staged); a conflict silently clears the pending
+        # change with the generic error.
+        new_canonical = canonical_email(email)
+        conflict = session.exec(
+            select(User).where(
+                User.email_canonical == new_canonical, User.id != user.id
+            )
+        ).first()
+        if conflict:
+            user.pending_email = None
+            session.add(user)
+            session.commit()
+            raise HTTPException(status_code=400, detail="验证链接无效或已过期")
+        user.email = email
+        user.email_canonical = new_canonical
+        history = list(user.email_history or [])
+        if new_canonical not in history:
+            history.append(new_canonical)
+        user.email_history = history
+        user.pending_email = None
         user.is_email_verified = True
-        session.add(user)
-        session.commit()
+    elif not user.is_email_verified:
+        user.is_email_verified = True
+    session.add(user)
+    session.commit()
     return Message(message="邮箱验证成功")
 
 
@@ -721,13 +743,16 @@ def resend_verification_me(current_user: CurrentUser) -> Any:
     Re-send the verification email to the signed-in user (used by the reminder
     banner in the app, so no address has to be typed).
     """
-    if current_user.is_email_verified:
+    # A staged email change takes priority: the pending address needs its
+    # verification link re-sent.
+    target = current_user.pending_email or current_user.email
+    if current_user.is_email_verified and not current_user.pending_email:
         return Message(message="邮箱已验证")
     if settings.emails_enabled:
-        email_data = generate_verify_email_email(email_to=current_user.email)
-        if recipient_send_cooldown(current_user.email):
+        email_data = generate_verify_email_email(email_to=target)
+        if recipient_send_cooldown(target):
             send_email_safely(
-                email_to=current_user.email,
+                email_to=target,
                 subject=email_data.subject,
                 html_content=email_data.html_content,
                 text_content=email_data.text_content,

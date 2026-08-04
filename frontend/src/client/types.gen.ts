@@ -260,6 +260,7 @@ export type UserPublic = {
     id: string;
     created_at?: (string | null);
     is_email_verified?: boolean;
+    pending_email?: (string | null);
 };
 
 export type UserRegister = {

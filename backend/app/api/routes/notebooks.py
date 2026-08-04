@@ -241,11 +241,12 @@ def search_notebook(
     try:
         user_settings = load_user_provider_settings(session, current_user.id)
         # Reserve the exact query length atomically before embedding it.
+        embedding_reserved = len(search_in.query)
         reserve_usage(
             session=session,
             user_id=current_user.id,
             user_settings=user_settings,
-            embedding_chars=len(search_in.query),
+            embedding_chars=embedding_reserved,
         )
         retrieved = retrieve_chunks(
             session=session,
@@ -257,6 +258,14 @@ def search_notebook(
             limit=search_in.limit,
         )
     except EmbeddingError as error:
+        # Refund the embedding reservation — the provider call failed, so the
+        # allowance must not be permanently consumed.
+        if embedding_reserved:
+            settle_usage(
+                session=session,
+                user_id=current_user.id,
+                embedding_chars=-embedding_reserved,
+            )
         raise HTTPException(status_code=503, detail=str(error)) from error
     except QuotaError as error:
         raise HTTPException(status_code=429, detail=str(error)) from error

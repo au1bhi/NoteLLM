@@ -16,6 +16,12 @@ from app.services.provider_settings import ProviderConfig, resolve_api_base
 # more than the reservation.
 MAX_OUTPUT_TOKENS = 2000
 
+# Bounds concurrent outbound provider calls per process. The chat/embedding
+# calls run on the shared anyio worker threadpool (default 40 workers); without
+# a bound a single authenticated BYOK user pointing at a slow endpoint could
+# pin all workers and stall every other request (availability DoS).
+_PROVIDER_SEMAPHORE = threading.Semaphore(8)
+
 
 class ChatError(Exception):
     """Raised when the configured chat provider cannot produce a safe answer."""
@@ -75,19 +81,20 @@ class OpenAICompatibleChatProvider:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
         try:
-            response = pinned_request(
-                "POST",
-                endpoint,
-                headers={"Authorization": f"Bearer {self.config.api_key}"},
-                json={
-                    "model": self.config.model,
-                    "messages": messages,
-                    "response_format": {"type": "json_object"},
-                    "temperature": 0,
-                    "max_tokens": MAX_OUTPUT_TOKENS,
-                },
-                timeout=60.0,
-            )
+            with _PROVIDER_SEMAPHORE:
+                response = pinned_request(
+                    "POST",
+                    endpoint,
+                    headers={"Authorization": f"Bearer {self.config.api_key}"},
+                    json={
+                        "model": self.config.model,
+                        "messages": messages,
+                        "response_format": {"type": "json_object"},
+                        "temperature": 0,
+                        "max_tokens": MAX_OUTPUT_TOKENS,
+                    },
+                    timeout=60.0,
+                )
             response.raise_for_status()
             payload = response.json()
             content = payload["choices"][0]["message"]["content"]

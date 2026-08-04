@@ -777,7 +777,8 @@ export class UsersService {
      * Verify Email
      * Confirm email ownership with the signed link token. The endpoint is
      * idempotent and reveals nothing beyond "invalid or expired" whether the token
-     * is malformed, expired, or refers to a removed account.
+     * is malformed, expired, or refers to a removed account. If the token matches
+     * a STAGED email change (pending_email), the change is applied here.
      * @param data The data for the request.
      * @param data.requestBody
      * @returns Message Successful Response
