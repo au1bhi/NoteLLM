@@ -11,5 +11,9 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 
+# Frontend build artifact produced by scripts/build-frontend-dist.sh (injected
+# into the frontend-dist volume on low-memory servers; ~6MB, never commit).
+/frontend-dist.tar.gz
+
 # Local uploads (test artifacts)
 backend/data/uploads/

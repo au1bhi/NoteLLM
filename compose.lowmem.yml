@@ -16,6 +16,11 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile.nginx
+      # !reset drops the base compose.yml SPA-build args (BUN_IMAGE, NODE_ENV,
+      # VITE_API_URL, NPM_REGISTRY); keep only the nginx base image (mirror-aware
+      # for restricted networks).
+      args: !reset
+        NGINX_IMAGE: ${REGISTRY_MIRROR:-}library/nginx:1
     # The nginx image already serves /usr/share/nginx/html; mounting the
     # pre-built SPA there decouples the static assets from the image so the
     # server never runs the heavy frontend build.

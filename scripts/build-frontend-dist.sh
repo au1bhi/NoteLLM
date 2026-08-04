@@ -27,4 +27,4 @@ bun run build
 
 OUT="../frontend-dist.tar.gz"
 tar -czf "$OUT" -C dist .
-echo "OK: built $(cd dist && ls index-*.js) -> $OUT"
+echo "OK: built SPA -> $OUT ($(du -h "$OUT" | cut -f1))"

@@ -404,7 +404,7 @@ collect_config() {
   if [[ "$PROFILE" == "prod" ]]; then
     local def
     def="$(env_get DOMAIN)"; [[ -n "$def" ]] || def="$ARGS_DOMAIN"
-    ask_var DOMAIN "你的域名（例如 notellm.au1bhi.com）" "$def"
+    ask_var DOMAIN "你的域名（例如 example.com）" "$def"
     while [[ -z "$DOMAIN" ]] || [[ "$DOMAIN" == "localhost" ]]; do
       if [[ "$ASSUME_YES" == "1" ]] || [[ ! -t 0 ]]; then
         err "生产部署需要一个公网域名。请用环境变量指定后再运行："
@@ -413,7 +413,7 @@ collect_config() {
       fi
       warn "生产部署需要一个公网域名，且 DNS 需已指向本服务器。"
       DOMAIN=""
-      ask_var DOMAIN "你的域名（例如 notellm.au1bhi.com）" ""
+      ask_var DOMAIN "你的域名（例如 example.com）" ""
     done
     FRONTEND_HOST="https://${DOMAIN}"
     ENVIRONMENT="production"
