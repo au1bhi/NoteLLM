@@ -66,11 +66,17 @@ if [[ ! -f "$PWD/compose.yml" ]]; then
   export GIT_TERMINAL_PROMPT=0
 
   if [[ -f "$INSTALL_DIR/compose.yml" ]]; then
-    if command -v git >/dev/null 2>&1; then
+    if [[ -d "$INSTALL_DIR/.git" ]] && command -v git >/dev/null 2>&1; then
       echo "==> 更新 $INSTALL_DIR ..."
       # timeout 防止被墙网络让 git pull 无限挂起。
       timeout 60 git -C "$INSTALL_DIR" pull --ff-only >/dev/null 2>&1 \
         || warn "git pull 失败或超时（网络受限/本地改动），使用现有代码继续。"
+    else
+      # 源码包安装（无 .git）：重新下载源码包即是最新代码，直接覆盖更新。
+      echo "==> 更新 $INSTALL_DIR（源码包安装，重新下载最新代码）..."
+      curl -fLsS --max-time 300 "$TARBALL_URL" -o /tmp/notellm-src.tar.gz
+      tar -xzf /tmp/notellm-src.tar.gz --strip-components=1 -C "$INSTALL_DIR"
+      rm -f /tmp/notellm-src.tar.gz
     fi
     cd "$INSTALL_DIR"
   else
