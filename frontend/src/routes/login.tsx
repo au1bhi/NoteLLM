@@ -4,7 +4,9 @@ import {
   Link as RouterLink,
   redirect,
 } from "@tanstack/react-router"
+import { useEffect } from "react"
 import { useForm } from "react-hook-form"
+import { toast } from "sonner"
 import { z } from "zod"
 
 import type { Body_login_login_access_token as AccessToken } from "@/client"
@@ -21,6 +23,7 @@ import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { PasswordInput } from "@/components/ui/password-input"
 import useAuth, { isLoggedIn } from "@/hooks/useAuth"
+import { AUTH_EXPIRED_KEY } from "@/lib/auth"
 
 const formSchema = z.object({
   username: z.email({ message: "邮箱地址无效" }),
@@ -61,6 +64,15 @@ function Login() {
       password: "",
     },
   })
+
+  useEffect(() => {
+    if (sessionStorage.getItem(AUTH_EXPIRED_KEY)) {
+      sessionStorage.removeItem(AUTH_EXPIRED_KEY)
+      toast.error("登录已过期，请重新登录", {
+        description: "长时间未操作，为保障账户安全已退出登录。",
+      })
+    }
+  }, [])
 
   const onSubmit = (data: FormData) => {
     if (loginMutation.isPending) return

@@ -7,6 +7,7 @@ import {
   NotebooksService,
   OpenAPI,
 } from "@/client"
+import { AUTH_EXPIRED_KEY, clearToken, getToken } from "@/lib/auth"
 
 type StreamHandlers = {
   onCitations: (citations: CitationPublic[]) => void
@@ -50,12 +51,21 @@ export const conversationsApi = {
             : undefined,
         }),
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("access_token") || ""}`,
+          Authorization: `Bearer ${getToken() ?? ""}`,
           "Content-Type": "application/json",
         },
         method: "POST",
       },
     )
+    // Streaming requests bypass the generated client, so a 401 here never
+    // reached the QueryClient error handler. Treat it like every other stale
+    // session: drop the token and land on the login page immediately.
+    if (response.status === 401 || response.status === 403) {
+      clearToken()
+      sessionStorage.setItem(AUTH_EXPIRED_KEY, "1")
+      window.location.href = "/login"
+      throw new Error("登录已过期，请重新登录")
+    }
     if (!response.ok || !response.body) {
       throw new Error("无法启动回答流")
     }

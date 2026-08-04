@@ -8,11 +8,18 @@ import {
   type UserRegister,
   UsersService,
 } from "@/client"
+import {
+  AUTH_EXPIRED_KEY,
+  clearToken,
+  getToken,
+  isTokenExpired,
+  setToken,
+} from "@/lib/auth"
 import { handleError } from "@/utils"
 import useCustomToast from "./useCustomToast"
 
 const isLoggedIn = () => {
-  return localStorage.getItem("access_token") !== null
+  return getToken() !== null && !isTokenExpired()
 }
 
 const useAuth = () => {
@@ -42,7 +49,7 @@ const useAuth = () => {
     const response = await LoginService.loginAccessToken({
       formData: data,
     })
-    localStorage.setItem("access_token", response.access_token)
+    setToken(response.access_token)
   }
 
   const loginMutation = useMutation({
@@ -54,7 +61,8 @@ const useAuth = () => {
   })
 
   const logout = () => {
-    localStorage.removeItem("access_token")
+    clearToken()
+    sessionStorage.removeItem(AUTH_EXPIRED_KEY)
     queryClient.removeQueries({ queryKey: ["currentUser"] })
     queryClient.removeQueries({ queryKey: ["user-usage"] })
     queryClient.removeQueries({ queryKey: ["provider-settings"] })

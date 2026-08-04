@@ -14,19 +14,60 @@ import "@fontsource-variable/geist"
 import "@fontsource-variable/geist-mono"
 import "@fontsource-variable/noto-serif-sc"
 import "./index.css"
+import {
+  AUTH_EXPIRED_KEY,
+  clearToken,
+  getToken,
+  isTokenExpired,
+} from "./lib/auth"
 import { routeTree } from "./routeTree.gen"
 
 OpenAPI.BASE = import.meta.env.VITE_API_URL ?? ""
-OpenAPI.TOKEN = async () => {
-  return localStorage.getItem("access_token") || ""
+OpenAPI.TOKEN = async () => getToken() ?? ""
+
+// An expired token at startup is the "fake offline" bug: the dashboard renders
+// as if usable while every request 401s and only redirects to /login after
+// retries. Clear it before the first render so `_layout.beforeLoad` redirects
+// straight to the login page with a reason.
+if (isTokenExpired()) {
+  clearToken()
+  sessionStorage.setItem(AUTH_EXPIRED_KEY, "1")
 }
 
-const handleApiError = (error: Error) => {
-  if (error instanceof ApiError && [401, 403].includes(error.status)) {
-    localStorage.removeItem("access_token")
-    window.location.href = "/login"
+let redirectingToLogin = false
+const redirectToLogin = (expired: boolean) => {
+  // If we already are on a public route there is nothing to kick from.
+  if (
+    [
+      "/login",
+      "/signup",
+      "/recover-password",
+      "/reset-password",
+      "/verify-email",
+    ].includes(window.location.pathname)
+  ) {
+    clearToken()
+    return
   }
+  if (redirectingToLogin) return
+  redirectingToLogin = true
+  clearToken()
+  if (expired) sessionStorage.setItem(AUTH_EXPIRED_KEY, "1")
+  window.location.href = "/login"
+  // Coalesce concurrent 401s from parallel page-load queries; later
+  // expirations (next session) must be able to redirect again.
+  window.setTimeout(() => {
+    redirectingToLogin = false
+  }, 1500)
 }
+
+const isAuthFailure = (error: Error) =>
+  error instanceof ApiError && (error.status === 401 || error.status === 403)
+
+const handleApiError = (error: Error) => {
+  if (isAuthFailure(error)) redirectToLogin(true)
+}
+
 const queryClient = new QueryClient({
   queryCache: new QueryCache({
     onError: handleApiError,
@@ -34,6 +75,30 @@ const queryClient = new QueryClient({
   mutationCache: new MutationCache({
     onError: handleApiError,
   }),
+  defaultOptions: {
+    queries: {
+      // Don't retry auth failures. The default 3 retries keep the dashboard on
+      // skeletons for seconds before the onError redirect finally fires — the
+      // exact "clicking around a page that doesn't work" symptom. Fail fast so
+      // the 401 handling above runs on the very first response.
+      retry: (_failureCount, error) => !isAuthFailure(error),
+    },
+  },
+})
+
+const checkExpiredSession = () => {
+  if (getToken() && isTokenExpired()) {
+    redirectToLogin(true)
+  }
+}
+
+// Kick an open tab the moment its session lapses, and immediately when the
+// user comes back to it after being away — a stale page should never look
+// usable even before any request happens.
+window.setInterval(checkExpiredSession, 30_000)
+window.addEventListener("focus", checkExpiredSession)
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") checkExpiredSession()
 })
 
 const router = createRouter({ routeTree })
