@@ -59,7 +59,9 @@
 - 安全加固：登录/注册/改密等接口限流（429 带 Retry-After）；SSRF 校验解析 DNS 并拦截十进制/十六进制/简写 IP 与私有/回环/云元数据地址；`SECRET_KEY` 生产环境强制 ≥32 字符；移除未鉴权的 `/private` 路由；SSE 越权改为前置依赖返回 404；nginx 增加 CSP 与安全响应头；提示词增加“不得复述指令”约束。
 - 可移植性：后端要求降为 Python ≥3.12（去除 3.14 专属 `except A, B:` 语法与前置类引用，改括号形式与字符串前置引用），便于开源社区与论文复现环境接入。
 
-2026-08 迭代验收证据：后端全套 pytest 131 项通过（含 SSRF 绕过表单、原子额度预留、会话删除、SSE 越权、API 格式等新增用例），mypy 与 Ruff 通过；前端 `bun run --filter frontend build` 与 lint 通过；`AGENTS.md` 已同步新增能力与约束。
+2026-08 迭代验收证据：后端全套 pytest 131 项通过（含 SSRF 绕过表单、原子额度预留、会话删除、SSE 越权、API 格式等新增用例），mypy 与 Ruff 通过；前端 `bun run --filter frontend build` 与 lint 通过。2026-08-04 已根据此后 Git 历史与当前代码再次同步 `AGENTS.md`，补充邮箱身份/验证、令牌撤销、配额预留—结算、固定公网 IP 的 provider 请求、一键部署与低内存构建约束。
+
+2026-08-04 生产部署验收：在 2 核、约 1.6 GiB 内存的 Ubuntu 22.04 ECS 上验证 `install.sh --prod --yes --dry-run` 会自动选择低内存 Compose；当前 `compose.yml + compose.traefik.yml + compose.lowmem.yml` 配置合法，后端与 PostgreSQL 健康且无重启/OOM，Alembic 位于 `46a98a434c83 (head)`，pgvector 为 0.8.5。公网前端与 API 健康检查返回 200，生产 `/docs` 返回 404，Adminer/Traefik 返回 401，TLS 与 CSP/HSTS 等响应头有效。待处理的运维问题：服务器 Git 工作树为旧 HEAD 加手工覆盖，`git pull --ff-only` 无法可靠升级；安装总结仍展示生产环境已关闭的 `/docs` 链接；SSH 仍允许 root 密码登录。
 
 完成条件：可复现演示和论文所需证据齐全。
 
