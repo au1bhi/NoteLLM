@@ -63,9 +63,10 @@ const useAuth = () => {
   const logout = () => {
     clearToken()
     sessionStorage.removeItem(AUTH_EXPIRED_KEY)
-    queryClient.removeQueries({ queryKey: ["currentUser"] })
-    queryClient.removeQueries({ queryKey: ["user-usage"] })
-    queryClient.removeQueries({ queryKey: ["provider-settings"] })
+    // Drop EVERY cached query (currentUser, notebooks, sources, conversations,
+    // provider-settings, …) so a different user logging in on this tab can
+    // never see the previous user's documents or chat history from memory.
+    queryClient.clear()
     navigate({ to: "/login" })
   }
 

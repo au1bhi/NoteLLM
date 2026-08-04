@@ -53,3 +53,28 @@ export function isTokenExpired(): boolean {
   const exp = decodeTokenExpiry(token)
   return exp === null || exp * 1000 <= Date.now()
 }
+
+/**
+ * Read a one-time JWT delivered in the URL fragment (`#token=...`) and strip
+ * the fragment from the address bar and history in the same call.
+ *
+ * The fragment keeps the token out of proxy access logs and the Referer
+ * header; stripping it once the SPA has consumed it also keeps it out of
+ * browser history — so an opened-but-unused reset/verify link cannot be
+ * replayed from history on a shared machine for the token's full validity
+ * window (reset 48h, verify 72h).
+ */
+export function consumeTokenFromHash(): string {
+  const hash = window.location.hash
+  const token = hash
+    ? (new URLSearchParams(hash.replace(/^#/, "")).get("token") ?? "")
+    : ""
+  if (hash) {
+    window.history.replaceState(
+      null,
+      "",
+      window.location.pathname + window.location.search,
+    )
+  }
+  return token
+}

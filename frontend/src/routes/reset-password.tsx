@@ -23,6 +23,7 @@ import { LoadingButton } from "@/components/ui/loading-button"
 import { PasswordInput } from "@/components/ui/password-input"
 import { isLoggedIn } from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
+import { consumeTokenFromHash } from "@/lib/auth"
 import { handleError } from "@/utils"
 
 const formSchema = z
@@ -42,22 +43,23 @@ type FormData = z.infer<typeof formSchema>
 
 // The reset JWT is delivered in the URL *fragment* (`#token=...`), never the
 // query string, so it is not written to proxy access logs and is not leaked
-// through the Referer header. Parse it here.
-function tokenFromHash(): string {
-  const hash = window.location.hash
-  if (!hash) return ""
-  return new URLSearchParams(hash.replace(/^#/, "")).get("token") ?? ""
-}
+// through the Referer header. `consumeTokenFromHash` reads it and immediately
+// strips the fragment from the address bar and history, so an opened-but-unused
+// link cannot be replayed from history for the token's 48h validity window.
 
 export const Route = createFileRoute("/reset-password")({
   component: ResetPassword,
-  beforeLoad: () => {
+  beforeLoad: (): { token: string } => {
     if (isLoggedIn()) {
       throw redirect({ to: "/" })
     }
-    if (!tokenFromHash()) {
+    // Consume the fragment token (stripping it from the URL) and thread it
+    // through the route context so the form can submit it.
+    const token = consumeTokenFromHash()
+    if (!token) {
       throw redirect({ to: "/login" })
     }
+    return { token }
   },
   head: () => ({
     meta: [
@@ -69,7 +71,7 @@ export const Route = createFileRoute("/reset-password")({
 })
 
 function ResetPassword() {
-  const token = tokenFromHash()
+  const { token } = Route.useRouteContext()
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const navigate = useNavigate()
 

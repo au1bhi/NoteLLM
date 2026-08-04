@@ -11,18 +11,19 @@ import { ApiError, UsersService } from "@/client"
 import { AuthLayout } from "@/components/Common/AuthLayout"
 import { Button } from "@/components/ui/button"
 import { isLoggedIn } from "@/hooks/useAuth"
+import { consumeTokenFromHash } from "@/lib/auth"
 
 // The verify JWT is delivered in the URL *fragment* (`#token=...`), never the
 // query string, so it is not written to proxy access logs and is not leaked
-// through the Referer header. Parse it here.
-function tokenFromHash(): string {
-  const hash = window.location.hash
-  if (!hash) return ""
-  return new URLSearchParams(hash.replace(/^#/, "")).get("token") ?? ""
-}
+// through the Referer header. `consumeTokenFromHash` reads it and immediately
+// strips the fragment from the address bar and history, so the token does not
+// linger in history for its 72h validity window.
 
 export const Route = createFileRoute("/verify-email")({
   component: VerifyEmail,
+  beforeLoad: (): { token: string } => {
+    return { token: consumeTokenFromHash() }
+  },
   head: () => ({
     meta: [
       {
@@ -33,7 +34,7 @@ export const Route = createFileRoute("/verify-email")({
 })
 
 function VerifyEmail() {
-  const token = tokenFromHash()
+  const { token } = Route.useRouteContext()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
 

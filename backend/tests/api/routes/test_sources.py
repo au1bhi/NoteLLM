@@ -171,3 +171,59 @@ def test_extract_pages_rejects_oversized_text(tmp_path: Path) -> None:
     pages = extract_pages(ok, "text/plain")
     assert len(pages) == 1
     assert len(pages[0].text) == MAX_EXTRACTED_CHARS
+
+
+def test_oversized_upload_does_not_erase_embedding_usage(
+    client: TestClient,
+    db: Session,
+    monkeypatch: MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """A failed embedding reservation (QuotaError) must not refund anything.
+
+    The refund path is only for a reservation that actually succeeded: on
+    QuotaError nothing was debited, so settling `-embedded_chars` would be a
+    phantom decrement that lets an oversized upload erase the user's usage
+    counter and reset their monthly free allowance.
+    """
+    from app.models import UserUsage
+    from app.services.usage import ensure_period
+
+    monkeypatch.setattr(settings, "UPLOADS_DIR", tmp_path)
+    # Make the embedding dimension server-billed so the allowance applies.
+    monkeypatch.setattr(
+        settings, "EMBEDDING_BASE_URL", "https://api.example.com/v1"
+    )
+    monkeypatch.setattr(settings, "EMBEDDING_API_KEY", "server-embed-key")
+    monkeypatch.setattr(settings, "EMBEDDING_MODEL", "embed-3")
+    monkeypatch.setattr(
+        "app.services.sources.get_embedding_provider",
+        lambda _config=None: FakeEmbeddingProvider(),
+    )
+    # A fresh user avoids the module-scoped shared EMAIL_TEST_USER.
+    user = create_random_user(db)
+    headers = authentication_token_from_email(
+        client=client, email=user.email, db=db
+    )
+    quota = settings.FREE_QUOTA_EMBEDDING_CHARS
+    # Sit just under the monthly allowance: the upload pre-check passes, the
+    # reservation then exceeds the cap and raises QuotaError.
+    usage = ensure_period(db, user.id)
+    usage.chat_tokens = 0
+    usage.embedding_chars = quota - 10_000
+    db.add(usage)
+    db.commit()
+    notebook = create_notebook(client, headers)
+    # >10k chars, so the reservation exceeds the remaining headroom.
+    content = "The quick brown fox jumps over the lazy dog. " * 500
+    r = client.post(
+        f"{settings.API_V1_STR}/notebooks/{notebook['id']}/sources/",
+        headers=headers,
+        files={"file": ("oversized.txt", content.encode(), "text/plain")},
+    )
+    assert r.status_code == 200
+    assert r.json()["status"] == "failed"
+    db.expire_all()
+    usage = db.exec(select(UserUsage).where(UserUsage.user_id == user.id)).first()
+    assert usage is not None
+    assert usage.embedding_chars == quota - 10_000

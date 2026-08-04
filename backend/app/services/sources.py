@@ -194,12 +194,13 @@ def process_source(*, session: Session, source: Source) -> None:
             else None
         )
         embedded_chars = 0
+        embedded_reserved = 0
         if notebook:
             # Reserve the exact embedding char count atomically before calling
             # the provider, so a single oversized upload cannot blow past the
             # monthly allowance and concurrent uploads serialize correctly.
             embedded_chars = sum(len(chunk.content) for chunk in chunks)
-            reserve_usage(
+            _, embedded_reserved = reserve_usage(
                 session=session,
                 user_id=notebook.owner_id,
                 user_settings=user_settings,
@@ -244,12 +245,16 @@ def process_source(*, session: Session, source: Source) -> None:
         fitz.FileDataError,
     ) as error:
         # Refund the embedding reservation when the provider call failed, so a
-        # burst of failed uploads cannot drain the monthly allowance.
-        if notebook and embedded_chars:
+        # burst of failed uploads cannot drain the monthly allowance. Only
+        # refund what was ACTUALLY reserved: on the QuotaError path the
+        # reservation failed (nothing was debited), so settling here would be a
+        # phantom decrement that lets an oversized upload erase the user's
+        # accumulated usage and reset their free allowance.
+        if notebook and embedded_reserved:
             settle_usage(
                 session=session,
                 user_id=notebook.owner_id,
-                embedding_chars=-embedded_chars,
+                embedding_chars=-embedded_reserved,
             )
         mark_failed(str(error))
     except Exception as error:

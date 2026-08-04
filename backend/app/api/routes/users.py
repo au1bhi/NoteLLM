@@ -5,7 +5,7 @@ from typing import Any
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
-from sqlmodel import col, func, select
+from sqlmodel import Session, col, func, select
 
 from app import crud
 from app.api.deps import (
@@ -90,6 +90,23 @@ def _require_allowed_email(email: str) -> None:
             f"暂不支持该邮箱域名，当前仅支持：{domains}" if domains else "暂不支持该邮箱域名"
         )
         raise HTTPException(status_code=400, detail=detail)
+
+
+def _tombstone_released_email(
+    session: Session, user_id: uuid.UUID, email: str
+) -> None:
+    """Carry the account's usage onto a canonical identity it is releasing.
+
+    An email change frees the OLD address for re-registration; without a
+    tombstone the freed mailbox could mint a fresh free allowance ("change
+    email → re-register the old address", no deletion needed). Mirrors the
+    deletion path (`save_usage_tombstone`), keyed by canonical email, and is a
+    no-op when the account has no usage yet.
+    """
+    usage = session.exec(
+        select(UserUsage).where(UserUsage.user_id == user_id)
+    ).first()
+    save_usage_tombstone(session=session, emails=[email], usage=usage)
 
 
 @router.get(
@@ -207,6 +224,9 @@ def update_user_me(
             # No mail backend: there is nothing that could verify a staged
             # change, so apply it immediately (matching how signup auto-verifies).
             new_email = user_data["email"].lower()
+            # The OLD address is released by this change; carry the account's
+            # usage onto it so re-registering it cannot refresh the allowance.
+            _tombstone_released_email(session, current_user.id, current_user.email)
             current_user.email = new_email
             current_user.email_canonical = canonical_email(new_email)
             history = list(current_user.email_history or [])
@@ -527,7 +547,13 @@ def fetch_available_models(
         # on success, fully refunded on failure).
         user_settings = load_user_provider_settings(session, current_user.id)
         try:
-            reserve_usage(
+            # Capture the amount ACTUALLY reserved. A user with their own stored
+            # chat key is billed on that key (chat_source "user"), so
+            # reserve_usage returns (0, 0) — nothing was debited and the settles
+            # below must be skipped. Hardcoding `reserved = 500` here would
+            # decrement a counter that was never incremented, letting repeated
+            # probes erase the user's usage and refresh their free allowance.
+            reserved, _ = reserve_usage(
                 session=session,
                 user_id=current_user.id,
                 user_settings=user_settings,
@@ -535,7 +561,6 @@ def fetch_available_models(
             )
         except QuotaError as error:
             raise HTTPException(status_code=429, detail=str(error)) from error
-        reserved = 500
     else:
         reserved = 0
     root = resolve_api_base(base_url, body.api_format)
@@ -723,6 +748,9 @@ def verify_email(session: SessionDep, body: VerifyEmailRequest) -> Any:
             session.add(user)
             session.commit()
             raise HTTPException(status_code=400, detail="验证链接无效或已过期")
+        # The OLD address is released by this change; carry the account's usage
+        # onto it so re-registering it cannot refresh the allowance.
+        _tombstone_released_email(session, user.id, user.email)
         user.email = email
         user.email_canonical = new_canonical
         history = list(user.email_history or [])

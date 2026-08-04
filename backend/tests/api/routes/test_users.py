@@ -940,3 +940,55 @@ def test_plain_token_cannot_apply_staged_change(
         assert a_db is not None and a_db.email == a_email.lower()
         v_db = crud.get_user_by_email(session=db, email=v_email.lower())
         assert v_db is not None and v_db.email == v_email.lower()
+
+
+def test_email_change_tombstones_released_address(
+    client: TestClient, db: Session
+) -> None:
+    """Changing email must carry the account's usage onto the RELEASED address,
+    so re-registering it cannot mint a fresh allowance WITHOUT deletion.
+
+    The round-1 tombstone mechanism only ran on account deletion; this closes
+    the "change email -> re-register the old address" variant (mail-disabled
+    mode applies the change immediately).
+    """
+    from app.models import EmailUsageTombstone, UserUsage
+    from app.utils import canonical_email
+
+    e1 = random_email()
+    e2 = random_email()
+    password = random_lower_string()
+    r = client.post(
+        f"{settings.API_V1_STR}/users/signup",
+        json={"email": e1, "password": password},
+    )
+    assert r.status_code == 200
+    headers = user_authentication_headers(client=client, email=e1, password=password)
+    me = client.get(f"{settings.API_V1_STR}/users/me", headers=headers).json()
+    db.add(UserUsage(user_id=me["id"], chat_tokens=99_000, embedding_chars=250_000))
+    db.commit()
+    # Change email E1 -> E2 (mail backend off in this fixture -> immediate).
+    r = client.patch(
+        f"{settings.API_V1_STR}/users/me",
+        headers=headers,
+        json={"email": e2, "current_password": password},
+    )
+    assert r.status_code == 200
+    db.expire_all()
+    # The RELEASED address E1 carries the usage on a tombstone.
+    tombstone = db.get(EmailUsageTombstone, canonical_email(e1))
+    assert tombstone is not None
+    assert tombstone.chat_tokens >= 99_000
+    assert tombstone.embedding_chars >= 250_000
+    # Re-registering E1 restores the usage instead of a fresh allowance.
+    r = client.post(
+        f"{settings.API_V1_STR}/users/signup",
+        json={"email": e1, "password": random_lower_string()},
+    )
+    assert r.status_code == 200
+    user = crud.get_user_by_email(session=db, email=e1)
+    assert user is not None
+    usage = db.exec(select(UserUsage).where(UserUsage.user_id == user.id)).first()
+    assert usage is not None
+    assert usage.chat_tokens >= 99_000
+    assert usage.embedding_chars >= 250_000
