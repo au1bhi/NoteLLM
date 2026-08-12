@@ -69,7 +69,14 @@ def test_render_report_includes_recall_and_question_count_without_answers() -> N
         _result(identifier="Q02", retrieval_hit=False, retrieval_latency_ms=40.0),
     ]
 
-    report = render_report(results, answers_enabled=False)
+    report = render_report(
+        results,
+        answers_enabled=False,
+        top_k=5,
+        mode="grounded",
+        chunk_size=1000,
+        chunk_overlap=150,
+    )
 
     assert "Recall@" in report
     assert "问题数：2" in report
@@ -87,7 +94,14 @@ def test_render_report_includes_manual_faithfulness_table_when_answers_enabled()
         )
     ]
 
-    report = render_report(results, answers_enabled=True)
+    report = render_report(
+        results,
+        answers_enabled=True,
+        top_k=5,
+        mode="grounded",
+        chunk_size=1000,
+        chunk_overlap=150,
+    )
 
     assert "| ID | 问题 | 期望来源 | 模型回答 | 已验证引用来源 | 人工忠实度 |" in report
     assert "待人工复核" in report
