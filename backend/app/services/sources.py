@@ -136,7 +136,24 @@ def extract_pages(path: Path, media_type: str) -> list[ExtractedPage]:
     return pages
 
 
-def split_page(page: ExtractedPage) -> Iterable[ChunkData]:
+def validate_chunk_params(*, chunk_size: int, chunk_overlap: int) -> None:
+    if chunk_size <= 0:
+        raise ValueError("chunk_size 必须大于 0")
+    if chunk_overlap < 0:
+        raise ValueError("chunk_overlap 不能为负数")
+    if chunk_overlap >= chunk_size:
+        raise ValueError(
+            f"chunk_overlap 必须小于 chunk_size，当前为 {chunk_overlap} >= {chunk_size}"
+        )
+
+
+def split_page(
+    page: ExtractedPage,
+    *,
+    chunk_size: int = CHUNK_SIZE,
+    chunk_overlap: int = CHUNK_OVERLAP,
+) -> Iterable[ChunkData]:
+    validate_chunk_params(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     text = page.text.strip()
     if not text:
         return []
@@ -144,7 +161,7 @@ def split_page(page: ExtractedPage) -> Iterable[ChunkData]:
     chunks: list[ChunkData] = []
     start = 0
     while start < len(text):
-        end = min(start + CHUNK_SIZE, len(text))
+        end = min(start + chunk_size, len(text))
         if end < len(text):
             break_at = max(
                 text.rfind("\n", start + CHUNK_MIN_BREAK, end),
@@ -164,11 +181,18 @@ def split_page(page: ExtractedPage) -> Iterable[ChunkData]:
             )
         if end == len(text):
             break
-        start = max(end - CHUNK_OVERLAP, start + 1)
+        start = max(end - chunk_overlap, start + 1)
     return chunks
 
 
-def process_source(*, session: Session, source: Source) -> None:
+def process_source(
+    *,
+    session: Session,
+    source: Source,
+    chunk_size: int = CHUNK_SIZE,
+    chunk_overlap: int = CHUNK_OVERLAP,
+) -> None:
+    validate_chunk_params(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     session.exec(delete(Chunk).where(col(Chunk.source_id) == source.id))
     source.status = "processing"
     source.error_message = None
@@ -180,9 +204,19 @@ def process_source(*, session: Session, source: Source) -> None:
         source.error_message = message[:1000]
         source.processed_at = get_datetime_utc()
 
+    # Assigned before extract so a failed extract / empty-text raise still
+    # reaches mark_failed instead of UnboundLocalError in the except handler.
+    notebook: Notebook | None = None
+    embedded_reserved = 0
     try:
         pages = extract_pages(get_upload_path(source), source.media_type)
-        chunks = [chunk for page in pages for chunk in split_page(page)]
+        chunks = [
+            chunk
+            for page in pages
+            for chunk in split_page(
+                page, chunk_size=chunk_size, chunk_overlap=chunk_overlap
+            )
+        ]
         if not chunks:
             raise ValueError("该资料没有可提取的文本")
         notebook = session.get(Notebook, source.notebook_id)
