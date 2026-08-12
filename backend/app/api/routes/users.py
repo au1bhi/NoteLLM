@@ -63,6 +63,7 @@ from app.utils import (
     allowed_email_domains_text,
     canonical_email,
     email_change_token_account,
+    email_change_token_password_changed_at,
     generate_email_change_token,
     generate_new_account_email,
     generate_verify_email_email,
@@ -247,6 +248,7 @@ def update_user_me(
         bound_token = generate_email_change_token(
             pending_email=current_user.pending_email,
             current_email=current_user.email,
+            password_changed_at=current_user.password_changed_at,
         )
         email_data = generate_verify_email_email(
             email_to=current_user.pending_email, token=bound_token
@@ -281,6 +283,9 @@ def update_password_me(
     current_user.hashed_password = hashed_password
     # Rotating the password revokes every previously issued access token.
     current_user.password_changed_at = get_datetime_utc()
+    # A staged email-change link is also a takeover path: if an attacker already
+    # pointed pending_email at their inbox, rotation must cancel that change.
+    current_user.pending_email = None
     session.add(current_user)
     session.commit()
     return Message(message="密码更新成功")
@@ -709,6 +714,12 @@ def verify_email(session: SessionDep, body: VerifyEmailRequest) -> Any:
         user = crud.get_user_by_email(session=session, email=staging_account_email)
         if user is None or not (user.pending_email or "").lower() == email:
             raise HTTPException(status_code=400, detail="验证链接无效或已过期")
+        token_pwd = email_change_token_password_changed_at(body.token)
+        if user.password_changed_at is not None and (
+            token_pwd is None
+            or int(user.password_changed_at.timestamp() * 1_000_000) > token_pwd
+        ):
+            raise HTTPException(status_code=400, detail="验证链接无效或已过期")
     else:
         # A plain (cur-less) token is a SIGNUP verification only: resolve the
         # account by its CURRENT email. A staged email change can ONLY be
@@ -797,6 +808,7 @@ def resend_verification_me(current_user: CurrentUser) -> Any:
             generate_email_change_token(
                 pending_email=current_user.pending_email,
                 current_email=current_user.email,
+                password_changed_at=current_user.password_changed_at,
             )
             if current_user.pending_email
             else None

@@ -9,6 +9,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import CurrentUser, SessionDep
 from app.core.db import engine
+from app.core.rate_limit import rate_limit
 from app.models import (
     AnswerMode,
     Chunk,
@@ -268,7 +269,11 @@ def get_owned_conversation_or_404(
     )
 
 
-@router.post("/{conversation_id}/messages/stream", response_class=EventSourceResponse)
+@router.post(
+    "/{conversation_id}/messages/stream",
+    response_class=EventSourceResponse,
+    dependencies=[Depends(rate_limit(limit=60, window=60))],
+)
 async def stream_message(
     conversation: Annotated[Conversation, Depends(get_owned_conversation_or_404)],
     message_in: ConversationMessageCreate,

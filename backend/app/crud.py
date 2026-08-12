@@ -39,6 +39,7 @@ def update_user(*, session: Session, db_user: User, user_in: UserUpdate) -> Any:
         # /users/{id} reset) would silently leave stolen JWTs and outstanding
         # reset tokens valid for up to ACCESS_TOKEN_EXPIRE_MINUTES.
         extra_data["password_changed_at"] = get_datetime_utc()
+        extra_data["pending_email"] = None
     if user_data.get("email"):
         user_data["email"] = user_data["email"].strip().lower()
         # Keep the unique canonical identity in sync with the current email

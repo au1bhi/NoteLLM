@@ -1,12 +1,13 @@
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import ProgrammingError
 from sqlmodel import Session, col, select
 
 from app.api.deps import CurrentUser, SessionDep
 from app.api.routes.conversations import get_conversation_or_404
 from app.core.config import settings
+from app.core.rate_limit import rate_limit
 from app.models import (
     Conversation,
     Notebook,
@@ -111,6 +112,7 @@ def read_conversation_study_plan(
 @router.post(
     "/conversations/{conversation_id}/study-plan",
     response_model=StudyPlanPublic,
+    dependencies=[Depends(rate_limit(limit=30, window=60))],
 )
 def create_or_regenerate_study_plan(
     conversation_id: uuid.UUID,

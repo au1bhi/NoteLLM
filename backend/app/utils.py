@@ -239,7 +239,11 @@ def generate_verify_email_token(email: str) -> str:
     )
 
 
-def generate_email_change_token(pending_email: str, current_email: str) -> str:
+def generate_email_change_token(
+    pending_email: str,
+    current_email: str,
+    password_changed_at: datetime | None = None,
+) -> str:
     """Signed token binding a STAGED email change to the account that staged it.
 
     Two accounts can stage the same pending email (there is deliberately no
@@ -248,6 +252,11 @@ def generate_email_change_token(pending_email: str, current_email: str) -> str:
     only apply the change to the account that actually requested it — a victim's
     click can never redirect their change onto another account that happened to
     stage the same target first.
+
+    The optional `pwd` snapshot is the same revocation clock used by access and
+    reset tokens: rotating the password must invalidate an outstanding change
+    link, otherwise a stolen-password staging to an attacker inbox survives the
+    victim's recovery.
     """
     delta = timedelta(hours=settings.EMAIL_VERIFY_TOKEN_EXPIRE_HOURS)
     now = datetime.now(UTC)
@@ -258,6 +267,8 @@ def generate_email_change_token(pending_email: str, current_email: str) -> str:
         "purpose": "email_verify",
         "cur": current_email.strip().lower(),
     }
+    if password_changed_at is not None:
+        claims["pwd"] = int(password_changed_at.timestamp() * 1_000_000)
     return jwt.encode(claims, settings.SECRET_KEY, algorithm=security.ALGORITHM)
 
 
@@ -274,6 +285,20 @@ def email_change_token_account(token: str) -> str | None:
         return None
     cur = decoded.get("cur")
     return str(cur) if isinstance(cur, str) else None
+
+
+def email_change_token_password_changed_at(token: str) -> int | None:
+    """The `pwd` snapshot bound to an email-change token, or None."""
+    try:
+        decoded = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
+        )
+    except InvalidTokenError:
+        return None
+    if decoded.get("purpose") != "email_verify" or decoded.get("cur") is None:
+        return None
+    pwd = decoded.get("pwd")
+    return int(pwd) if isinstance(pwd, int | float) else None
 
 
 def verify_email_token(token: str) -> str | None:

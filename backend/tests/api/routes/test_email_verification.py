@@ -279,11 +279,13 @@ def test_update_email_requires_current_password(
 
         # Verify the new address -> the staged change is applied. The link the
         # app emails is BOUND to the staging account (a plain token cannot
-        # apply a pending change).
+        # apply a pending change) and to the password-change clock.
         from app.utils import generate_email_change_token
 
         verify_token = generate_email_change_token(
-            pending_email=new_email, current_email=email
+            pending_email=new_email,
+            current_email=email,
+            password_changed_at=user.password_changed_at,
         )
         r = client.post(
             f"{settings.API_V1_STR}/users/verify-email",
@@ -294,6 +296,67 @@ def test_update_email_requires_current_password(
         assert user.email == new_email.lower()
         assert user.pending_email is None
         assert user.is_email_verified is True
+
+
+def test_email_change_token_revoked_after_password_rotation(
+    client: TestClient, db: Session
+) -> None:
+    """A staged email-change link must die when the password is rotated.
+
+    Otherwise a stolen-password attacker who already pointed pending_email at
+    their inbox keeps a 72h takeover window after the victim recovers.
+    """
+    from app.utils import generate_email_change_token
+
+    with _email_enabled():
+        email, password = _signup(client)
+        token = generate_verify_email_token(email)
+        client.post(f"{settings.API_V1_STR}/users/verify-email", json={"token": token})
+        headers = user_authentication_headers(
+            client=client, email=email, password=password
+        )
+        new_email = random_email()
+        staged = client.patch(
+            f"{settings.API_V1_STR}/users/me",
+            headers=headers,
+            json={"email": new_email, "current_password": password},
+        )
+        assert staged.status_code == 200
+        user = _user_from_db(db, email)
+        assert user.pending_email == new_email.lower()
+        stale_token = generate_email_change_token(
+            pending_email=new_email,
+            current_email=email,
+            password_changed_at=user.password_changed_at,
+        )
+        new_password = random_lower_string()
+        rotated = client.patch(
+            f"{settings.API_V1_STR}/users/me/password",
+            headers=headers,
+            json={"current_password": password, "new_password": new_password},
+        )
+        assert rotated.status_code == 200
+        user = _user_from_db(db, email)
+        assert user.pending_email is None
+        rejected = client.post(
+            f"{settings.API_V1_STR}/users/verify-email",
+            json={"token": stale_token},
+        )
+        assert rejected.status_code == 400
+        assert user.email == email
+
+        # Defense in depth: even if pending_email is re-queued after rotation,
+        # a token bound to the previous password clock must still be rejected.
+        user.pending_email = new_email.lower()
+        db.add(user)
+        db.commit()
+        still_rejected = client.post(
+            f"{settings.API_V1_STR}/users/verify-email",
+            json={"token": stale_token},
+        )
+        assert still_rejected.status_code == 400
+        user = _user_from_db(db, email)
+        assert user.email == email
 
 
 def test_email_change_cannot_take_over_with_stolen_session(

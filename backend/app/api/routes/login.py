@@ -150,6 +150,9 @@ def reset_password(session: SessionDep, body: NewPassword) -> Message:
         user_in=user_in_update,
     )
     user.password_changed_at = get_datetime_utc()
+    # Password recovery is the intended close of a stolen-password incident;
+    # drop any staged email change the attacker may have queued.
+    user.pending_email = None
     session.add(user)
     session.commit()
     return Message(message="密码更新成功")

@@ -1,5 +1,5 @@
 from fastapi.testclient import TestClient
-from sqlmodel import Session
+from sqlmodel import Session, select
 
 from app.core.config import settings
 from app.models import UserUsage
@@ -180,3 +180,45 @@ def test_reserve_with_own_key_is_unlimited(client: TestClient, db: Session) -> N
             session=session, user_id=user.id, chat_tokens=10_000_000
         )
         assert chat_reserved == 0  # BYOK chat is not counted against free quota
+
+
+def test_search_refund_does_not_wipe_byok_embedding_usage(
+    client: TestClient, db: Session
+) -> None:
+    """A failed BYOK search must not refund len(query) against a counter that
+    was never incremented — that would let repeated failures erase usage."""
+    from unittest.mock import patch
+
+    from app.services.embeddings import EmbeddingError
+
+    user = create_random_user(db)
+    notebook = create_random_notebook(db=db, owner_id=user.id)
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+    seeded = 4_000
+    db.add(
+        UserUsage(
+            user_id=user.id,
+            embedding_chars=seeded,
+            period_start=current_period(),
+        )
+    )
+    db.commit()
+    client.put(
+        f"{settings.API_V1_STR}/users/me/provider-settings",
+        headers=headers,
+        json={"embedding_api_key": "sk-my-own-embedding-key"},
+    )
+    with patch(
+        "app.api.routes.notebooks.retrieve_chunks",
+        side_effect=EmbeddingError("embedding provider unavailable"),
+    ):
+        response = client.post(
+            f"{settings.API_V1_STR}/notebooks/{notebook.id}/search",
+            headers=headers,
+            json={"query": "x" * 200},
+        )
+    assert response.status_code == 503
+    db.expire_all()
+    usage = db.exec(select(UserUsage).where(UserUsage.user_id == user.id)).first()
+    assert usage is not None
+    assert usage.embedding_chars == seeded

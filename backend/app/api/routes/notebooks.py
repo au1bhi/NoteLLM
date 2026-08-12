@@ -1,11 +1,12 @@
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlmodel import col, func, select
 from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import CurrentUser, SessionDep
+from app.core.rate_limit import rate_limit
 from app.models import (
     Conversation,
     ConversationCreate,
@@ -228,7 +229,11 @@ def create_conversation(
     return conversation
 
 
-@router.post("/{notebook_id}/search", response_model=RetrievedChunksPublic)
+@router.post(
+    "/{notebook_id}/search",
+    response_model=RetrievedChunksPublic,
+    dependencies=[Depends(rate_limit(limit=60, window=60))],
+)
 def search_notebook(
     notebook_id: uuid.UUID,
     search_in: SearchRequest,
@@ -238,15 +243,17 @@ def search_notebook(
     get_notebook_or_404(
         session=session, current_user=current_user, notebook_id=notebook_id
     )
+    embedding_reserved = 0
     try:
         user_settings = load_user_provider_settings(session, current_user.id)
-        # Reserve the exact query length atomically before embedding it.
-        embedding_reserved = len(search_in.query)
-        reserve_usage(
+        # Capture the amount ACTUALLY reserved. BYOK / unconfigured embedding
+        # returns (0, 0); refunding len(query) would decrement a counter that
+        # was never incremented and refresh the free allowance.
+        _, embedding_reserved = reserve_usage(
             session=session,
             user_id=current_user.id,
             user_settings=user_settings,
-            embedding_chars=embedding_reserved,
+            embedding_chars=len(search_in.query),
         )
         retrieved = retrieve_chunks(
             session=session,
@@ -351,7 +358,9 @@ def read_notebook_overview(
 
 
 @router.post(
-    "/{notebook_id}/overview/regenerate", response_model=NotebookOverviewPublic
+    "/{notebook_id}/overview/regenerate",
+    response_model=NotebookOverviewPublic,
+    dependencies=[Depends(rate_limit(limit=30, window=60))],
 )
 def regenerate_notebook_overview(
     notebook_id: uuid.UUID,
@@ -371,7 +380,11 @@ def regenerate_notebook_overview(
     )
 
 
-@router.post("/{notebook_id}/study-guide", response_model=StudyGuidePublic)
+@router.post(
+    "/{notebook_id}/study-guide",
+    response_model=StudyGuidePublic,
+    dependencies=[Depends(rate_limit(limit=30, window=60))],
+)
 def generate_notebook_study_guide(
     notebook_id: uuid.UUID,
     session: SessionDep,
@@ -423,7 +436,11 @@ def generate_notebook_study_guide(
     )
 
 
-@router.post("/{notebook_id}/sources/", response_model=SourcePublic)
+@router.post(
+    "/{notebook_id}/sources/",
+    response_model=SourcePublic,
+    dependencies=[Depends(rate_limit(limit=30, window=60))],
+)
 async def upload_source(
     notebook_id: uuid.UUID,
     session: SessionDep,
@@ -468,7 +485,11 @@ def remove_source(
     return {"message": "资料删除成功"}
 
 
-@router.post("/{notebook_id}/sources/{source_id}/retry", response_model=SourcePublic)
+@router.post(
+    "/{notebook_id}/sources/{source_id}/retry",
+    response_model=SourcePublic,
+    dependencies=[Depends(rate_limit(limit=30, window=60))],
+)
 async def retry_source(
     notebook_id: uuid.UUID,
     source_id: uuid.UUID,

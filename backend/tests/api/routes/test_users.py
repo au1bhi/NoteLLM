@@ -878,8 +878,12 @@ def test_pending_email_collision_applies_to_staging_account(
             == 200
         )
         # V's own BOUND link applies the change to V, not A.
+        v_user = crud.get_user_by_email(session=db, email=v_email)
+        assert v_user is not None
         v_bound = generate_email_change_token(
-            pending_email=target, current_email=v_email
+            pending_email=target,
+            current_email=v_email,
+            password_changed_at=v_user.password_changed_at,
         )
         r = client.post(
             f"{settings.API_V1_STR}/users/verify-email", json={"token": v_bound}
