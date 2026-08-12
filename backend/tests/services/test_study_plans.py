@@ -86,6 +86,7 @@ def test_scheduler_sends_once_at_local_nine(
     assert dispatch_due_study_reminders(session=db, now=now, sender=sender) == 0
     assert len(sent) == 1
     assert "今日学习计划" in str(sent[0]["subject"])
+    assert f"?conversation={conversation.id}" in str(sent[0]["html_content"])
 
 
 def test_scheduler_skips_opted_out_plan(db: Session, monkeypatch: MonkeyPatch) -> None:

@@ -1,0 +1,99 @@
+import { useQuery } from "@tanstack/react-query"
+import { createFileRoute, Link } from "@tanstack/react-router"
+import { CalendarRange } from "lucide-react"
+
+import { AggregatedGantt } from "@/components/Notebooks/AggregatedGantt"
+import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
+import { studyPlansApi } from "@/services/study-plans"
+import { extractErrorMessage } from "@/utils"
+
+export const Route = createFileRoute("/_layout/gantt")({
+  component: GanttPage,
+  head: () => ({ meta: [{ title: "甘特图 - NoteLLM" }] }),
+})
+
+function GanttPage() {
+  const { data, error, isLoading } = useQuery({
+    queryFn: () => studyPlansApi.list(),
+    queryKey: ["study-plans"],
+  })
+
+  const plans = data?.data ?? []
+  const completedTasks = plans.reduce(
+    (total, plan) =>
+      total + plan.tasks.filter((task) => task.is_completed).length,
+    0,
+  )
+  const totalTasks = plans.reduce((total, plan) => total + plan.tasks.length, 0)
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h1 className="font-display text-2xl font-bold tracking-tight">
+          甘特图
+        </h1>
+        <p className="mt-1 text-muted-foreground">
+          把所有对话里的学习计划放到同一条时间轴上，按笔记本着色，并跳回对应会话。
+        </p>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-3">
+          <Skeleton className="h-16 rounded-xl" />
+          <Skeleton className="h-72 rounded-xl" />
+        </div>
+      ) : null}
+      {error ? (
+        <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
+          {extractErrorMessage(error)}
+        </p>
+      ) : null}
+
+      {!isLoading && !error && plans.length ? (
+        <>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border bg-card p-4">
+              <p className="text-xs text-muted-foreground">学习计划</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums">
+                {plans.length}
+              </p>
+            </div>
+            <div className="rounded-xl border bg-card p-4">
+              <p className="text-xs text-muted-foreground">阶段任务</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums">
+                {totalTasks}
+              </p>
+            </div>
+            <div className="rounded-xl border bg-card p-4">
+              <p className="text-xs text-muted-foreground">已完成</p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums">
+                {completedTasks}/{totalTasks}
+              </p>
+            </div>
+          </div>
+          <AggregatedGantt plans={plans} />
+        </>
+      ) : null}
+
+      {!isLoading && !error && plans.length === 0 ? (
+        <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed px-6 py-16 text-center">
+          <span className="inline-flex size-14 items-center justify-center rounded-2xl bg-brand-gradient-soft text-primary">
+            <CalendarRange className="size-7" />
+          </span>
+          <div>
+            <h2 className="text-lg font-semibold tracking-tight">
+              还没有可聚合的学习甘特图
+            </h2>
+            <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+              在任意对话中生成学习计划后，这里会把所有计划排到同一条时间轴上。
+            </p>
+          </div>
+          <Button asChild>
+            <Link to="/notebooks">去笔记本生成计划</Link>
+          </Button>
+        </div>
+      ) : null}
+    </div>
+  )
+}

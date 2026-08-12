@@ -592,6 +592,17 @@ class StudyPlanPublic(SQLModel):
     tasks: list[StudyTaskPublic]
 
 
+class StudyPlanListItem(StudyPlanPublic):
+    notebook_id: uuid.UUID
+    notebook_title: str
+    conversation_title: str
+
+
+class StudyPlansPublic(SQLModel):
+    data: list[StudyPlanListItem]
+    count: int
+
+
 AnswerMode = Literal["grounded", "hybrid", "knowledge"]
 
 

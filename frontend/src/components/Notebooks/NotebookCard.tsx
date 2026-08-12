@@ -45,6 +45,7 @@ export function NotebookCard({ notebook }: NotebookCardProps) {
       <Link
         to="/notebooks/$notebookId"
         params={{ notebookId: notebook.id }}
+        search={{}}
         className="flex flex-col gap-3 rounded-xl border bg-card p-5 shadow-soft transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-card"
       >
         <span className="inline-flex size-10 items-center justify-center rounded-lg bg-brand-gradient-soft text-primary transition-all duration-300 group-hover:bg-brand-gradient group-hover:text-white">

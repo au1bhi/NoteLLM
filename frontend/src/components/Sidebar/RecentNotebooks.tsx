@@ -51,6 +51,7 @@ export function RecentNotebooks() {
                   <Link
                     to="/notebooks/$notebookId"
                     params={{ notebookId: notebook.id }}
+                    search={{}}
                     onClick={handleClick}
                   >
                     <BookOpen />

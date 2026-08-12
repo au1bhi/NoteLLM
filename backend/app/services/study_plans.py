@@ -8,7 +8,7 @@ from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import update
-from sqlmodel import Session, col, select
+from sqlmodel import Session, col, func, select
 
 from app.core.config import settings
 from app.core.db import engine
@@ -18,6 +18,7 @@ from app.models import (
     Notebook,
     StudyPlan,
     StudyPlanDifficulty,
+    StudyPlanListItem,
     StudyPlanPublic,
     StudyTask,
     StudyTaskPublic,
@@ -331,6 +332,98 @@ def plan_public(*, session: Session, plan: StudyPlan, user: User) -> StudyPlanPu
     )
 
 
+def plan_list_item(
+    *,
+    session: Session,
+    plan: StudyPlan,
+    user: User,
+    notebook: Notebook,
+    conversation: Conversation,
+    tasks: list[StudyTask] | None = None,
+) -> StudyPlanListItem:
+    if tasks is None:
+        public = plan_public(session=session, plan=plan, user=user)
+    else:
+        public = StudyPlanPublic(
+            id=plan.id,
+            conversation_id=plan.conversation_id,
+            title=plan.title,
+            summary=plan.summary,
+            difficulty=_difficulty(plan.difficulty),
+            start_date=plan.start_date,
+            end_date=plan.end_date,
+            timezone=plan.timezone,
+            reminder_enabled=plan.reminder_enabled,
+            email_reminder_available=bool(
+                settings.emails_enabled and user.is_email_verified
+            ),
+            created_at=plan.created_at,
+            updated_at=plan.updated_at,
+            tasks=[StudyTaskPublic.model_validate(task) for task in tasks],
+        )
+    return StudyPlanListItem(
+        **public.model_dump(),
+        notebook_id=notebook.id,
+        notebook_title=notebook.title,
+        conversation_title=conversation.title,
+    )
+
+
+def list_owned_plans(
+    *,
+    session: Session,
+    user: User,
+    skip: int = 0,
+    limit: int = 100,
+    notebook_id: uuid.UUID | None = None,
+) -> tuple[list[StudyPlanListItem], int]:
+    filters = [Notebook.owner_id == user.id]
+    if notebook_id is not None:
+        filters.append(Notebook.id == notebook_id)
+
+    count = session.exec(
+        select(func.count())
+        .select_from(StudyPlan)
+        .join(Conversation, col(StudyPlan.conversation_id) == col(Conversation.id))
+        .join(Notebook, col(Conversation.notebook_id) == col(Notebook.id))
+        .where(*filters)
+    ).one()
+    rows = session.exec(
+        select(StudyPlan, Conversation, Notebook)
+        .join(Conversation, col(StudyPlan.conversation_id) == col(Conversation.id))
+        .join(Notebook, col(Conversation.notebook_id) == col(Notebook.id))
+        .where(*filters)
+        .order_by(col(StudyPlan.start_date).desc(), col(StudyPlan.updated_at).desc())
+        .offset(skip)
+        .limit(limit)
+    ).all()
+    plan_ids = [plan.id for plan, _conversation, _notebook in rows]
+    tasks_by_plan: dict[uuid.UUID, list[StudyTask]] = {
+        plan_id: [] for plan_id in plan_ids
+    }
+    if plan_ids:
+        tasks = session.exec(
+            select(StudyTask)
+            .where(col(StudyTask.plan_id).in_(plan_ids))
+            .order_by(col(StudyTask.sort_order), col(StudyTask.start_date))
+        ).all()
+        for task in tasks:
+            tasks_by_plan.setdefault(task.plan_id, []).append(task)
+
+    items = [
+        plan_list_item(
+            session=session,
+            plan=plan,
+            user=user,
+            notebook=notebook,
+            conversation=conversation,
+            tasks=tasks_by_plan.get(plan.id, []),
+        )
+        for plan, conversation, notebook in rows
+    ]
+    return items, count
+
+
 def _daily_plan_email(
     *, plan: StudyPlan, notebook_id: uuid.UUID, day: date, tasks: list[StudyTask]
 ) -> tuple[str, str, str]:
@@ -341,7 +434,10 @@ def _daily_plan_email(
         f"<br>{html.escape(task.description)}</li>"
         for task in tasks
     )
-    link = f"{settings.FRONTEND_HOST}/notebooks/{notebook_id}"
+    link = (
+        f"{settings.FRONTEND_HOST}/notebooks/{notebook_id}"
+        f"?conversation={plan.conversation_id}"
+    )
     html_content = (
         f"<h2>{html.escape(plan.title)}</h2>"
         f"<p>{day.isoformat()} 的学习安排：</p><ol>{task_rows}</ol>"

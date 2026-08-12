@@ -12,6 +12,7 @@ from app.models import (
     StudyPlan,
     StudyPlanGenerateRequest,
     StudyPlanPublic,
+    StudyPlansPublic,
     StudyPlanUpdate,
     StudyTask,
     StudyTaskPublic,
@@ -26,6 +27,7 @@ from app.services.provider_settings import (
 from app.services.study_plans import (
     conversation_text,
     generate_study_plan,
+    list_owned_plans,
     plan_public,
     store_generated_plan,
     validate_timezone,
@@ -38,6 +40,24 @@ from app.services.usage import (
 )
 
 router = APIRouter(tags=["study-plans"])
+
+
+@router.get("/study-plans", response_model=StudyPlansPublic)
+def read_study_plans(
+    session: SessionDep,
+    current_user: CurrentUser,
+    skip: int = 0,
+    limit: int = 100,
+    notebook_id: uuid.UUID | None = None,
+) -> StudyPlansPublic:
+    items, count = list_owned_plans(
+        session=session,
+        user=current_user,
+        skip=skip,
+        limit=limit,
+        notebook_id=notebook_id,
+    )
+    return StudyPlansPublic(data=items, count=count)
 
 
 def get_owned_plan_or_404(

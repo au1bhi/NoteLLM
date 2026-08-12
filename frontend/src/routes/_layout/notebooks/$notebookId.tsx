@@ -6,9 +6,10 @@ import {
   PanelRight,
   PanelRightClose,
 } from "lucide-react"
-import { useState } from "react"
+import { useCallback, useEffect, useState } from "react"
+import { z } from "zod"
 
-import type { ConversationMessagePublic } from "@/client"
+import type { ConversationMessagePublic, ConversationsPublic } from "@/client"
 import { ChatPanel } from "@/components/Notebooks/ChatPanel"
 import { DeleteNotebook } from "@/components/Notebooks/DeleteNotebook"
 import { EditNotebook } from "@/components/Notebooks/EditNotebook"
@@ -33,24 +34,49 @@ import {
 import { notebooksApi } from "@/services/notebooks"
 import { extractErrorMessage } from "@/utils"
 
+const searchSchema = z.object({
+  conversation: z.string().uuid().optional().catch(undefined),
+})
+
 export const Route = createFileRoute("/_layout/notebooks/$notebookId")({
   component: NotebookWorkspace,
+  validateSearch: searchSchema,
   head: () => ({ meta: [{ title: "笔记本 - NoteLLM" }] }),
 })
 
 function NotebookWorkspace() {
   const { notebookId } = Route.useParams()
+  const { conversation: conversationFromSearch } = Route.useSearch()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { showErrorToast, showSuccessToast } = useCustomToast()
   const isDesktop = useIsDesktop()
-  const [conversationId, setConversationId] = useState<string | null>(null)
+  const [conversationId, setConversationId] = useState<string | null>(
+    conversationFromSearch ?? null,
+  )
   const [streamingAnswer, setStreamingAnswer] = useState("")
   const [isStreaming, setIsStreaming] = useState(false)
   const [sourcesOpen, setSourcesOpen] = useState(true)
   const [mobileSourcesOpen, setMobileSourcesOpen] = useState(false)
   const [selectedSourceIds, setSelectedSourceIds] = useState<Set<string>>(
     new Set(),
+  )
+
+  useEffect(() => {
+    setConversationId(conversationFromSearch ?? null)
+  }, [conversationFromSearch])
+
+  const selectConversation = useCallback(
+    (nextId: string | null) => {
+      setConversationId(nextId)
+      void navigate({
+        to: "/notebooks/$notebookId",
+        params: { notebookId },
+        search: nextId ? { conversation: nextId } : {},
+        replace: true,
+      })
+    },
+    [navigate, notebookId],
   )
 
   const toggleSource = (sourceId: string) => {
@@ -86,8 +112,27 @@ function NotebookWorkspace() {
     queryFn: () => conversationsApi.list(notebookId),
     queryKey: ["notebooks", notebookId, "conversations"],
   })
+  const conversationBelongsToNotebook =
+    conversations.data?.data.some((item) => item.id === conversationId) ?? false
+  useEffect(() => {
+    if (
+      !conversationId ||
+      conversations.isLoading ||
+      conversations.isError ||
+      conversationBelongsToNotebook
+    ) {
+      return
+    }
+    selectConversation(null)
+  }, [
+    conversationBelongsToNotebook,
+    conversationId,
+    conversations.isError,
+    conversations.isLoading,
+    selectConversation,
+  ])
   const conversation = useQuery({
-    enabled: Boolean(conversationId),
+    enabled: Boolean(conversationId) && conversationBelongsToNotebook,
     queryFn: () => conversationsApi.get(conversationId as string),
     queryKey: ["conversations", conversationId],
   })
@@ -96,7 +141,14 @@ function NotebookWorkspace() {
     mutationFn: () => conversationsApi.create(notebookId),
     onError: (error: Error) => showErrorToast(extractErrorMessage(error)),
     onSuccess: (created) => {
-      setConversationId(created.id)
+      queryClient.setQueryData<ConversationsPublic>(
+        ["notebooks", notebookId, "conversations"],
+        (old) =>
+          old
+            ? { data: [created, ...old.data], count: old.count + 1 }
+            : { data: [created], count: 1 },
+      )
+      selectConversation(created.id)
       queryClient.invalidateQueries({
         queryKey: ["notebooks", notebookId, "conversations"],
       })
@@ -199,11 +251,12 @@ function NotebookWorkspace() {
     onSuccess: (_, deletedId) => {
       showSuccessToast("会话已删除")
       if (deletedId === conversationId) {
-        setConversationId(null)
+        selectConversation(null)
       }
       queryClient.invalidateQueries({
         queryKey: ["conversations", deletedId],
       })
+      queryClient.invalidateQueries({ queryKey: ["study-plans"] })
     },
     onSettled: () =>
       queryClient.invalidateQueries({
@@ -385,7 +438,7 @@ function NotebookWorkspace() {
           }
           className="min-w-0 flex-1"
           onNewConversation={() => createConversationMutation.mutate()}
-          onSelectConversation={setConversationId}
+          onSelectConversation={selectConversation}
           onRenameConversation={(conversationId, title) =>
             renameConversationMutation.mutate({ conversationId, title })
           }

@@ -188,6 +188,7 @@ export function OnboardingChecklist({
                 <Link
                   to="/notebooks/$notebookId"
                   params={{ notebookId: firstNotebookId }}
+                  search={{}}
                 >
                   去上传
                 </Link>
@@ -208,6 +209,7 @@ export function OnboardingChecklist({
                 <Link
                   to="/notebooks/$notebookId"
                   params={{ notebookId: firstNotebookId }}
+                  search={{}}
                 >
                   去提问
                 </Link>

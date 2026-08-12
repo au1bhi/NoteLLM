@@ -863,6 +863,94 @@ export const StudyPlanGenerateRequestSchema = {
     title: 'StudyPlanGenerateRequest'
 } as const;
 
+export const StudyPlanListItemSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        conversation_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Conversation Id'
+        },
+        title: {
+            type: 'string',
+            title: 'Title'
+        },
+        summary: {
+            type: 'string',
+            title: 'Summary'
+        },
+        difficulty: {
+            type: 'string',
+            enum: ['beginner', 'intermediate', 'advanced'],
+            title: 'Difficulty'
+        },
+        start_date: {
+            type: 'string',
+            format: 'date',
+            title: 'Start Date'
+        },
+        end_date: {
+            type: 'string',
+            format: 'date',
+            title: 'End Date'
+        },
+        timezone: {
+            type: 'string',
+            title: 'Timezone'
+        },
+        reminder_enabled: {
+            type: 'boolean',
+            title: 'Reminder Enabled'
+        },
+        reminder_time: {
+            type: 'string',
+            title: 'Reminder Time',
+            default: '09:00'
+        },
+        email_reminder_available: {
+            type: 'boolean',
+            title: 'Email Reminder Available'
+        },
+        created_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Created At'
+        },
+        updated_at: {
+            type: 'string',
+            format: 'date-time',
+            title: 'Updated At'
+        },
+        tasks: {
+            items: {
+                '$ref': '#/components/schemas/StudyTaskPublic'
+            },
+            type: 'array',
+            title: 'Tasks'
+        },
+        notebook_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Notebook Id'
+        },
+        notebook_title: {
+            type: 'string',
+            title: 'Notebook Title'
+        },
+        conversation_title: {
+            type: 'string',
+            title: 'Conversation Title'
+        }
+    },
+    type: 'object',
+    required: ['id', 'conversation_id', 'title', 'summary', 'difficulty', 'start_date', 'end_date', 'timezone', 'reminder_enabled', 'email_reminder_available', 'created_at', 'updated_at', 'tasks', 'notebook_id', 'notebook_title', 'conversation_title'],
+    title: 'StudyPlanListItem'
+} as const;
+
 export const StudyPlanPublicSchema = {
     properties: {
         id: {
@@ -967,6 +1055,25 @@ export const StudyPlanUpdateSchema = {
     },
     type: 'object',
     title: 'StudyPlanUpdate'
+} as const;
+
+export const StudyPlansPublicSchema = {
+    properties: {
+        data: {
+            items: {
+                '$ref': '#/components/schemas/StudyPlanListItem'
+            },
+            type: 'array',
+            title: 'Data'
+        },
+        count: {
+            type: 'integer',
+            title: 'Count'
+        }
+    },
+    type: 'object',
+    required: ['data', 'count'],
+    title: 'StudyPlansPublic'
 } as const;
 
 export const StudySectionPublicSchema = {

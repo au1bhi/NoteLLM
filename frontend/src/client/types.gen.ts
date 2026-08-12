@@ -200,6 +200,28 @@ export type StudyPlanGenerateRequest = {
     timezone?: string;
 };
 
+export type StudyPlanListItem = {
+    id: string;
+    conversation_id: string;
+    title: string;
+    summary: string;
+    difficulty: 'beginner' | 'intermediate' | 'advanced';
+    start_date: string;
+    end_date: string;
+    timezone: string;
+    reminder_enabled: boolean;
+    reminder_time?: string;
+    email_reminder_available: boolean;
+    created_at: string;
+    updated_at: string;
+    tasks: Array<StudyTaskPublic>;
+    notebook_id: string;
+    notebook_title: string;
+    conversation_title: string;
+};
+
+export type difficulty = 'beginner' | 'intermediate' | 'advanced';
+
 export type StudyPlanPublic = {
     id: string;
     conversation_id: string;
@@ -217,7 +239,10 @@ export type StudyPlanPublic = {
     tasks: Array<StudyTaskPublic>;
 };
 
-export type difficulty = 'beginner' | 'intermediate' | 'advanced';
+export type StudyPlansPublic = {
+    data: Array<StudyPlanListItem>;
+    count: number;
+};
 
 export type StudyPlanUpdate = {
     reminder_enabled?: (boolean | null);
@@ -531,6 +556,14 @@ export type NotebooksRetrySourceData = {
 };
 
 export type NotebooksRetrySourceResponse = (SourcePublic);
+
+export type StudyPlansReadStudyPlansData = {
+    limit?: number;
+    notebookId?: (string | null);
+    skip?: number;
+};
+
+export type StudyPlansReadStudyPlansResponse = (StudyPlansPublic);
 
 export type StudyPlansReadConversationStudyPlanData = {
     conversationId: string;

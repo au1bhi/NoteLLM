@@ -17,6 +17,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as LayoutRouteImport } from './routes/_layout'
 import { Route as LayoutIndexRouteImport } from './routes/_layout/index'
 import { Route as LayoutSettingsRouteImport } from './routes/_layout/settings'
+import { Route as LayoutGanttRouteImport } from './routes/_layout/gantt'
 import { Route as LayoutAdminRouteImport } from './routes/_layout/admin'
 import { Route as LayoutNotebooksIndexRouteImport } from './routes/_layout/notebooks/index'
 import { Route as LayoutNotebooksNotebookIdRouteImport } from './routes/_layout/notebooks/$notebookId'
@@ -60,6 +61,11 @@ const LayoutSettingsRoute = LayoutSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => LayoutRoute,
 } as any)
+const LayoutGanttRoute = LayoutGanttRouteImport.update({
+  id: '/gantt',
+  path: '/gantt',
+  getParentRoute: () => LayoutRoute,
+} as any)
 const LayoutAdminRoute = LayoutAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
@@ -85,6 +91,7 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/verify-email': typeof VerifyEmailRoute
   '/admin': typeof LayoutAdminRoute
+  '/gantt': typeof LayoutGanttRoute
   '/settings': typeof LayoutSettingsRoute
   '/notebooks/$notebookId': typeof LayoutNotebooksNotebookIdRoute
   '/notebooks/': typeof LayoutNotebooksIndexRoute
@@ -96,6 +103,7 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/verify-email': typeof VerifyEmailRoute
   '/admin': typeof LayoutAdminRoute
+  '/gantt': typeof LayoutGanttRoute
   '/settings': typeof LayoutSettingsRoute
   '/': typeof LayoutIndexRoute
   '/notebooks/$notebookId': typeof LayoutNotebooksNotebookIdRoute
@@ -110,6 +118,7 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/verify-email': typeof VerifyEmailRoute
   '/_layout/admin': typeof LayoutAdminRoute
+  '/_layout/gantt': typeof LayoutGanttRoute
   '/_layout/settings': typeof LayoutSettingsRoute
   '/_layout/': typeof LayoutIndexRoute
   '/_layout/notebooks/$notebookId': typeof LayoutNotebooksNotebookIdRoute
@@ -125,6 +134,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/verify-email'
     | '/admin'
+    | '/gantt'
     | '/settings'
     | '/notebooks/$notebookId'
     | '/notebooks/'
@@ -136,6 +146,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/verify-email'
     | '/admin'
+    | '/gantt'
     | '/settings'
     | '/'
     | '/notebooks/$notebookId'
@@ -149,6 +160,7 @@ export interface FileRouteTypes {
     | '/signup'
     | '/verify-email'
     | '/_layout/admin'
+    | '/_layout/gantt'
     | '/_layout/settings'
     | '/_layout/'
     | '/_layout/notebooks/$notebookId'
@@ -222,6 +234,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutSettingsRouteImport
       parentRoute: typeof LayoutRoute
     }
+    '/_layout/gantt': {
+      id: '/_layout/gantt'
+      path: '/gantt'
+      fullPath: '/gantt'
+      preLoaderRoute: typeof LayoutGanttRouteImport
+      parentRoute: typeof LayoutRoute
+    }
     '/_layout/admin': {
       id: '/_layout/admin'
       path: '/admin'
@@ -248,6 +267,7 @@ declare module '@tanstack/react-router' {
 
 interface LayoutRouteChildren {
   LayoutAdminRoute: typeof LayoutAdminRoute
+  LayoutGanttRoute: typeof LayoutGanttRoute
   LayoutSettingsRoute: typeof LayoutSettingsRoute
   LayoutIndexRoute: typeof LayoutIndexRoute
   LayoutNotebooksNotebookIdRoute: typeof LayoutNotebooksNotebookIdRoute
@@ -256,6 +276,7 @@ interface LayoutRouteChildren {
 
 const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutAdminRoute: LayoutAdminRoute,
+  LayoutGanttRoute: LayoutGanttRoute,
   LayoutSettingsRoute: LayoutSettingsRoute,
   LayoutIndexRoute: LayoutIndexRoute,
   LayoutNotebooksNotebookIdRoute: LayoutNotebooksNotebookIdRoute,

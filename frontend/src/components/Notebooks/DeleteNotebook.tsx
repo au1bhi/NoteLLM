@@ -40,7 +40,10 @@ export function DeleteNotebook({
       showSuccessToast("笔记本已删除")
       onDeleted?.()
     },
-    onSettled: () => queryClient.invalidateQueries({ queryKey: ["notebooks"] }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["notebooks"] })
+      queryClient.invalidateQueries({ queryKey: ["study-plans"] })
+    },
   })
 
   return (

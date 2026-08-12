@@ -13,6 +13,11 @@ All endpoints require the existing bearer authentication and return `404` for re
 | `GET`, `POST` | `/api/v1/notebooks/{notebook_id}/conversations/` | List or create conversations |
 | `GET` | `/api/v1/conversations/{conversation_id}` | Read messages and citations |
 | `POST` | `/api/v1/conversations/{conversation_id}/messages/stream` | Send `{ "content": "..." }` and receive an SSE answer stream |
+| `GET` | `/api/v1/study-plans` | List the caller's study plans across conversations; optional `notebook_id` |
+| `GET`, `POST` | `/api/v1/conversations/{conversation_id}/study-plan` | Read or generate the current conversation's study plan |
+| `PATCH` | `/api/v1/study-plans/{plan_id}` | Update reminder opt-in or timezone |
+| `PATCH` | `/api/v1/study-plans/{plan_id}/tasks/{task_id}` | Toggle a task's completion |
+| `DELETE` | `/api/v1/study-plans/{plan_id}` | Delete one study plan |
 
 The streaming endpoint emits `delta` text events, then one `citations` event containing source name, page number, excerpt, and chunk ID, followed by `done`. It emits `error` with a user-safe message on failure. It must reject questions when the notebook has no `ready` sources.
 
@@ -27,6 +32,10 @@ Notebook workspace
  ├─ Left: source list + [Upload]
  ├─ Centre: conversation + question input
  └─ Right/below answer: expandable citations
+                                               │
+                                               ▼
+Sidebar /gantt
+ └─ one timeline of every conversation study plan
                                                │
                                                ▼
 Upload and processing state
