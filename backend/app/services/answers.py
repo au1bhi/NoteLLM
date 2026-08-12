@@ -7,7 +7,11 @@ from sqlmodel import Session
 from app.models import AnswerMode
 from app.services.chat import ChatError, ChatProvider
 from app.services.embeddings import EmbeddingProvider
-from app.services.retrieval import RetrievedChunk, retrieve_chunks
+from app.services.retrieval import (
+    DEFAULT_RETRIEVAL_LIMIT,
+    RetrievedChunk,
+    retrieve_chunks,
+)
 
 INSUFFICIENT_EVIDENCE_ANSWER = "资料不足，无法根据当前笔记本中的来源可靠回答。"
 MAX_CITATIONS = 5
@@ -128,6 +132,7 @@ def answer_question(
     session: Session,
     mode: AnswerMode = "grounded",
     source_ids: list[uuid.UUID] | None = None,
+    limit: int = DEFAULT_RETRIEVAL_LIMIT,
 ) -> GroundedAnswer:
     if mode == "knowledge":
         model_answer = chat_provider.answer(
@@ -146,6 +151,7 @@ def answer_question(
         notebook_id=notebook_id,
         query=query,
         source_ids=source_ids,
+        limit=limit,
     )
     if not retrieved:
         if mode == "hybrid":

@@ -243,3 +243,26 @@ def test_suggestions_are_best_effort_on_failure(monkeypatch: MonkeyPatch) -> Non
 
     assert answer.suggestions == []
     assert answer.content == "Verified evidence answers the question."
+
+
+def test_answer_forwards_limit_to_retrieve_chunks(monkeypatch: MonkeyPatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_retrieve(**kwargs: object) -> list[RetrievedChunk]:
+        captured.update(kwargs)
+        return []
+
+    monkeypatch.setattr("app.services.answers.retrieve_chunks", fake_retrieve)
+
+    answer_question(
+        session=cast(Session, None),
+        notebook_id=uuid.uuid4(),
+        query="What is verified?",
+        embedding_provider=FakeEmbeddingProvider(),
+        chat_provider=FakeChatProvider(
+            ModelAnswer(content="unused", citation_chunk_ids=[])
+        ),
+        limit=3,
+    )
+
+    assert captured["limit"] == 3
