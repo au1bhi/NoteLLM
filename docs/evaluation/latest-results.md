@@ -27,6 +27,8 @@
 
 引用正确率只检查至少一条已验证引用是否来自标注的期望来源；关键词命中率不等同于回答忠实度。论文定稿前应逐题阅读答案和引用摘录，记录人工忠实度结论及异常原因。
 
+本次人工复核 34 题全部对照已验证引用来源与合成语料原文：**34 通过 / 0 未通过**。关键词自动未命中的 4 题均非幻觉：Q04 写「1,000个字符」，与 `rag_workflow.md` 一致，自动指标因千分位逗号漏检金标准 `1000`；Q09 正确说明引用 chunk ID 来自当前笔记本 ready 来源经余弦检索得到的前 5 个分块，自动指标漏检金标准「候选」；Q32 所引为 `api_contract.md`（conversation / message 持久化），期望来源 `demo_operations.md` 同样写刷新后应看到来源与会话历史，属来源级标注局限；Q34 「不会编造答案」与 `demo_operations.md`「不应编造没有证据的答案」同义，自动指标因「不会」对「不应」漏检。详见 `docs/evaluation/human-faithfulness.md`。
+
 ## 逐题结果
 
 | ID | Recall@5 | 检索 ms | 回答 ms | 引用来源匹配 | 关键词命中 |
@@ -68,41 +70,41 @@
 
 ## 人工忠实度复核表
 
-下表只包含合成语料的输出。请逐题核对回答是否仅由引用来源支持，并将“待人工复核”替换为“通过”或“未通过”，再简述异常原因。
+下表只包含合成语料的输出。已逐题核对回答是否仅由引用来源支持；结论为“通过”或“未通过”，并简述原因。关键词自动未命中不等于不忠实。
 
 | ID | 问题 | 期望来源 | 模型回答 | 已验证引用来源 | 人工忠实度 |
 | --- | --- | --- | --- | --- | --- |
-| Q01 | NoteLLM 支持哪些上传文件类型？ | rag_workflow.md | NoteLLM 支持上传 UTF-8 TXT、Markdown 和 PDF 文件。 | rag_workflow.md | 待人工复核 |
-| Q02 | PDF 来源为什么可以显示页码？ | rag_workflow.md | PDF 会按页提取文本，因此引用可以显示页码。 | rag_workflow.md | 待人工复核 |
-| Q03 | 文本被分块前会先经过什么步骤？ | rag_workflow.md | 提取文本 | rag_workflow.md | 待人工复核 |
-| Q04 | 默认分块长度是多少？ | rag_workflow.md | 默认分块长度为1,000个字符。 | rag_workflow.md | 待人工复核 |
-| Q05 | 相邻分块保留多少字符重叠？ | rag_workflow.md | 150个字符 | rag_workflow.md | 待人工复核 |
-| Q06 | 哪些来源状态允许参与检索？ | rag_workflow.md | 只有状态为 ready 且已有向量的分块才可参与检索。 | rag_workflow.md | 待人工复核 |
-| Q07 | 检索使用哪种距离度量？ | rag_workflow.md | 检索使用余弦距离。 | rag_workflow.md | 待人工复核 |
-| Q08 | 一次问题默认返回多少个候选分块？ | rag_workflow.md | 5 | api_contract.md, rag_workflow.md | 待人工复核 |
-| Q09 | 聊天模型可引用的 chunk ID 来自哪里？ | rag_workflow.md | 聊天模型可引用的 chunk ID 来自用户当前笔记本中状态为 ready 的来源，经余弦距离检索得到的前5个分块。 | rag_workflow.md | 待人工复核 |
-| Q10 | 模型返回未知引用 ID 时后端如何处理？ | rag_workflow.md | 后端会移除不属于候选集的引用 ID；若没有有效引用，回答必须是“资料不足，无法根据当前笔记本中的来源可靠回答。” | rag_workflow.md | 待人工复核 |
-| Q11 | 没有有效引用时系统应回复什么？ | rag_workflow.md | 资料不足，无法根据当前笔记本中的来源可靠回答。 | product_scope.md, rag_workflow.md | 待人工复核 |
-| Q12 | 删除来源后哪些派生数据需要清理？ | rag_workflow.md | 删除来源时，数据库会级联删除其分块和向量，同时本地上传文件也会被删除。 | rag_workflow.md | 待人工复核 |
-| Q13 | 笔记本访问控制依赖哪个字段校验？ | rag_workflow.md | owner_id | access_boundaries.md, rag_workflow.md | 待人工复核 |
-| Q14 | 固定评测语料是否应包含个人资料？ | study_protocol.md | 不应包含。固定评测语料应使用合成且不含个人资料的语料。 | study_protocol.md | 待人工复核 |
-| Q15 | 每轮实验至少要记录哪些模型信息？ | study_protocol.md | 每轮实验至少要记录代码提交、嵌入模型、向量维度、Top-K、运行日期和数据库镜像版本。 | study_protocol.md | 待人工复核 |
-| Q16 | 为什么不应同时调整多个检索参数？ | study_protocol.md | 除非实验目标是比较配置，否则不得在同一轮中同时修改分块长度、重叠长度和检索数量，否则无法确定哪个参数变化导致了效果变化。 | study_protocol.md | 待人工复核 |
-| Q17 | 评测问题包含哪三种类型？ | study_protocol.md | 事实定位、流程理解和边界条件 | study_protocol.md | 待人工复核 |
-| Q18 | Recall@5 如何判定一次命中？ | study_protocol.md | 在前5个返回分块中，至少有一个分块来自期望来源，则视为一次命中。 | study_protocol.md | 待人工复核 |
-| Q19 | 引用正确率在什么情况下计算？ | study_protocol.md | 引用正确率只在模型生成了回答时计算。 | study_protocol.md | 待人工复核 |
-| Q20 | 什么样的引用记为正确？ | study_protocol.md | 若回答中至少一个已验证的引用来自期望来源，且引用ID在检索候选集中（即未被后端丢弃），则记为正确。 | rag_workflow.md, study_protocol.md | 待人工复核 |
-| Q21 | 未知引用 ID 能否计入正确率？ | study_protocol.md | 不能 | rag_workflow.md, study_protocol.md | 待人工复核 |
-| Q22 | 关键词命中率能否替代人工忠实度审核？ | study_protocol.md | 不能。关键词命中率仅是自动化的忠实度筛查信号，回答包含指定关键词不代表人工审核已经通过。 | study_protocol.md | 待人工复核 |
-| Q23 | 报告中应使用哪些响应时间统计量？ | study_protocol.md | 平均值和 P95 | study_protocol.md | 待人工复核 |
-| Q24 | 响应时间异常可能来自哪些外部因素？ | study_protocol.md | 网络波动、供应商限流和冷启动。 | study_protocol.md | 待人工复核 |
-| Q25 | 本地数据库容器使用什么镜像？ | demo_operations.md | 本地数据库容器使用 pgvector/pgvector:pg18 镜像。 | demo_operations.md | 待人工复核 |
-| Q26 | 主机连接数据库时使用什么端口？ | demo_operations.md | 5433 | demo_operations.md | 待人工复核 |
-| Q27 | 数据库迁移命令应在什么目录执行？ | demo_operations.md | 应在 backend 目录执行 | demo_operations.md | 待人工复核 |
-| Q28 | 当前嵌入列的维度是多少？ | demo_operations.md | 1024 | demo_operations.md | 待人工复核 |
-| Q29 | 前端和 API 文档分别在哪两个地址查看？ | demo_operations.md | 前端地址：http://localhost:5173，API 文档地址：http://localhost:8000/docs。 | demo_operations.md | 待人工复核 |
-| Q30 | 另一账户访问受保护笔记本应收到什么状态码？ | demo_operations.md | 404 | access_boundaries.md, demo_operations.md | 待人工复核 |
-| Q31 | 演示问答前来源应显示什么状态？ | demo_operations.md | ready | demo_operations.md, rag_workflow.md | 待人工复核 |
-| Q32 | 刷新工作区后应保留哪两类内容？ | demo_operations.md | 刷新工作区后应保留 conversation 和 message 两类内容。 | api_contract.md | 待人工复核 |
-| Q33 | provider 未配置时密钥能否交给浏览器？ | demo_operations.md | 不能。当 provider 未配置时，系统不应把密钥交给浏览器。 | access_boundaries.md, demo_operations.md | 待人工复核 |
-| Q34 | provider 未配置时系统能否编造答案？ | demo_operations.md | 不会编造答案。 | demo_operations.md | 待人工复核 |
+| Q01 | NoteLLM 支持哪些上传文件类型？ | rag_workflow.md | NoteLLM 支持上传 UTF-8 TXT、Markdown 和 PDF 文件。 | rag_workflow.md | 通过：与 rag_workflow.md「只接受 UTF-8 TXT、Markdown 和 PDF」一致。 |
+| Q02 | PDF 来源为什么可以显示页码？ | rag_workflow.md | PDF 会按页提取文本，因此引用可以显示页码。 | rag_workflow.md | 通过：与来源原句一致。 |
+| Q03 | 文本被分块前会先经过什么步骤？ | rag_workflow.md | 提取文本 | rag_workflow.md | 通过：流程第一步为提取文本，与来源一致。 |
+| Q04 | 默认分块长度是多少？ | rag_workflow.md | 默认分块长度为1,000个字符。 | rag_workflow.md | 通过：自动关键词假阴性（千分位逗号），事实正确。 |
+| Q05 | 相邻分块保留多少字符重叠？ | rag_workflow.md | 150个字符 | rag_workflow.md | 通过：重叠 150 字符，与来源一致。 |
+| Q06 | 哪些来源状态允许参与检索？ | rag_workflow.md | 只有状态为 ready 且已有向量的分块才可参与检索。 | rag_workflow.md | 通过：与来源原句一致。 |
+| Q07 | 检索使用哪种距离度量？ | rag_workflow.md | 检索使用余弦距离。 | rag_workflow.md | 通过：与来源「按余弦距离检索」一致。 |
+| Q08 | 一次问题默认返回多少个候选分块？ | rag_workflow.md | 5 | api_contract.md, rag_workflow.md | 通过：Top-5，两处引用来源均支持默认 5。 |
+| Q09 | 聊天模型可引用的 chunk ID 来自哪里？ | rag_workflow.md | 聊天模型可引用的 chunk ID 来自用户当前笔记本中状态为 ready 的来源，经余弦距离检索得到的前5个分块。 | rag_workflow.md | 通过：正确说明引用来自 ready 来源检索的前 5 个分块；自动指标漏检「候选」。 |
+| Q10 | 模型返回未知引用 ID 时后端如何处理？ | rag_workflow.md | 后端会移除不属于候选集的引用 ID；若没有有效引用，回答必须是“资料不足，无法根据当前笔记本中的来源可靠回答。” | rag_workflow.md | 通过：移除未知引用及无有效引用时的固定回复，与来源一致。 |
+| Q11 | 没有有效引用时系统应回复什么？ | rag_workflow.md | 资料不足，无法根据当前笔记本中的来源可靠回答。 | product_scope.md, rag_workflow.md | 通过：固定回复与 rag_workflow.md 一致；product_scope.md 亦要求资料不足须承认边界。 |
+| Q12 | 删除来源后哪些派生数据需要清理？ | rag_workflow.md | 删除来源时，数据库会级联删除其分块和向量，同时本地上传文件也会被删除。 | rag_workflow.md | 通过：级联清理分块与向量并删除本地上传，与来源一致。 |
+| Q13 | 笔记本访问控制依赖哪个字段校验？ | rag_workflow.md | owner_id | access_boundaries.md, rag_workflow.md | 通过：两处引用均写明以 owner_id 校验。 |
+| Q14 | 固定评测语料是否应包含个人资料？ | study_protocol.md | 不应包含。固定评测语料应使用合成且不含个人资料的语料。 | study_protocol.md | 通过：与来源「合成且不含个人资料」一致。 |
+| Q15 | 每轮实验至少要记录哪些模型信息？ | study_protocol.md | 每轮实验至少要记录代码提交、嵌入模型、向量维度、Top-K、运行日期和数据库镜像版本。 | study_protocol.md | 通过：记录项与来源列举一致。 |
+| Q16 | 为什么不应同时调整多个检索参数？ | study_protocol.md | 除非实验目标是比较配置，否则不得在同一轮中同时修改分块长度、重叠长度和检索数量，否则无法确定哪个参数变化导致了效果变化。 | study_protocol.md | 通过：复述单变量约束；末句为该约束的常规释义，未编造语料外事实。 |
+| Q17 | 评测问题包含哪三种类型？ | study_protocol.md | 事实定位、流程理解和边界条件 | study_protocol.md | 通过：三类与来源一致。 |
+| Q18 | Recall@5 如何判定一次命中？ | study_protocol.md | 在前5个返回分块中，至少有一个分块来自期望来源，则视为一次命中。 | study_protocol.md | 通过：单题命中判定与 Recall@5 定义一致。 |
+| Q19 | 引用正确率在什么情况下计算？ | study_protocol.md | 引用正确率只在模型生成了回答时计算。 | study_protocol.md | 通过：与来源原句一致。 |
+| Q20 | 什么样的引用记为正确？ | study_protocol.md | 若回答中至少一个已验证的引用来自期望来源，且引用ID在检索候选集中（即未被后端丢弃），则记为正确。 | rag_workflow.md, study_protocol.md | 通过：期望来源命中且未知 ID 须丢弃，两处引用支持。 |
+| Q21 | 未知引用 ID 能否计入正确率？ | study_protocol.md | 不能 | rag_workflow.md, study_protocol.md | 通过：未知引用不能计入正确，与协议一致。 |
+| Q22 | 关键词命中率能否替代人工忠实度审核？ | study_protocol.md | 不能。关键词命中率仅是自动化的忠实度筛查信号，回答包含指定关键词不代表人工审核已经通过。 | study_protocol.md | 通过：与来源原句一致。 |
+| Q23 | 报告中应使用哪些响应时间统计量？ | study_protocol.md | 平均值和 P95 | study_protocol.md | 通过：与来源「平均值和 P95」一致。 |
+| Q24 | 响应时间异常可能来自哪些外部因素？ | study_protocol.md | 网络波动、供应商限流和冷启动。 | study_protocol.md | 通过：三项外部因素与来源一致。 |
+| Q25 | 本地数据库容器使用什么镜像？ | demo_operations.md | 本地数据库容器使用 pgvector/pgvector:pg18 镜像。 | demo_operations.md | 通过：镜像名与来源一致。 |
+| Q26 | 主机连接数据库时使用什么端口？ | demo_operations.md | 5433 | demo_operations.md | 通过：主机端口 5433，与来源一致。 |
+| Q27 | 数据库迁移命令应在什么目录执行？ | demo_operations.md | 应在 backend 目录执行 | demo_operations.md | 通过：迁移目录与来源一致。 |
+| Q28 | 当前嵌入列的维度是多少？ | demo_operations.md | 1024 | demo_operations.md | 通过：嵌入列 1024 维，与来源一致。 |
+| Q29 | 前端和 API 文档分别在哪两个地址查看？ | demo_operations.md | 前端地址：http://localhost:5173，API 文档地址：http://localhost:8000/docs。 | demo_operations.md | 通过：localhost:5173 与 /docs，与来源一致。 |
+| Q30 | 另一账户访问受保护笔记本应收到什么状态码？ | demo_operations.md | 404 | access_boundaries.md, demo_operations.md | 通过：跨账户访问返回 404，两处引用支持。 |
+| Q31 | 演示问答前来源应显示什么状态？ | demo_operations.md | ready | demo_operations.md, rag_workflow.md | 通过：演示前须 ready，两处引用支持。 |
+| Q32 | 刷新工作区后应保留哪两类内容？ | demo_operations.md | 刷新工作区后应保留 conversation 和 message 两类内容。 | api_contract.md | 通过：答案与所引 api_contract.md 一致（conversation/message 持久化）；demo_operations.md 亦写刷新后可见来源与会话历史，属来源级标注局限，非幻觉。 |
+| Q33 | provider 未配置时密钥能否交给浏览器？ | demo_operations.md | 不能。当 provider 未配置时，系统不应把密钥交给浏览器。 | access_boundaries.md, demo_operations.md | 通过：密钥不得交给浏览器，两处引用支持。 |
+| Q34 | provider 未配置时系统能否编造答案？ | demo_operations.md | 不会编造答案。 | demo_operations.md | 通过：与 demo_operations.md「不应编造没有证据的答案」一致；自动关键词假阴性（「不会」对「不应」）。 |
