@@ -1,0 +1,7 @@
+id,question,expected_source,expected_answer_terms
+OOC01,Kubernetes 部署的默认副本数是多少？,none,资料不足
+OOC02,官方 Helm Chart 的名称是什么？,none,资料不足
+OOC03,扫描件 OCR 支持哪些语言？,none,资料不足
+OOC04,iOS 客户端在 App Store 的上架名称是什么？,none,资料不足
+OOC05,多租户 SAML SSO 应映射哪个断言字段？,none,资料不足
+OOC06,如何在应用内训练自定义嵌入模型？,none,资料不足
