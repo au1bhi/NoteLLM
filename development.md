@@ -76,7 +76,14 @@ And then you can run the local development server for the backend:
 
 ```bash
 cd backend
-fastapi dev app/main.py
+POSTGRES_PORT=5433 fastapi dev app/main.py
+```
+
+The Compose Postgres published on `5433` does not auto-migrate when the backend runs locally. After pulling a revision that adds tables (for example study plans), apply it before opening `/gantt`:
+
+```bash
+cd backend
+POSTGRES_PORT=5433 uv run alembic upgrade head
 ```
 
 ## Docker Compose in `localhost.tiangolo.com`

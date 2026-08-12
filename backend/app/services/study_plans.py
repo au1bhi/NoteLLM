@@ -8,6 +8,7 @@ from datetime import UTC, date, datetime, timedelta
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import update
+from sqlalchemy.exc import ProgrammingError
 from sqlmodel import Session, col, func, select
 
 from app.core.config import settings
@@ -369,6 +370,23 @@ def plan_list_item(
     )
 
 
+MISSING_STUDY_PLAN_SCHEMA = (
+    "学习计划数据表尚未初始化，请先在 backend 目录运行 alembic upgrade head"
+)
+
+
+def is_missing_study_plan_schema(error: BaseException) -> bool:
+    message = str(error).lower()
+    return "study_plan" in message and (
+        "does not exist" in message or "undefinedtable" in message
+    )
+
+
+def translate_missing_study_plan_schema(error: ProgrammingError) -> None:
+    if is_missing_study_plan_schema(error):
+        raise RuntimeError(MISSING_STUDY_PLAN_SCHEMA) from error
+
+
 def list_owned_plans(
     *,
     session: Session,
@@ -381,22 +399,28 @@ def list_owned_plans(
     if notebook_id is not None:
         filters.append(Notebook.id == notebook_id)
 
-    count = session.exec(
-        select(func.count())
-        .select_from(StudyPlan)
-        .join(Conversation, col(StudyPlan.conversation_id) == col(Conversation.id))
-        .join(Notebook, col(Conversation.notebook_id) == col(Notebook.id))
-        .where(*filters)
-    ).one()
-    rows = session.exec(
-        select(StudyPlan, Conversation, Notebook)
-        .join(Conversation, col(StudyPlan.conversation_id) == col(Conversation.id))
-        .join(Notebook, col(Conversation.notebook_id) == col(Notebook.id))
-        .where(*filters)
-        .order_by(col(StudyPlan.start_date).desc(), col(StudyPlan.updated_at).desc())
-        .offset(skip)
-        .limit(limit)
-    ).all()
+    try:
+        count = session.exec(
+            select(func.count())
+            .select_from(StudyPlan)
+            .join(Conversation, col(StudyPlan.conversation_id) == col(Conversation.id))
+            .join(Notebook, col(Conversation.notebook_id) == col(Notebook.id))
+            .where(*filters)
+        ).one()
+        rows = session.exec(
+            select(StudyPlan, Conversation, Notebook)
+            .join(Conversation, col(StudyPlan.conversation_id) == col(Conversation.id))
+            .join(Notebook, col(Conversation.notebook_id) == col(Notebook.id))
+            .where(*filters)
+            .order_by(
+                col(StudyPlan.start_date).desc(), col(StudyPlan.updated_at).desc()
+            )
+            .offset(skip)
+            .limit(limit)
+        ).all()
+    except ProgrammingError as error:
+        translate_missing_study_plan_schema(error)
+        raise
     plan_ids = [plan.id for plan, _conversation, _notebook in rows]
     tasks_by_plan: dict[uuid.UUID, list[StudyTask]] = {
         plan_id: [] for plan_id in plan_ids

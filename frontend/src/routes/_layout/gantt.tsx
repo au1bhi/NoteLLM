@@ -86,7 +86,7 @@ function GanttPage() {
               还没有可聚合的学习甘特图
             </h2>
             <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-              在任意对话中生成学习计划后，这里会把所有计划排到同一条时间轴上。
+              这里只聚合已有计划，不会自己生成。打开任意会话，点标题旁的日历图标，即可从对话生成学习甘特图。
             </p>
           </div>
           <Button asChild>

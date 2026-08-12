@@ -7,9 +7,18 @@ from app.core.config import settings
 from app.models import Conversation, Notebook, StudyPlan, StudyTask
 from app.services.study_plans import (
     dispatch_due_study_reminders,
+    is_missing_study_plan_schema,
     parse_generated_study_plan,
 )
 from tests.utils.user import create_random_user
+
+
+def test_missing_study_plan_schema_detects_undefined_table() -> None:
+    assert is_missing_study_plan_schema(
+        RuntimeError('relation "study_plan" does not exist')
+    )
+    assert is_missing_study_plan_schema(RuntimeError("UndefinedTable: study_plan"))
+    assert not is_missing_study_plan_schema(RuntimeError("connection refused"))
 
 
 def test_parser_bounds_duration_and_fills_uncovered_days() -> None:

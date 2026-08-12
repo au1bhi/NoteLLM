@@ -50,13 +50,16 @@ def read_study_plans(
     limit: int = 100,
     notebook_id: uuid.UUID | None = None,
 ) -> StudyPlansPublic:
-    items, count = list_owned_plans(
-        session=session,
-        user=current_user,
-        skip=skip,
-        limit=limit,
-        notebook_id=notebook_id,
-    )
+    try:
+        items, count = list_owned_plans(
+            session=session,
+            user=current_user,
+            skip=skip,
+            limit=limit,
+            notebook_id=notebook_id,
+        )
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
     return StudyPlansPublic(data=items, count=count)
 
 

@@ -286,3 +286,21 @@ def test_list_study_plans_aggregates_owned_conversations(
     )
     other_listed = client.get(f"{settings.API_V1_STR}/study-plans", headers=stranger)
     assert {item["title"] for item in other_listed.json()["data"]} == {"他人计划"}
+
+
+def test_list_study_plans_reports_uninitialized_schema(
+    client: TestClient, db: Session, monkeypatch: MonkeyPatch
+) -> None:
+    user = create_random_user(db)
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+    monkeypatch.setattr(
+        "app.api.routes.study_plans.list_owned_plans",
+        lambda **_: (_ for _ in ()).throw(
+            RuntimeError(
+                "学习计划数据表尚未初始化，请先在 backend 目录运行 alembic upgrade head"
+            )
+        ),
+    )
+    response = client.get(f"{settings.API_V1_STR}/study-plans", headers=headers)
+    assert response.status_code == 503
+    assert "alembic upgrade head" in response.json()["detail"]
