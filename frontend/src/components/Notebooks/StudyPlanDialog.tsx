@@ -206,7 +206,12 @@ export function StudyPlanDialog({
             {extractErrorMessage(planQuery.error)}
           </p>
         ) : null}
-        {!planQuery.isLoading && !plan ? (
+        {generateMutation.error ? (
+          <p className="text-sm text-destructive">
+            {extractErrorMessage(generateMutation.error)}
+          </p>
+        ) : null}
+        {!planQuery.isLoading && !planQuery.error && !plan ? (
           <div className="rounded-xl border border-dashed p-8 text-center">
             <Sparkles className="mx-auto size-8 text-primary" />
             <p className="mt-3 font-medium">把对话变成可执行的学习周期</p>

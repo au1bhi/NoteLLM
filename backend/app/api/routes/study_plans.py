@@ -1,6 +1,7 @@
 import uuid
 
 from fastapi import APIRouter, HTTPException
+from sqlalchemy.exc import ProgrammingError
 from sqlmodel import Session, col, select
 
 from app.api.deps import CurrentUser, SessionDep
@@ -25,8 +26,10 @@ from app.services.provider_settings import (
     load_user_provider_settings,
 )
 from app.services.study_plans import (
+    MISSING_STUDY_PLAN_SCHEMA,
     conversation_text,
     generate_study_plan,
+    is_missing_study_plan_schema,
     list_owned_plans,
     plan_public,
     store_generated_plan,
@@ -90,9 +93,16 @@ def read_conversation_study_plan(
     conversation = get_conversation_or_404(
         session=session, current_user=current_user, conversation_id=conversation_id
     )
-    plan = session.exec(
-        select(StudyPlan).where(StudyPlan.conversation_id == conversation.id)
-    ).first()
+    try:
+        plan = session.exec(
+            select(StudyPlan).where(StudyPlan.conversation_id == conversation.id)
+        ).first()
+    except ProgrammingError as error:
+        if is_missing_study_plan_schema(error):
+            raise HTTPException(
+                status_code=503, detail=MISSING_STUDY_PLAN_SCHEMA
+            ) from error
+        raise
     if plan is None:
         return None
     return plan_public(session=session, plan=plan, user=current_user)
@@ -138,6 +148,14 @@ def create_or_regenerate_study_plan(
         )
     except QuotaError as error:
         raise HTTPException(status_code=429, detail=str(error)) from error
+    except ValueError as error:
+        if reserved:
+            settle_usage(
+                session=session,
+                user_id=current_user.id,
+                chat_tokens=-reserved,
+            )
+        raise HTTPException(status_code=400, detail=str(error)) from error
     except (ChatError, RuntimeError) as error:
         if reserved:
             settle_usage(
@@ -153,12 +171,15 @@ def create_or_regenerate_study_plan(
             user_id=current_user.id,
             chat_tokens=getattr(provider, "total_tokens_used", 0) - reserved,
         )
-    plan = store_generated_plan(
-        session=session,
-        conversation=conversation,
-        generated=generated,
-        timezone=timezone,
-    )
+    try:
+        plan = store_generated_plan(
+            session=session,
+            conversation=conversation,
+            generated=generated,
+            timezone=timezone,
+        )
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
     return plan_public(session=session, plan=plan, user=current_user)
 
 

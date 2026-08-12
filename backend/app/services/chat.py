@@ -63,8 +63,7 @@ class OpenAICompatibleChatProvider:
     def _chat(self, *, prompt: str, system: str | None = None) -> str:
         if not self.config.base_url or not self.config.api_key or not self.config.model:
             raise ChatError(
-                "Chat is not configured. Add your API key in Settings, or set "
-                "LLM_BASE_URL, LLM_API_KEY, and LLM_MODEL on the server."
+                "对话模型尚未配置。请在设置中填写 API Key，或由管理员配置服务端模型。"
             )
 
         endpoint = (
@@ -133,7 +132,9 @@ class OpenAICompatibleChatProvider:
         """Ask the provider for any JSON object (used for structured generation)."""
         try:
             parsed = json.loads(self._chat(prompt=prompt, system=system))
-        except (json.JSONDecodeError, ChatError) as error:
+        except ChatError:
+            raise
+        except json.JSONDecodeError as error:
             raise ChatError("对话模型未返回有效 JSON") from error
         if not isinstance(parsed, dict):
             raise ChatError("对话模型未返回 JSON 对象")

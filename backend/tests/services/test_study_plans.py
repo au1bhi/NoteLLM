@@ -1,10 +1,12 @@
 from datetime import UTC, date, datetime
 
+import pytest
 from pytest import MonkeyPatch
 from sqlmodel import Session
 
 from app.core.config import settings
 from app.models import Conversation, Notebook, StudyPlan, StudyTask
+from app.services.chat import ChatError
 from app.services.study_plans import (
     dispatch_due_study_reminders,
     is_missing_study_plan_schema,
@@ -18,7 +20,13 @@ def test_missing_study_plan_schema_detects_undefined_table() -> None:
         RuntimeError('relation "study_plan" does not exist')
     )
     assert is_missing_study_plan_schema(RuntimeError("UndefinedTable: study_plan"))
+    assert is_missing_study_plan_schema(
+        RuntimeError('relation "study_task" does not exist')
+    )
     assert not is_missing_study_plan_schema(RuntimeError("connection refused"))
+    assert not is_missing_study_plan_schema(
+        RuntimeError('relation "user" does not exist')
+    )
 
 
 def test_parser_bounds_duration_and_fills_uncovered_days() -> None:
@@ -45,6 +53,20 @@ def test_parser_bounds_duration_and_fills_uncovered_days() -> None:
     assert generated.tasks[0].estimated_minutes == 15
     assert generated.tasks[-1].start_day == 3
     assert generated.tasks[-1].end_day == 60
+
+
+def test_parser_rejects_empty_title_and_tasks() -> None:
+    with pytest.raises(ChatError, match="学习计划标题"):
+        parse_generated_study_plan({"title": " ", "summary": "说明", "tasks": []})
+    with pytest.raises(ChatError, match="可执行的学习任务"):
+        parse_generated_study_plan(
+            {
+                "title": "计划",
+                "summary": "说明",
+                "duration_days": 7,
+                "tasks": [{"title": "", "description": "空"}],
+            }
+        )
 
 
 def test_scheduler_sends_once_at_local_nine(

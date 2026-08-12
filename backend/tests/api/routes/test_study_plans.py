@@ -304,3 +304,78 @@ def test_list_study_plans_reports_uninitialized_schema(
     response = client.get(f"{settings.API_V1_STR}/study-plans", headers=headers)
     assert response.status_code == 503
     assert "alembic upgrade head" in response.json()["detail"]
+
+
+def test_generate_study_plan_reports_uninitialized_schema(
+    client: TestClient, db: Session, monkeypatch: MonkeyPatch
+) -> None:
+    user, conversation = _conversation_with_message(db)
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+    monkeypatch.setattr(
+        "app.api.routes.study_plans.get_chat_provider",
+        lambda _config: FakePlanProvider(),
+    )
+    monkeypatch.setattr(
+        "app.api.routes.study_plans.store_generated_plan",
+        lambda **_: (_ for _ in ()).throw(
+            RuntimeError(
+                "学习计划数据表尚未初始化，请先在 backend 目录运行 alembic upgrade head"
+            )
+        ),
+    )
+    response = client.post(
+        f"{settings.API_V1_STR}/conversations/{conversation.id}/study-plan",
+        headers=headers,
+        json={"timezone": "Asia/Shanghai"},
+    )
+    assert response.status_code == 503
+    assert "alembic upgrade head" in response.json()["detail"]
+
+
+def test_generate_study_plan_rejects_empty_conversation(
+    client: TestClient, db: Session
+) -> None:
+    user = create_random_user(db)
+    notebook = create_random_notebook(db=db, owner_id=user.id)
+    conversation = Conversation(notebook_id=notebook.id, title="空会话")
+    db.add(conversation)
+    db.commit()
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+    response = client.post(
+        f"{settings.API_V1_STR}/conversations/{conversation.id}/study-plan",
+        headers=headers,
+        json={"timezone": "Asia/Shanghai"},
+    )
+    assert response.status_code == 400
+    assert "还没有可用于生成计划的内容" in response.json()["detail"]
+
+
+def test_generate_study_plan_reports_unconfigured_chat(
+    client: TestClient, db: Session, monkeypatch: MonkeyPatch
+) -> None:
+    from app.services.chat import ChatError
+
+    user, conversation = _conversation_with_message(db)
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+
+    class UnconfiguredProvider:
+        total_tokens_used = 0
+
+        def complete_json(
+            self, *, prompt: str, system: str | None = None
+        ) -> dict[str, object]:
+            raise ChatError(
+                "对话模型尚未配置。请在设置中填写 API Key，或由管理员配置服务端模型。"
+            )
+
+    monkeypatch.setattr(
+        "app.api.routes.study_plans.get_chat_provider",
+        lambda _config: UnconfiguredProvider(),
+    )
+    response = client.post(
+        f"{settings.API_V1_STR}/conversations/{conversation.id}/study-plan",
+        headers=headers,
+        json={"timezone": "Asia/Shanghai"},
+    )
+    assert response.status_code == 503
+    assert "对话模型尚未配置" in response.json()["detail"]

@@ -260,51 +260,57 @@ def store_generated_plan(
     timezone = validate_timezone(timezone)
     start_date = today or datetime.now(ZoneInfo(timezone)).date()
     end_date = start_date + timedelta(days=generated.duration_days - 1)
-    plan = session.exec(
-        select(StudyPlan).where(StudyPlan.conversation_id == conversation.id)
-    ).first()
-    if plan is None:
-        plan = StudyPlan(
-            conversation_id=conversation.id,
-            title=generated.title,
-            summary=generated.summary,
-            difficulty=generated.difficulty,
-            start_date=start_date,
-            end_date=end_date,
-            timezone=timezone,
-        )
-        session.add(plan)
-        session.flush()
-    else:
-        for existing_task in session.exec(
-            select(StudyTask).where(StudyTask.plan_id == plan.id)
-        ).all():
-            session.delete(existing_task)
-        plan.title = generated.title
-        plan.summary = generated.summary
-        plan.difficulty = generated.difficulty
-        plan.start_date = start_date
-        plan.end_date = end_date
-        plan.timezone = timezone
-        plan.last_reminder_date = None
-        plan.updated_at = get_datetime_utc()
-        session.add(plan)
-        session.flush()
-
-    for sort_order, generated_task in enumerate(generated.tasks):
-        session.add(
-            StudyTask(
-                plan_id=plan.id,
-                title=generated_task.title,
-                description=generated_task.description,
-                start_date=start_date + timedelta(days=generated_task.start_day - 1),
-                end_date=start_date + timedelta(days=generated_task.end_day - 1),
-                estimated_minutes=generated_task.estimated_minutes,
-                sort_order=sort_order,
+    try:
+        plan = session.exec(
+            select(StudyPlan).where(StudyPlan.conversation_id == conversation.id)
+        ).first()
+        if plan is None:
+            plan = StudyPlan(
+                conversation_id=conversation.id,
+                title=generated.title,
+                summary=generated.summary,
+                difficulty=generated.difficulty,
+                start_date=start_date,
+                end_date=end_date,
+                timezone=timezone,
             )
-        )
-    session.commit()
-    session.refresh(plan)
+            session.add(plan)
+            session.flush()
+        else:
+            for existing_task in session.exec(
+                select(StudyTask).where(StudyTask.plan_id == plan.id)
+            ).all():
+                session.delete(existing_task)
+            plan.title = generated.title
+            plan.summary = generated.summary
+            plan.difficulty = generated.difficulty
+            plan.start_date = start_date
+            plan.end_date = end_date
+            plan.timezone = timezone
+            plan.last_reminder_date = None
+            plan.updated_at = get_datetime_utc()
+            session.add(plan)
+            session.flush()
+
+        for sort_order, generated_task in enumerate(generated.tasks):
+            session.add(
+                StudyTask(
+                    plan_id=plan.id,
+                    title=generated_task.title,
+                    description=generated_task.description,
+                    start_date=start_date
+                    + timedelta(days=generated_task.start_day - 1),
+                    end_date=start_date + timedelta(days=generated_task.end_day - 1),
+                    estimated_minutes=generated_task.estimated_minutes,
+                    sort_order=sort_order,
+                )
+            )
+        session.commit()
+        session.refresh(plan)
+    except ProgrammingError as error:
+        session.rollback()
+        translate_missing_study_plan_schema(error)
+        raise
     return plan
 
 
@@ -377,7 +383,8 @@ MISSING_STUDY_PLAN_SCHEMA = (
 
 def is_missing_study_plan_schema(error: BaseException) -> bool:
     message = str(error).lower()
-    return "study_plan" in message and (
+    mentions_table = "study_plan" in message or "study_task" in message
+    return mentions_table and (
         "does not exist" in message or "undefinedtable" in message
     )
 
