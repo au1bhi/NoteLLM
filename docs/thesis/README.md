@@ -7,6 +7,7 @@
 | [abstract.md](abstract.md) | 中英文摘要与关键词 |
 | [acknowledgements.md](acknowledgements.md) | 致谢骨架，须换成真实姓名 |
 | [OUTLINE.md](OUTLINE.md) | 目录、必写事实、图表清单 |
+| [ASSEMBLE.md](ASSEMBLE.md) | 粘进学校模板时怎么避免套稿和自重复 |
 | [chapter-intro.md](chapter-intro.md) | 第 1 章　绪论 |
 | [chapter-related.md](chapter-related.md) | 第 2 章　相关技术 |
 | [chapter-design.md](chapter-design.md) | 第 3 章　系统设计 |

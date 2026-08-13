@@ -269,7 +269,7 @@ function SidebarTrigger({
   ...props
 }: React.ComponentProps<typeof Button>) {
   const { toggleSidebar, open } = useSidebar()
-  const sidebarCopy = open ? "Collapse Sidebar" : "Open Sidebar"
+  const sidebarCopy = open ? "收起侧边栏" : "打开侧边栏"
 
   return (
     <Button
