@@ -40,7 +40,7 @@ uv run python scripts/evaluate_retrieval.py \
   --top-k 5 --mode grounded \
   --chunk-size 1000 --chunk-overlap 150 \
   --with-answers \
-  --report ../../docs/evaluation/runs/topk-5-grounded.md
+  --report ../docs/evaluation/runs/topk-5-grounded.md
 ```
 
 必须在隔离库上跑，跑完脚本会删临时用户与文件。不要覆盖 `latest-results.md`。不要把 Recall@5 = 100% 抄成开放域结论。

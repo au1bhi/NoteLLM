@@ -7,7 +7,7 @@
 ```bash
 uv run python scripts/evaluate_retrieval.py \
   --with-answers \
-  --report ../../docs/evaluation/runs/local-run.md
+  --report ../docs/evaluation/runs/local-run.md
 ```
 
 `--with-answers` 会调用已配置的聊天模型，只作为论文实验产物，不要放进 CI。

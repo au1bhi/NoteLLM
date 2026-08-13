@@ -13,5 +13,5 @@ uv run python scripts/evaluate_retrieval.py \
   --questions ../docs/evaluation/questions-ooc.csv \
   --mode grounded \
   --with-answers \
-  --report ../../docs/evaluation/runs/ooc-grounded.md
+  --report ../docs/evaluation/runs/ooc-grounded.md
 ```

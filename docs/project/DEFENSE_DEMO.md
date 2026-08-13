@@ -31,7 +31,7 @@ cd ..
 cd backend
 uv run python scripts/evaluate_retrieval.py \
   --top-k 5 --mode grounded \
-  --report ../../docs/evaluation/runs/defense-scratch.md
+  --report ../docs/evaluation/runs/defense-scratch.md
 ```
 
 ## 常见问题的简短回答

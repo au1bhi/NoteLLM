@@ -55,7 +55,7 @@ uv run python scripts/evaluate_retrieval.py \
   --top-k 5 --mode grounded \
   --chunk-size 1000 --chunk-overlap 150 \
   --with-answers \
-  --report ../../docs/evaluation/runs/baseline-rerun.md
+  --report ../docs/evaluation/runs/baseline-rerun.md
 ```
 
 本地开发：仓库根目录 `docker compose up -d` 后，在 `backend` 执行 `alembic upgrade head`。`fastapi dev` 不会自动迁移。
