@@ -80,6 +80,6 @@
 
 ## 当前下一步
 
-在隔离库上按 `docs/evaluation/ablation-protocol.md` 与 `answer-mode-protocol.md` 实跑，把数字抄进空表；新报告写入 `docs/evaluation/runs/`，不要覆盖 2026-07-23 基线。论文粘贴稿见 `docs/thesis/`。默认不要加入阶段目标外的依赖或服务；如确有必要，先记录原因与替代方案。
+在隔离库上按 `docs/evaluation/ablation-protocol.md` 与 `answer-mode-protocol.md` 实跑，把数字抄进空表；新报告写入 `docs/evaluation/runs/`，不要覆盖 2026-07-23 基线。第 1—8 章粘贴稿已在 `docs/thesis/`（见该目录 README），截图按 `SCREENSHOTS.md` 本机捕获。默认不要加入阶段目标外的依赖或服务；如确有必要，先记录原因与替代方案。
 
 阶段 4 当前验收证据：2026-07-23 使用 7 份合成 Markdown 资料、34 个固定问题、智谱 Embedding-3（1024 维）与 DeepSeek V4 Flash 运行评测；Recall@5 为 100.0%，自动引用来源匹配率为 97.1%，关键词忠实度筛查为 88.2%，检索平均/P95 为 339/894 ms，回答平均/P95 为 2904/5595 ms。人工对照摘录后 **34 通过 / 0 未通过**（见 `docs/evaluation/human-faithfulness.md`）；Q32 是来源级标注碰撞，Q04 / Q09 / Q34 是关键词假阴性，均非幻觉。`--top-k` / `--chunk-size` / `--mode` / `--questions` 已接通，消融与模式对照表待本机实跑。

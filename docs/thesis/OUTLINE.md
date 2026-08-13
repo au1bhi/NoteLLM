@@ -30,11 +30,11 @@ NoteLLM 是面向个人学习与研究的毕业设计原型：用户把 PDF / TX
 
 ### 1.4 论文结构
 
-第 2 章简述关键技术；第 3 章给出系统与数据模型；第 4 章写摄取、检索、引用白名单、三种回答模式与学习计划（粘贴稿见 [`chapter-implementation.md`](chapter-implementation.md)）；第 5 章写安全边界并指向威胁模型附录；第 6 章报告固定评测集基线、已完成的人工忠实度与待实跑对照；第 7 章写部署与复现；第 8 章总结与展望。
+第 1 章按 [`chapter-intro.md`](chapter-intro.md) 写定位与四个工程问题；第 2 章按 [`chapter-related.md`](chapter-related.md) 只列实际用到的技术；第 3 章给出系统与数据模型；第 4 章按 [`chapter-implementation.md`](chapter-implementation.md) 写摄取、检索、白名单与学习计划；第 5 章按 [`chapter-security.md`](chapter-security.md) 写边界；第 6 章按 [`chapter-experiment.md`](chapter-experiment.md) 报告基线与人工复核；第 7 章写部署与复现；第 8 章按 [`chapter-conclusion.md`](chapter-conclusion.md) 收束。
 
 ## 第 2 章　相关技术
 
-本章保持短篇幅，只写本系统实际用到的技术，不展开综述清单。
+正文按 [`chapter-related.md`](chapter-related.md) 粘贴。本章保持短篇幅，只写本系统实际用到的技术，不展开综述清单。
 
 | 技术 | 在本系统中的角色 |
 | --- | --- |
@@ -46,6 +46,8 @@ NoteLLM 是面向个人学习与研究的毕业设计原型：用户把 PDF / TX
 嵌入与聊天均走 OpenAI 兼容接口，密钥只存在后端。前端为 React / Vite，不直接调用模型供应商。
 
 ## 第 3 章　系统设计
+
+正文按 [`chapter-design.md`](chapter-design.md) 粘贴。下面只保留必须与实现一致的骨架。
 
 ### 3.1 总体架构
 
@@ -120,7 +122,7 @@ User 1 ── * Notebook 1 ── * Source 1 ── * Chunk
 
 ## 第 5 章　安全
 
-本章只写已实现控制，不承诺未落地能力。STRIDE 对照与安全回归清单已经在本仓库：
+正文按 [`chapter-security.md`](chapter-security.md) 粘贴。STRIDE 全表与 pytest 对照已经在本仓库：
 
 - `docs/project/THREAT_MODEL.md`（威胁模型附录）
 - `docs/evaluation/security-experiments.md`（已有 pytest 对照表，不是渗透测试报告）
@@ -150,6 +152,8 @@ User 1 ── * Notebook 1 ── * Source 1 ── * Chunk
 
 ## 第 7 章　实现与部署
 
+正文按 [`chapter-deploy.md`](chapter-deploy.md) 粘贴。
+
 - 后端 Python ≥ 3.12，Alembic 管理 schema；前端 React / Vite，OpenAPI 生成客户端。
 - 本地：`docker compose` 拉起 `pgvector/pgvector:pg18`（主机 5433），`backend` 目录执行 `alembic upgrade head`。
 - 一键安装：仓库根目录 `install.sh`（`--local` / `--prod` / `--low-mem` / `--dry-run`）。生产侧 Traefik + TLS；低内存机下载 Release 中的预构建 `frontend-dist`。
@@ -158,7 +162,7 @@ User 1 ── * Notebook 1 ── * Source 1 ── * Chunk
 
 ## 第 8 章　总结与展望
 
-总结应回到工程闭环：笔记本内 RAG、引用白名单、可复现评测、用户隔离与学习计划，而不是「提出了更优的检索算法」。展望须落在 MVP 边界内，例如：在隔离库上补齐消融 / 模式对照的实跑数字；在不引入独立向量库的前提下按评测单变量调节分块或 Top-K；加强答案语义核验（仍不宣称 NLI SOTA）。不把多人协作、OCR、微服务列为「下一步必做」。
+正文按 [`chapter-conclusion.md`](chapter-conclusion.md) 粘贴。总结应回到工程闭环：笔记本内 RAG、引用白名单、可复现评测、用户隔离与学习计划，而不是「提出了更优的检索算法」。展望须落在 MVP 边界内，例如：在隔离库上补齐消融 / 模式对照的实跑数字；在不引入独立向量库的前提下按评测单变量调节分块或 Top-K；加强答案语义核验（仍不宣称 NLI SOTA）。不把多人协作、OCR、微服务列为「下一步必做」。
 
 ## 插图与表格清单
 
@@ -173,4 +177,6 @@ User 1 ── * Notebook 1 ── * Source 1 ── * Chunk
 | 表 6-2 | 自动指标与人工结论不一致的四题 | Q04 / Q09 / Q32 / Q34，均已标通过 |
 | 表 6-3 | Top-K / 分块消融 | 待本机实跑，见 `docs/evaluation/ablation-template.md` |
 | 表 6-4 | 三种回答模式对照 | 待本机实跑，见 `docs/evaluation/answer-mode-protocol.md` |
+| 表 5-1 | STRIDE 资产与残余风险 | `THREAT_MODEL.md`，正文见 `chapter-security.md` |
 | 表 6-5 | 人工忠实度复核 | `latest-results.md`：**34 通过 / 0 未通过** |
+| 参考文献 | RAG / DPR / JWT / STRIDE / 本仓库依赖 | `references.bib`，缺的条目读过再补 |
