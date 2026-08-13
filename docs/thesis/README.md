@@ -17,6 +17,7 @@
 | [chapter-deploy.md](chapter-deploy.md) | 第 7 章　实现与部署 |
 | [chapter-conclusion.md](chapter-conclusion.md) | 第 8 章　总结与展望 |
 | [appendix.md](appendix.md) | 附录 A—E：威胁表、安全回归、评测口径、复现、截图 |
+| [defense-talk.md](defense-talk.md) | 答辩口述提纲，不要照着论文念 |
 | [SCREENSHOTS.md](SCREENSHOTS.md) | 本机截图清单；不要用仓库 `img/` |
 | [references.bib](references.bib) | 可核对的 BibTeX 骨架；不要从别的毕业论文整页粘参考文献 |
 
