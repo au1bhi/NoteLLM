@@ -9,7 +9,11 @@ import {
 import { useCallback, useEffect, useState } from "react"
 import { z } from "zod"
 
-import type { ConversationMessagePublic, ConversationsPublic } from "@/client"
+import {
+  ApiError,
+  type ConversationMessagePublic,
+  type ConversationsPublic,
+} from "@/client"
 import { ChatPanel } from "@/components/Notebooks/ChatPanel"
 import { DeleteNotebook } from "@/components/Notebooks/DeleteNotebook"
 import { EditNotebook } from "@/components/Notebooks/EditNotebook"
@@ -326,10 +330,30 @@ function NotebookWorkspace() {
     )
   }
   if (notebook.error) {
+    const isMissing =
+      notebook.error instanceof ApiError && notebook.error.status === 404
     return (
-      <p className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">
-        {extractErrorMessage(notebook.error)}
-      </p>
+      <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed px-6 py-16 text-center">
+        <span className="text-gradient text-5xl font-bold leading-none">
+          {isMissing ? "404" : "出错"}
+        </span>
+        <div>
+          <h1 className="text-lg font-semibold tracking-tight">
+            {isMissing ? "笔记本不存在" : "无法打开笔记本"}
+          </h1>
+          <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+            {isMissing
+              ? "没有这份笔记本，或不属于当前账户。归属校验统一返回 404，不会用 403 暴露资源是否存在。"
+              : extractErrorMessage(notebook.error)}
+          </p>
+        </div>
+        <Button asChild>
+          <Link to="/notebooks">
+            <ArrowLeft className="size-4" />
+            返回笔记本列表
+          </Link>
+        </Button>
+      </div>
     )
   }
   if (!notebook.data) {

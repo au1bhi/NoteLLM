@@ -126,15 +126,18 @@ function SearchResults({
                 ? ` · 第 ${result.page_number} 页`
                 : ""}
             </p>
-            <span className="shrink-0 text-xs font-semibold text-primary">
-              {Math.max(0, Math.round(result.score * 100))}%
+            <span
+              className="shrink-0 text-xs font-semibold tabular-nums text-primary"
+              title="1 − 余弦距离，只用于排序，不是回答正确率"
+            >
+              相似 {Math.max(0, result.score).toFixed(2)}
             </span>
           </div>
           <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
             <div
               className="h-full rounded-full bg-primary"
               style={{
-                width: `${Math.max(4, Math.round(result.score * 100))}%`,
+                width: `${Math.max(4, Math.round(Math.max(0, result.score) * 100))}%`,
               }}
             />
           </div>

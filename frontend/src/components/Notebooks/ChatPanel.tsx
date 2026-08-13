@@ -33,17 +33,17 @@ const ANSWER_MODES: { value: AnswerMode; label: string; hint: string }[] = [
   {
     value: "grounded",
     label: "仅依据资料",
-    hint: "回答只基于当前笔记本中已就绪的资料，并附上可追溯来源。",
+    hint: "只依据当前笔记本已就绪资料。无存活引用时改成固定「资料不足」句，检索为空时不调模型。",
   },
   {
     value: "hybrid",
     label: "资料 + 已有知识",
-    hint: "回答优先基于当前笔记本的资料，可结合已有知识补充。",
+    hint: "优先检索当前笔记本；没有存活引用时仍保留模型正文，引用可以为空。",
   },
   {
     value: "knowledge",
     label: "自由问答",
-    hint: "使用通用知识直接回答，不依赖笔记本中的资料。",
+    hint: "不检索笔记本，引用在服务端恒为空。",
   },
 ]
 

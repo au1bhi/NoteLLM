@@ -13,12 +13,14 @@ const FEATURES = [
   {
     icon: Search,
     title: "限定资料问答",
-    description: "回答只基于你上传到笔记本中的内容。",
+    description:
+      "默认只依据你上传的资料作答；也可改成结合已有知识，或完全不检索。",
   },
   {
     icon: Quote,
     title: "可追溯引用",
-    description: "每条答案都附上来源、页码与原文摘录。",
+    description:
+      "「仅依据资料」时，有效引用会挂来源、页码与摘录；无证据则固定弃权。",
   },
   {
     icon: ShieldCheck,

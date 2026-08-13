@@ -64,7 +64,7 @@ function Notebooks() {
               创建你的第一个笔记本
             </h2>
             <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-              上传讲义或研究资料，即可开始只基于这些内容的问答。
+              上传讲义或研究资料后，默认只依据这些内容问答；无证据时会固定弃权。
             </p>
           </div>
           <AddNotebook />

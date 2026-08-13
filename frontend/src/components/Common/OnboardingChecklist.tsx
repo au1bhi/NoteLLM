@@ -55,7 +55,8 @@ const STEPS: Step[] = [
     id: "question",
     icon: MessagesSquare,
     title: "开始提问",
-    description: "在资料范围内提问，获得带引用的可验证答案。",
+    description:
+      "默认「仅依据资料」。有效引用可核对；无证据则固定「资料不足」。",
   },
 ]
 

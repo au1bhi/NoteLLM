@@ -39,14 +39,15 @@ const STEPS = [
   },
   {
     icon: MessagesSquare,
-    title: "在资料内提问",
+    title: "选择回答模式再提问",
     description:
-      "问答只限定在当前笔记本的资料范围内，不依赖模型既有的知识猜测。",
+      "默认「仅依据资料」。也可改成结合已有知识，或完全不检索的自由问答。",
   },
   {
     icon: Quote,
-    title: "获得带引用的答案",
-    description: "每个答案都附上来源、页码与原文摘录，可逐条回溯验证。",
+    title: "核对引用或看到弃权",
+    description:
+      "「仅依据资料」时，有效引用会挂来源、页码与摘录；无证据则固定「资料不足」。",
   },
   {
     icon: Sparkles,
@@ -196,7 +197,7 @@ function Dashboard() {
             你好，{name}
           </h1>
           <p className="mt-3 max-w-xl text-muted-foreground dark:text-white/85">
-            把课程讲义、研究资料和笔记放进笔记本，在限定资料范围内提问，获得带可追溯引用的答案。
+            把课程讲义、研究资料和笔记放进笔记本。默认「仅依据资料」提问；无证据时固定弃权，而不是补造结论。
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
             <AddNotebook triggerClassName="bg-primary text-primary-foreground shadow-lifted transition-transform duration-200 hover:-translate-y-0.5 dark:bg-white dark:text-primary" />
