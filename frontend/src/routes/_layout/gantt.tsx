@@ -86,11 +86,11 @@ function GanttPage() {
               还没有可聚合的学习甘特图
             </h2>
             <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-              这里只聚合已有计划，不会自己生成。打开任意会话，点标题旁的日历图标，即可从对话生成学习甘特图。
+              这里只聚合已有计划，不会自己生成。打开任意会话，点标题旁的「学习计划」，即可从对话生成甘特图。
             </p>
           </div>
           <Button asChild>
-            <Link to="/notebooks">去笔记本生成计划</Link>
+            <Link to="/notebooks">去笔记本打开会话</Link>
           </Button>
         </div>
       ) : null}

@@ -523,7 +523,7 @@ export function ChatPanel({
             <DialogTitle>删除会话</DialogTitle>
             <DialogDescription>
               将删除“{deleteTarget?.title || "未命名"}
-              ”及其全部消息，此操作不可恢复。
+              ”及其全部消息。若该会话已有学习计划，计划与任务也会一并删除，此操作不可恢复。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

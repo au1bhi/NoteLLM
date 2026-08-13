@@ -30,7 +30,7 @@ NoteLLM 是面向个人学习与研究的毕业设计原型：用户把 PDF / TX
 
 ### 1.4 论文结构
 
-第 2 章简述关键技术；第 3 章给出系统与数据模型；第 4 章写摄取、检索、引用白名单、三种回答模式与学习计划；第 5 章写安全边界并指向威胁模型附录；第 6 章报告固定评测集基线与待填对照；第 7 章写实现与部署；第 8 章总结与展望。
+第 2 章简述关键技术；第 3 章给出系统与数据模型；第 4 章写摄取、检索、引用白名单、三种回答模式与学习计划（粘贴稿见 [`chapter-implementation.md`](chapter-implementation.md)）；第 5 章写安全边界并指向威胁模型附录；第 6 章报告固定评测集基线、已完成的人工忠实度与待实跑对照；第 7 章写部署与复现；第 8 章总结与展望。
 
 ## 第 2 章　相关技术
 
@@ -90,9 +90,11 @@ User 1 ── * Notebook 1 ── * Source 1 ── * Chunk
 
 ## 第 4 章　关键实现
 
+正文按 [`chapter-implementation.md`](chapter-implementation.md) 粘贴，不要另写一套泛化 RAG 流程。下面只列必须出现的实现事实。
+
 ### 4.1 摄取与分块
 
-只接受 UTF-8 TXT、Markdown 和 PDF；PDF 用 PyMuPDF 按页提取以便引用带页码。默认分块 **1,000** 字符、重叠 **150** 字符。来源状态为 `pending` → `processing` → `ready` / `failed`。嵌入维度错误或 provider 缺失时标记 `failed`，不写入残缺索引。删除来源时级联清理分块、向量与本地文件。
+只接受 UTF-8 TXT、Markdown 和 PDF；PDF 用 PyMuPDF 按页提取以便引用带页码。默认分块 **1,000** 字符、重叠 **150** 字符；`split_page` / `process_source` 接受同名可选参数供评测消融，上传 API 不暴露这两项。来源状态为 `pending` → `processing` → `ready` / `failed`。提取失败必须能 `mark_failed`，不能把来源卡在 `processing`。嵌入维度错误或 provider 缺失时标记 `failed`，不写入残缺索引。删除来源时级联清理分块、向量与本地文件。
 
 ### 4.2 Top-5 余弦检索
 
@@ -118,10 +120,10 @@ User 1 ── * Notebook 1 ── * Source 1 ── * Chunk
 
 ## 第 5 章　安全
 
-本章只写已实现控制，不承诺未落地能力。详细 STRIDE 对照与安全实验记录由兄弟单元提供，定稿时引用：
+本章只写已实现控制，不承诺未落地能力。STRIDE 对照与安全回归清单已经在本仓库：
 
-- `docs/project/THREAT_MODEL.md`（威胁模型附录，兄弟 PR）
-- `docs/evaluation/security-experiments.md`（安全实验记录，兄弟 PR；若尚未合入则本章只保留定性描述）
+- `docs/project/THREAT_MODEL.md`（威胁模型附录）
+- `docs/evaluation/security-experiments.md`（已有 pytest 对照表，不是渗透测试报告）
 
 四点必须写进正文：
 
@@ -144,7 +146,7 @@ User 1 ── * Notebook 1 ── * Source 1 ── * Chunk
 | 检索 P95 | 894 ms |
 | 回答 P95 | 5595 ms |
 
-人工忠实度复核表、Top-K / 分块消融表、三种回答模式对照表均为**待填**。未跑完的格子保持「—」，不得把协议里的先验写成测量值。100% 召回是本合成自描述语料上的天花板，不是检索科学研究结论。
+人工忠实度已对应该次基线回答逐题标完：**34 通过 / 0 未通过**，说明见 `docs/evaluation/human-faithfulness.md`。Top-K / 分块消融表、三种回答模式对照表的协议与 CLI 已接通，数字格在本机实跑前保持「—」，不得把协议里的先验写成测量值。100% 召回是本合成自描述语料上的天花板，不是检索科学研究结论。截图清单见 [`SCREENSHOTS.md`](SCREENSHOTS.md)，不要使用仓库 `img/`。
 
 ## 第 7 章　实现与部署
 
@@ -156,7 +158,7 @@ User 1 ── * Notebook 1 ── * Source 1 ── * Chunk
 
 ## 第 8 章　总结与展望
 
-总结应回到工程闭环：笔记本内 RAG、引用白名单、可复现评测、用户隔离与学习计划，而不是「提出了更优的检索算法」。展望须落在 MVP 边界内，例如：补齐人工忠实度与消融 / 模式对照的实跑数字；在不引入独立向量库的前提下按评测单变量调节分块或 Top-K；加强答案语义核验（仍不宣称 NLI SOTA）。不把多人协作、OCR、微服务列为「下一步必做」。
+总结应回到工程闭环：笔记本内 RAG、引用白名单、可复现评测、用户隔离与学习计划，而不是「提出了更优的检索算法」。展望须落在 MVP 边界内，例如：在隔离库上补齐消融 / 模式对照的实跑数字；在不引入独立向量库的前提下按评测单变量调节分块或 Top-K；加强答案语义核验（仍不宣称 NLI SOTA）。不把多人协作、OCR、微服务列为「下一步必做」。
 
 ## 插图与表格清单
 
@@ -165,9 +167,10 @@ User 1 ── * Notebook 1 ── * Source 1 ── * Chunk
 | 图 3-1 | 系统架构 mermaid | `ARCHITECTURE.md` |
 | 图 3-2 | 实体关系 | `DESIGN.md` |
 | 图 4-1 | 问答 + 引用白名单时序 | 第 4.3 节文字流程 |
-| 图 4-2 | 学习计划甘特图界面 | 作者本机截图（待摄） |
+| 图 4-2 | 流式回答与引用摘录 | 作者本机截图，见 `SCREENSHOTS.md` |
+| 图 4-6 | 聚合甘特图 | 作者本机截图；空状态须能说明生成入口 |
 | 表 6-1 | 基线自动指标 | `latest-results.md`（2026-07-23，`cb0ead1`） |
-| 表 6-2 | 逐题失败样例 | Q32 来源标签碰撞；Q04 `1,000` / `1000` |
-| 表 6-3 | Top-K / 分块消融 | 待填，见 `docs/evaluation/ablation-template.md`（兄弟 PR） |
-| 表 6-4 | 三种回答模式对照 | 待填，见 `docs/evaluation/answer-mode-protocol.md`（兄弟 PR） |
-| 表 6-5 | 人工忠实度复核 | `latest-results.md` 复核表，目前均为「待人工复核」 |
+| 表 6-2 | 自动指标与人工结论不一致的四题 | Q04 / Q09 / Q32 / Q34，均已标通过 |
+| 表 6-3 | Top-K / 分块消融 | 待本机实跑，见 `docs/evaluation/ablation-template.md` |
+| 表 6-4 | 三种回答模式对照 | 待本机实跑，见 `docs/evaluation/answer-mode-protocol.md` |
+| 表 6-5 | 人工忠实度复核 | `latest-results.md`：**34 通过 / 0 未通过** |

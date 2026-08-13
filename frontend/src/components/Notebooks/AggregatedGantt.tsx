@@ -64,18 +64,24 @@ function TaskBar({
   task,
   origin,
   color,
+  notebookId,
+  conversationId,
 }: {
   task: StudyTaskPublic
   origin: string
   color: string
+  notebookId: string
+  conversationId: string
 }) {
   const start = dayOffset(task.start_date, origin)
   const span = dayOffset(task.end_date, task.start_date) + 1
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
-          type="button"
+        <Link
+          to="/notebooks/$notebookId"
+          params={{ notebookId }}
+          search={{ conversation: conversationId }}
           className={cn(
             "absolute top-2 h-8 min-w-7 rounded shadow-sm",
             task.is_completed && "opacity-45",
@@ -85,7 +91,7 @@ function TaskBar({
             width: Math.max(span * AGGREGATED_DAY_WIDTH - 4, 28),
             backgroundColor: color,
           }}
-          aria-label={`${task.title}：${dateLabel(task.start_date)}—${dateLabel(task.end_date)}`}
+          aria-label={`${task.title}：${dateLabel(task.start_date)}—${dateLabel(task.end_date)}，打开对应会话`}
         />
       </TooltipTrigger>
       <TooltipContent side="top" className="max-w-xs space-y-1">
@@ -95,6 +101,7 @@ function TaskBar({
         </p>
         <p>每天约 {task.estimated_minutes} 分钟</p>
         {task.is_completed ? <p>已完成</p> : null}
+        <p>点击打开对应会话</p>
       </TooltipContent>
     </Tooltip>
   )
@@ -216,6 +223,8 @@ export function AggregatedGantt({ plans }: AggregatedGanttProps) {
                       task={task}
                       origin={start}
                       color={color}
+                      notebookId={plan.notebook_id}
+                      conversationId={plan.conversation_id}
                     />
                   ))}
                 </div>

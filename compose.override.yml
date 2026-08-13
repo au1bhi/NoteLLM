@@ -1,10 +1,8 @@
 services:
 
-  # Local services are available on their ports, but also available on:
-  # http://api.localhost.tiangolo.com: backend
-  # http://dashboard.localhost.tiangolo.com: frontend
-  # etc. To enable it, update .env, set:
-  # DOMAIN=localhost.tiangolo.com
+  # Local services bind to loopback ports (frontend 5173, backend 8000).
+  # Optional Traefik hostnames are only for proxy testing; primary URLs stay
+  # http://localhost:5173 and http://localhost:8000.
   proxy:
     image: ${REGISTRY_MIRROR:-}traefik:3.6
     volumes:

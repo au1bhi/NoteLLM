@@ -1,6 +1,11 @@
 MIT License
 
+Copyright (c) 2026 NoteLLM contributors
 Copyright (c) 2019 Sebastián Ramírez
+
+This repository started from the Full Stack FastAPI Template and now
+implements NoteLLM, a personal study Q&A system. The original MIT
+notice is retained as required.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

@@ -175,13 +175,18 @@ export function StudyPlanDialog({
       <DialogTrigger asChild>
         <Button
           variant="ghost"
-          size="icon"
-          className="size-7 shrink-0 rounded-md text-muted-foreground hover:text-foreground"
+          size="sm"
+          className="h-7 shrink-0 gap-1 rounded-md px-2 text-muted-foreground hover:text-foreground"
           disabled={disabled}
           aria-label="学习计划与甘特图"
-          title="学习计划与甘特图"
+          title={
+            disabled
+              ? "回答生成完成后再打开学习计划"
+              : "从当前会话生成或查看学习甘特图"
+          }
         >
           <CalendarRange className="size-3.5" />
+          学习计划
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-5xl">

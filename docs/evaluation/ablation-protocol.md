@@ -67,7 +67,7 @@
 
 ## 如何运行
 
-CLI 的 `--top-k`、`--chunk-size`、`--chunk-overlap` 可能在兄弟 PR 落地；下列是拟定命令。一律在 `backend` 目录、对**隔离数据库**执行。不要对开发库或用户数据跑，也不要用 `pytest` 去连某个固定端口充当评测。
+`--top-k`、`--chunk-size`、`--chunk-overlap` 已经接到 `evaluate_retrieval.py`，并转发给 `answer_question` / `process_source`。一律在 `backend` 目录、对**隔离数据库**执行。不要对开发库或用户数据跑，也不要用 `pytest` 去连某个固定端口充当评测。
 
 需要引用与关键词指标时加 `--with-answers`。报告写入 `docs/evaluation/runs/`，不要覆盖 `latest-results.md`。
 

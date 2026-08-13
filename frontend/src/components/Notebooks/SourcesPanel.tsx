@@ -122,7 +122,9 @@ function SearchResults({
           <div className="flex items-center justify-between gap-2">
             <p className="truncate text-xs font-medium">
               {result.source_display_name}
-              {result.page_number != null ? ` · p. ${result.page_number}` : ""}
+              {result.page_number != null
+                ? ` · 第 ${result.page_number} 页`
+                : ""}
             </p>
             <span className="shrink-0 text-xs font-semibold text-primary">
               {Math.max(0, Math.round(result.score * 100))}%

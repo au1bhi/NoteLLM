@@ -63,7 +63,7 @@ export function Citations({ citations }: CitationsProps) {
                     {citation.page_number != null ? (
                       <span className="text-muted-foreground">
                         {" "}
-                        · p. {citation.page_number}
+                        · 第 {citation.page_number} 页
                       </span>
                     ) : null}
                   </span>

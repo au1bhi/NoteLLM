@@ -1,5 +1,5 @@
 {
-  "name": "fastapi-full-stack-template",
+  "name": "notellm",
   "private": true,
   "workspaces": [
     "frontend"

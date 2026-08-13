@@ -69,7 +69,7 @@ FastAPI 负责认证、资料摄取、检索、模型调用、计划生成与权
 | 检索平均 / P95 | 339 ms / 894 ms |
 | 回答平均 / P95 | 2904 ms / 5595 ms |
 
-以上结果用于验证系统设计，不把关键词命中率等同于完整的人工忠实度判断。评测方法、固定数据和逐题结果分别位于 [评测说明](docs/evaluation/README.md) 与 [最新报告](docs/evaluation/latest-results.md)。
+以上结果用于验证系统设计。关键词命中率不是人工忠实度：对应这次基线的 34 题已逐题对照摘录，**34 通过 / 0 未通过**，见 [人工复核说明](docs/evaluation/human-faithfulness.md)。评测方法、固定数据和逐题结果分别位于 [评测说明](docs/evaluation/README.md) 与 [最新报告](docs/evaluation/latest-results.md)。不要把 Recall@5 = 100% 写成开放域检索结论，也不要把仓库 `img/` 当作本系统截图。
 
 ## 开源价值
 

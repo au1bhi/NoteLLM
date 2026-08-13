@@ -17,7 +17,7 @@ POSTGRES_PORT=5433 uv run python scripts/evaluate_retrieval.py \
 - `--top-k K`：检索深度，默认 5，限制在 1–10。报告中的 Recall@{k} 与 `answer_question` 的 `limit` 都使用该值。
 - `--mode {grounded,hybrid,knowledge}`：回答模式，默认 `grounded`。`knowledge` 仍跳过检索；Recall 仍单独跑一次检索以便计分。
 - `--questions PATH`：评测问题 CSV。默认固定集须为 30–50 题；显式传入其他路径时允许 1–50 题（供库外 / OOC 小集使用）。
-- `--chunk-size N` / `--chunk-overlap N`：请求的分块长度与重叠。当前 `process_source` / `split_page` 尚未接受这些参数，脚本不会因此失败，仍按默认 1000 / 150 分块，但会把请求值写入报告。分块消融需要 `process_source` 先接受 `chunk_size` / `chunk_overlap`。
+- `--chunk-size N` / `--chunk-overlap N`：分块长度与重叠，转发给 `process_source` / `split_page`。省略时用线上默认 1000 / 150。重叠必须小于长度，否则分块函数会拒绝。
 - `--report PATH`：把 Markdown 报告写到指定路径。
 - `--with-answers`：同时调用聊天模型测量引用与回答（论文实验，非 CI）。
 
@@ -28,6 +28,6 @@ POSTGRES_PORT=5433 uv run python scripts/evaluate_retrieval.py \
 脚本创建临时评测用户、笔记本、来源和上传副本，结束时全部删除。它输出并可写入报告的指标包括：Recall@{k}、检索/回答平均和 P95 耗时、带引用回答的期望来源命中率，以及答案关键词命中率。带回答运行还会生成逐题的“人工忠实度复核表”，其中保存问题、模型回答和已验证引用来源。后两项的边界如下：
 
 - “引用正确率（自动）”只验证有效引用是否来自标注的期望来源；后端本身已经拒绝未知 chunk ID。
-- “关键词命中率”只是忠实度筛查信号。答辩或论文定稿前，应人工逐题审阅报告中的答案、引用摘录和期望事实，并记录人工忠实度结论。
+- “关键词命中率”只是忠实度筛查信号，不等于人工忠实度。对应 2026-07-23 基线的 34 题已人工标完（34 通过 / 0 未通过），见 `human-faithfulness.md`。新跑仍须重新逐题审阅，不要把旧结论抄到新报告上。
 
 为比较不同参数，应保持相同语料与问题，仅改变一个变量，并把代码提交、provider、向量维度、Top-K、回答模式、分块配置、日期和异常情况记入报告。

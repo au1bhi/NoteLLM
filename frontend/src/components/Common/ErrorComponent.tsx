@@ -13,9 +13,11 @@ const ErrorComponent = () => {
       <Logo variant="full" asLink={false} />
       <div className="flex flex-col items-center gap-2 text-center">
         <span className="text-gradient text-6xl font-bold leading-none">
-          Oops
+          出错了
         </span>
-        <h1 className="mt-2 text-2xl font-bold tracking-tight">出了点问题</h1>
+        <h1 className="mt-2 text-2xl font-bold tracking-tight">
+          页面暂时无法打开
+        </h1>
         <p className="max-w-sm text-muted-foreground">
           发生了一些错误，请稍后重试。
         </p>

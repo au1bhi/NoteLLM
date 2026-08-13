@@ -1,6 +1,6 @@
 # 安全实验清单
 
-本清单把仓库里**已经存在**的 pytest 安全回归用例整理成论文可引用的对照表。它不是渗透测试报告，也不声称覆盖全部攻击面。威胁分类与残余风险见 [`docs/project/THREAT_MODEL.md`](../project/THREAT_MODEL.md)（该附录可能在另一 PR 落地）。
+本清单把仓库里**已经存在**的 pytest 安全回归用例整理成论文可引用的对照表。它不是渗透测试报告，也不声称覆盖全部攻击面。威胁分类与残余风险见 [`docs/project/THREAT_MODEL.md`](../project/THREAT_MODEL.md)。
 
 规则：
 

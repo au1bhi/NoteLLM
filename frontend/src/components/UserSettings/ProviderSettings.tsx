@@ -297,14 +297,14 @@ export function ProviderSettings() {
                 <SectionField
                   control={form.control}
                   name={section.baseUrl}
-                  label="API Base URL"
-                  placeholder="https://api.openai.com/v1"
+                  label="接口地址"
+                  placeholder="https://api.example.com/v1"
                 />
                 <SectionField
                   control={form.control}
                   name={section.apiKey}
-                  label="API Key"
-                  placeholder="输入新的 API Key"
+                  label="接口密钥"
+                  placeholder="输入新的接口密钥"
                   type="password"
                   masked={data?.[section.maskedKey] || undefined}
                 />

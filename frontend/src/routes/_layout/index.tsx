@@ -48,6 +48,12 @@ const STEPS = [
     title: "获得带引用的答案",
     description: "每个答案都附上来源、页码与原文摘录，可逐条回溯验证。",
   },
+  {
+    icon: Sparkles,
+    title: "生成学习甘特图",
+    description:
+      "在会话里点「学习计划」，把一次问答安排成 3—60 天任务；侧边栏甘特图再把全部计划画在同一条时间轴上。",
+  },
 ]
 
 function StatCard({

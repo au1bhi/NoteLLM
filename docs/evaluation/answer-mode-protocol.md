@@ -2,7 +2,7 @@
 
 本协议只规定论文实验章如何对照 `grounded` / `hybrid` / `knowledge` 三种回答模式，**不在此仓库里跑现场评测**。语料与问题均为合成内容，不含用户上传资料、账号、密钥或个人信息。表中数字格在真实跑完前保持 `—`，不要把假设写成已测结果。
 
-三种模式的语义以 `backend/app/services/answers.py` 的 `answer_question` 为准，定义见下节。`--mode` 等 CLI 开关可能在兄弟 PR 落地；在开关未合入前，本文件只是拟定协议，不要改评测脚本去“提前实现”。
+三种模式的语义以 `backend/app/services/answers.py` 的 `answer_question` 为准，定义见下节。`--mode {grounded,hybrid,knowledge}` 与 `--questions` 已经接到 `evaluate_retrieval.py`。
 
 ## 模式语义（对照 `answers.py`）
 
@@ -39,11 +39,11 @@
 - 分块：`1000` 字符，重叠 `150` 字符
 - 同一 git commit、同一嵌入模型与维度、同一聊天模型、同一隔离数据库镜像、同一运行日
 
-禁止在本对照中同时改 k、分块、嵌入模型或问题文件。那些因子属于另文的消融协议（可能在兄弟 PR 落地），不要和模式对照混在一轮里。
+禁止在本对照中同时改 k、分块、嵌入模型或问题文件。那些因子属于 `ablation-protocol.md`，不要和模式对照混在一轮里。
 
 ### 可选第二块：语料外（OOC）弃权率
 
-兄弟单元可能另增 `docs/evaluation/questions-ooc.csv`（本 PR **不**创建该文件；它可能在另一 PR 落地）。若该文件已存在，用**同一** `k=5`、分块 `1000/150` 和三种 `--mode` 再跑一轮，专门看弃权行为：
+语料外负例已落在 `docs/evaluation/questions-ooc.csv`（6 题，`expected_source=none`）。用**同一** `k=5`、分块 `1000/150` 和三种 `--mode` 再跑一轮，专门看弃权行为：
 
 - `grounded` 在 OOC 上应倾向输出精确的「资料不足」；
 - `hybrid` 在 OOC 上可能仍作答且引用为空；
@@ -102,7 +102,7 @@ OOC 未落地时，只填语料内 34 题那张表，不要编造 OOC 数字。
 | hybrid | — | — | — | — | |
 | knowledge | — | — | — | — | 引用率先验为 0 |
 
-### 语料外（`questions-ooc.csv`，可选；文件未落地则整表不填）
+### 语料外（`questions-ooc.csv`，6 题；未跑则整表保持「—」）
 
 | 模式 | 引用率 | 资料不足次数 | 无引用仍作答次数 | 备注 |
 | --- | ---: | ---: | ---: | --- |
@@ -112,9 +112,9 @@ OOC 未落地时，只填语料内 34 题那张表，不要编造 OOC 数字。
 
 「无引用仍作答」= 正文不是精确「资料不足」，且已验证引用数为 0。
 
-## 拟定命令
+## 命令
 
-`--mode` 可能在兄弟 PR 落地。一律在 `backend/` 下、对**隔离数据库**执行。不要对开发库或用户数据跑，也不要用 `pytest` 去连某个固定端口充当评测。
+`--mode` 与 `--questions` 已经接到 `evaluate_retrieval.py`。一律在 `backend/` 下、对**隔离数据库**执行。不要对开发库或用户数据跑，也不要用 `pytest` 去连某个固定端口充当评测。
 
 **会消耗聊天/嵌入 API 费用，不要进 CI。**
 
@@ -127,9 +127,12 @@ uv run python scripts/evaluate_retrieval.py --with-answers --mode hybrid \
   --report ../docs/evaluation/runs/mode-hybrid.md
 uv run python scripts/evaluate_retrieval.py --with-answers --mode knowledge \
   --report ../docs/evaluation/runs/mode-knowledge.md
-```
 
-OOC 文件若已落地，为每种模式再加一轮，并在报告名中区分（例如 `mode-grounded-ooc.md`）。具体问题文件开关以兄弟 PR 为准。
+# 语料外 6 题（不要并入 34 题基线）
+uv run python scripts/evaluate_retrieval.py --with-answers --mode grounded \
+  --questions ../docs/evaluation/questions-ooc.csv \
+  --report ../docs/evaluation/runs/mode-grounded-ooc.md
+```
 
 跑完后把自动指标与资料不足次数抄进上表；人工忠实度等逐题标注后再填。空格保持 `—`，不要用假设百分比占位。不要覆盖 `latest-results.md`（那是默认 grounded 路径的既有快照，不是本对照）。
 
