@@ -6,10 +6,12 @@ grounded 模式应拒答，供后续与 hybrid / knowledge 对比。
 
 不要并入 `questions.csv` 的 34 题基线。
 
-CLI 支持 `--questions` 后，从 `backend` 目录运行：
+从 `backend` 目录、在隔离 pgvector 上运行（不要打 5433）。报告写入 `runs/`：
 
 ```bash
-POSTGRES_PORT=5433 uv run python scripts/evaluate_retrieval.py \
+uv run python scripts/evaluate_retrieval.py \
   --questions ../docs/evaluation/questions-ooc.csv \
-  --mode grounded
+  --mode grounded \
+  --with-answers \
+  --report ../../docs/evaluation/runs/ooc-grounded.md
 ```

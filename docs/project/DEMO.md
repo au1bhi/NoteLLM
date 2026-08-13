@@ -18,10 +18,10 @@ cp .env.example .env
 docker compose up -d db
 cd backend
 POSTGRES_PORT=5433 uv run alembic upgrade head
-POSTGRES_PORT=5433 uv run pytest -q
 cd ..
-bun run --filter frontend build
 ```
+
+5433 是 Compose 开发库，只给应用和 `seed_demo.py` 用。pytest 必须另起隔离 pgvector，不要指到 5433 或本机 5432。
 
 `db` 使用 `pgvector/pgvector:pg18`。验证扩展：
 
@@ -34,10 +34,11 @@ docker compose exec db psql -U postgres -d app -c \
 
 1. 登录并创建笔记本。
 2. 上传一份 UTF-8 TXT、Markdown 或 PDF，确认来源显示为 `ready`。
-3. 新建 conversation，提出一个可由文档直接回答的问题。
+3. 新建会话，提出一个可由文档直接回答的问题。
 4. 确认答案流式显示，并展示文档名、适用页码和稳定摘录。
-5. 刷新页面，确认来源和会话历史仍然存在。
-6. 使用另一账户尝试访问该笔记本或 conversation；API 必须返回 `404`。
+5. 在会话标题旁点「学习计划」生成甘特任务；侧边栏「甘特图」只聚合，不会自己生成。
+6. 刷新页面，确认来源、会话和计划仍然存在。
+7. 使用另一账户尝试访问该笔记本或会话；API 必须返回 `404`。
 
 若 embedding 或 chat provider 未配置，来源或问答会返回安全的配置错误/资料不足信息，不会改由前端调用模型。
 

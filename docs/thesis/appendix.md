@@ -62,4 +62,4 @@ uv run python scripts/evaluate_retrieval.py \
 
 ## 附录 E　截图与演示
 
-截图清单见 [`SCREENSHOTS.md`](SCREENSHOTS.md)。不要使用仓库 `img/`。演示脚本见 `docs/project/DEFENSE_DEMO.md`，演示资料见 `docs/demo/` 与 `backend/scripts/seed_demo.py`。截图和演示账号里不要出现真实邮箱、真实供应商地址或密钥。
+截图清单见 [`SCREENSHOTS.md`](SCREENSHOTS.md)。不要使用仓库 `img/`。演示脚本见 `docs/project/DEFENSE_DEMO.md`（不要对 5433 跑 pytest，也不要覆盖基线报告）。演示资料见 `docs/demo/` 与 `backend/scripts/seed_demo.py`。截图和演示账号里不要出现真实邮箱、真实供应商地址或密钥。

@@ -2,12 +2,12 @@
 
 本目录的资料和问题均为合成内容，不含用户上传资料、账号、密钥或个人信息。`questions.csv` 固定为 34 个问题；每题对应一个期望来源和用于自动筛查的关键词。
 
-在数据库与 provider 已配置时，从 `backend` 目录运行：
+数据库与 provider 配好后，从 `backend` 目录运行。必须另起隔离 pgvector，不要打开发用的 Compose 5433。新报告写入 `docs/evaluation/runs/`，**不要**覆盖 2026-07-23 基线 `latest-results.md`。
 
 ```bash
-POSTGRES_PORT=5433 uv run python scripts/evaluate_retrieval.py \
+uv run python scripts/evaluate_retrieval.py \
   --with-answers \
-  --report ../docs/evaluation/latest-results.md
+  --report ../../docs/evaluation/runs/local-run.md
 ```
 
 `--with-answers` 会调用已配置的聊天模型，只作为论文实验产物，不要放进 CI。
