@@ -180,3 +180,9 @@ User 1 ── * Notebook 1 ── * Source 1 ── * Chunk
 | 表 5-1 | STRIDE 资产与残余风险 | `THREAT_MODEL.md`，正文见 `chapter-security.md` |
 | 表 6-5 | 人工忠实度复核 | `latest-results.md`：**34 通过 / 0 未通过** |
 | 参考文献 | RAG / DPR / JWT / STRIDE / 本仓库依赖 | `references.bib`，缺的条目读过再补 |
+| 致谢 | 结构稿 | [`acknowledgements.md`](acknowledgements.md)，须换成真实姓名 |
+| 附录 A | STRIDE 全表 | `THREAT_MODEL.md`，粘贴说明见 [`appendix.md`](appendix.md) |
+| 附录 B | 安全回归对照 | `security-experiments.md` |
+| 附录 C | 评测集与口径 | `questions.csv` / `study_protocol.md` |
+| 附录 D | 复现命令 | [`appendix.md`](appendix.md) |
+| 附录 E | 截图与演示 | `SCREENSHOTS.md`、`DEFENSE_DEMO.md` |

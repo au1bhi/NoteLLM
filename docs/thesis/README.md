@@ -5,6 +5,7 @@
 | 文件 | 对应章节 |
 | --- | --- |
 | [abstract.md](abstract.md) | 中英文摘要与关键词 |
+| [acknowledgements.md](acknowledgements.md) | 致谢骨架，须换成真实姓名 |
 | [OUTLINE.md](OUTLINE.md) | 目录、必写事实、图表清单 |
 | [chapter-intro.md](chapter-intro.md) | 第 1 章　绪论 |
 | [chapter-related.md](chapter-related.md) | 第 2 章　相关技术 |
@@ -14,6 +15,7 @@
 | [chapter-experiment.md](chapter-experiment.md) | 第 6 章　实验 |
 | [chapter-deploy.md](chapter-deploy.md) | 第 7 章　实现与部署 |
 | [chapter-conclusion.md](chapter-conclusion.md) | 第 8 章　总结与展望 |
+| [appendix.md](appendix.md) | 附录 A—E：威胁表、安全回归、评测口径、复现、截图 |
 | [SCREENSHOTS.md](SCREENSHOTS.md) | 本机截图清单；不要用仓库 `img/` |
 | [references.bib](references.bib) | 可核对的 BibTeX 骨架；不要从别的毕业论文整页粘参考文献 |
 
