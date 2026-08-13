@@ -4,6 +4,7 @@
 
 | 文件 | 对应章节 |
 | --- | --- |
+| [abstract.md](abstract.md) | 中英文摘要与关键词 |
 | [OUTLINE.md](OUTLINE.md) | 目录、必写事实、图表清单 |
 | [chapter-intro.md](chapter-intro.md) | 第 1 章　绪论 |
 | [chapter-related.md](chapter-related.md) | 第 2 章　相关技术 |
