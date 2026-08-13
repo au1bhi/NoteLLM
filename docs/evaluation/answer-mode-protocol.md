@@ -134,7 +134,7 @@ uv run python scripts/evaluate_retrieval.py --with-answers --mode grounded \
   --report ../docs/evaluation/runs/mode-grounded-ooc.md
 ```
 
-跑完后把自动指标与资料不足次数抄进上表；人工忠实度等逐题标注后再填。空格保持 `—`，不要用假设百分比占位。不要覆盖 `latest-results.md`（那是默认 grounded 路径的既有快照，不是本对照）。
+跑完后把报告自动汇总的引用率、关键词命中率、资料不足次数和无引用仍作答次数抄进上表；人工忠实度逐题标注后再填。空格保持 `—`，不要用假设百分比占位。不要覆盖 `latest-results.md`（那是默认 grounded 路径的既有快照，不是本对照）。
 
 ## 局限（须写进论文）
 

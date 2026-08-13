@@ -2,13 +2,11 @@
 
 import argparse
 import csv
-import inspect
 import shutil
 import subprocess
 import sys
 import time
 import uuid
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,7 +18,11 @@ from sqlmodel import Session
 from app.core.config import settings
 from app.core.db import engine
 from app.models import AnswerMode, Notebook, Source, User
-from app.services.answers import GroundedAnswer, answer_question
+from app.services.answers import (
+    INSUFFICIENT_EVIDENCE_ANSWER,
+    GroundedAnswer,
+    answer_question,
+)
 from app.services.chat import get_chat_provider
 from app.services.embeddings import get_embedding_provider
 from app.services.retrieval import (
@@ -35,6 +37,7 @@ from app.services.sources import (
     get_upload_path,
     process_source,
 )
+from app.utils import canonical_email
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 EVALUATION_DIRECTORY = REPOSITORY_ROOT / "docs" / "evaluation"
@@ -202,13 +205,25 @@ def render_report(
             for result in answered
             if result.keyword_match is not None
         ]
+        citation_rate = mean(bool(result.citation_sources) for result in answered)
+        insufficient_evidence_count = sum(
+            result.answer == INSUFFICIENT_EVIDENCE_ANSWER for result in answered
+        )
+        uncited_answer_count = sum(
+            not result.citation_sources
+            and result.answer != INSUFFICIENT_EVIDENCE_ANSWER
+            for result in answered
+        )
         lines.extend(
             [
                 f"- 回答数：{len(answered)}",
                 f"- 回答平均耗时：{mean(answer_latencies):.0f} ms",
                 f"- 回答 P95 耗时：{percentile_95(answer_latencies):.0f} ms",
+                f"- 引用率：{citation_rate:.1%}",
                 f"- 引用正确率（自动）：{mean(citation_matches):.1%}",
                 f"- 关键词命中率（忠实度筛查）：{mean(keyword_matches):.1%}",
+                f"- 资料不足次数（精确匹配）：{insufficient_evidence_count}",
+                f"- 无引用仍作答次数：{uncited_answer_count}",
             ]
         )
     lines.extend(
@@ -275,18 +290,6 @@ def render_report(
     return "\n".join(lines) + "\n"
 
 
-def supported_kwargs(
-    func: Callable[..., object], **kwargs: object
-) -> dict[str, object]:
-    parameters = inspect.signature(func).parameters
-    if any(
-        parameter.kind is inspect.Parameter.VAR_KEYWORD
-        for parameter in parameters.values()
-    ):
-        return kwargs
-    return {name: value for name, value in kwargs.items() if name in parameters}
-
-
 def prepare_sources(
     *,
     session: Session,
@@ -295,11 +298,10 @@ def prepare_sources(
     chunk_overlap: int | None = None,
 ) -> list[Source]:
     sources: list[Source] = []
-    extra_kwargs: dict[str, object] = {}
-    if chunk_size is not None:
-        extra_kwargs["chunk_size"] = chunk_size
-    if chunk_overlap is not None:
-        extra_kwargs["chunk_overlap"] = chunk_overlap
+    effective_chunk_size = chunk_size if chunk_size is not None else CHUNK_SIZE
+    effective_chunk_overlap = (
+        chunk_overlap if chunk_overlap is not None else CHUNK_OVERLAP
+    )
     for source_file in sorted(SOURCES_DIRECTORY.glob("*.md")):
         source = Source(
             notebook_id=notebook.id,
@@ -315,12 +317,10 @@ def prepare_sources(
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source_file, destination)
         process_source(
-            **supported_kwargs(
-                process_source,
-                session=session,
-                source=source,
-                **extra_kwargs,
-            )
+            session=session,
+            source=source,
+            chunk_size=effective_chunk_size,
+            chunk_overlap=effective_chunk_overlap,
         )
         if source.status != "ready":
             raise RuntimeError(
@@ -483,8 +483,11 @@ def main() -> None:
         args.chunk_overlap if args.chunk_overlap is not None else CHUNK_OVERLAP
     )
     with Session(engine) as session:
+        evaluation_email = f"evaluation-{uuid.uuid4()}@example.invalid"
         user = User(
-            email=f"evaluation-{uuid.uuid4()}@example.invalid",
+            email=evaluation_email,
+            email_canonical=canonical_email(evaluation_email),
+            email_history=[canonical_email(evaluation_email)],
             hashed_password="evaluation-only",
         )
         session.add(user)

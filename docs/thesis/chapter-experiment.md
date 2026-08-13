@@ -116,7 +116,7 @@ Q09 正确说明 chunk ID 来自当前笔记本 ready 来源经余弦检索得�
 
 ## 6.7 三种回答模式对照（待本机实跑）
 
-三种模式是 `answers.py` 里的服务端策略，不是评测脚本「测出来」的标签。语义见 [`chapter-implementation.md`](chapter-implementation.md) 第 4.3 节与 `docs/evaluation/answer-mode-protocol.md`。`--mode {grounded,hybrid,knowledge}` 已接通。对照时只改模式，固定 34 题、`k=5`、分块 `1000/150`。语料外 6 题见 `questions-ooc.csv`，不要并入基线 34 题。
+三种模式是 `answers.py` 里的服务端策略，不是评测脚本「测出来」的标签。语义见 [`chapter-implementation.md`](chapter-implementation.md) 第 4.3 节与 `docs/evaluation/answer-mode-protocol.md`。`--mode {grounded,hybrid,knowledge}` 已接通，报告会直接汇总引用率、精确资料不足次数和无引用仍作答次数。对照时只改模式，固定 34 题、`k=5`、分块 `1000/150`。语料外 6 题见 `questions-ooc.csv`，不要并入基线 34 题。
 
 表 6-5　语料内三种模式（`questions.csv`，34 题）
 
