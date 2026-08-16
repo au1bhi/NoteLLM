@@ -1,13 +1,16 @@
 import uuid
+from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+from pytest import MonkeyPatch
 from sqlmodel import Session, select
 
 from app import crud
 from app.core.config import settings
 from app.core.security import verify_password
-from app.models import User, UserCreate
+from app.models import Notebook, User, UserCreate
+from tests.utils.notebook import create_random_notebook
 from tests.utils.user import create_random_user, user_authentication_headers
 from tests.utils.utils import random_email, random_lower_string
 
@@ -541,6 +544,57 @@ def test_delete_user_super_user(
     assert deleted_user["message"] == "用户删除成功"
     result = db.exec(select(User).where(User.id == user_id)).first()
     assert result is None
+
+
+def test_admin_delete_user_unlinks_upload_files(
+    client: TestClient,
+    superuser_token_headers: dict[str, str],
+    db: Session,
+    tmp_path: Path,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """Admin deletion must clean the uploads volume, same as DELETE /users/me."""
+    from app.core.config import settings as app_settings
+    from app.models import Source
+    from app.services.sources import get_upload_path
+
+    monkeypatch.setattr(app_settings, "UPLOADS_DIR", tmp_path)
+    username = random_email()
+    password = random_lower_string()
+    user = crud.create_user(
+        session=db, user_create=UserCreate(email=username, password=password)
+    )
+    notebook = create_random_notebook(db=db, owner_id=user.id)
+    notebook_id = notebook.id
+    source = Source(
+        notebook_id=notebook.id,
+        display_name="notes.txt",
+        media_type="text/plain",
+        file_size_bytes=4,
+        storage_path="kept.txt",
+        status="ready",
+    )
+    db.add(source)
+    db.commit()
+    db.refresh(source)
+    path = get_upload_path(source)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("data")
+    assert path.exists()
+
+    response = client.delete(
+        f"{settings.API_V1_STR}/users/{user.id}",
+        headers=superuser_token_headers,
+    )
+    assert response.status_code == 200
+    assert not path.exists()
+    assert not path.parent.exists()
+    leftover = db.exec(select(User).where(User.id == user.id)).first()
+    assert leftover is None
+    leftover_notebook = db.exec(
+        select(Notebook).where(Notebook.id == notebook_id)
+    ).first()
+    assert leftover_notebook is None
 
 
 def test_delete_user_not_found(

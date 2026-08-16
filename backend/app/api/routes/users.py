@@ -26,7 +26,6 @@ from app.models import (
     Message,
     ModelFetchRequest,
     ModelInfoPublic,
-    Notebook,
     ResendVerificationRequest,
     SignupResult,
     UpdatePassword,
@@ -50,7 +49,7 @@ from app.services.provider_settings import (
     mask_secret,
     resolve_api_base,
 )
-from app.services.sources import delete_notebook_files
+from app.services.sources import delete_owner_upload_files
 from app.services.usage import (
     QuotaError,
     quota_status,
@@ -337,11 +336,7 @@ def delete_user_me(session: SessionDep, current_user: CurrentUser) -> Any:
     save_usage_tombstone(session=session, emails=history, usage=usage)
     # Unlink uploaded files before the DB rows cascade away, so deleting an
     # account leaves no residue on the uploads volume.
-    notebook_ids = session.exec(
-        select(Notebook.id).where(Notebook.owner_id == current_user.id)
-    ).all()
-    for notebook_id in notebook_ids:
-        delete_notebook_files(notebook_id)
+    delete_owner_upload_files(session=session, owner_id=current_user.id)
     session.delete(current_user)
     session.commit()
     return Message(message="用户删除成功")
@@ -898,6 +893,10 @@ def delete_user(
     usage = session.exec(select(UserUsage).where(UserUsage.user_id == user_id)).first()
     history = list(user.email_history or []) or [canonical_email(user.email)]
     save_usage_tombstone(session=session, emails=history, usage=usage)
+    # Unlink uploaded files before the notebook rows cascade away. The
+    # self-service DELETE /users/me path does the same; skipping it here left
+    # PDFs/TXT on the uploads volume after an admin deletion.
+    delete_owner_upload_files(session=session, owner_id=user.id)
     # Notebooks/sources/conversations cascade via their foreign keys.
     session.delete(user)
     session.commit()

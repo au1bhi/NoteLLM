@@ -80,6 +80,8 @@
 
 完成条件：可复现演示和论文所需证据齐全。
 
+2026-08-14 安全修复：管理员 `DELETE /users/{id}` 与自助删号一样先 `delete_owner_upload_files`，避免 volume 残留上传原文；认证限流改按 `X-Forwarded-For` 最右跳（代理实际观察到的地址）分桶，伪造最左跳不能绕过登录节流；概览/学习指南把规则放到 `system`、资料放到 `user`；前端 Markdown 只保留 http(s) 链接并加 `noopener noreferrer`。
+
 ## 当前下一步
 
 在隔离库上按 `docs/evaluation/ablation-protocol.md` 与 `answer-mode-protocol.md` 实跑，把数字抄进空表；新报告写入 `docs/evaluation/runs/`，不要覆盖 2026-07-23 基线。然后完成新轮人工忠实度复核、按 `SCREENSHOTS.md` 本机截图，并将第 1—8 章草稿改写进学校模板且补齐文内引用。项目功能已足够，默认不再添加产品模块、依赖或服务；完整范围判断见 `THESIS_READINESS_AUDIT.md`。

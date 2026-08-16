@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi.testclient import TestClient
 from pytest import MonkeyPatch
 from sqlmodel import Session
@@ -10,20 +12,32 @@ from tests.utils.user import authentication_token_from_email, create_random_user
 
 class FakeOverviewProvider:
     def __init__(
-        self, summary: str = "About the material.", topics: list[str] | None = None
+        self,
+        summary: str = "About the material.",
+        topics: list[str] | None = None,
+        payload: dict[str, object] | None = None,
     ) -> None:
         self.summary = summary
         self.topics = topics if topics is not None else ["topic one"]
+        self.payload = payload
         self.calls = 0
+        self.last_prompt = ""
+        self.last_system: str | None = None
 
-    def complete_json(self, *, prompt: str) -> dict:
+    def complete_json(
+        self, *, prompt: str, system: str | None = None
+    ) -> dict[str, object]:
         self.calls += 1
+        self.last_prompt = prompt
+        self.last_system = system
+        if self.payload is not None:
+            return self.payload
         return {"summary": self.summary, "topics": self.topics}
 
 
 def _add_ready_source(
     db: Session,
-    notebook_id,
+    notebook_id: uuid.UUID,
     content: str = "pgvector adds vector search to PostgreSQL.",
 ) -> Source:
     source = Source(
@@ -75,6 +89,10 @@ def test_overview_generates_lazily_and_caches(
     assert body["topics"] == ["vector search", "PostgreSQL"]
     assert body["updated_at"] is not None
     assert provider.calls == 1
+    assert provider.last_system is not None
+    assert "untrusted" in (provider.last_system or "").lower()
+    assert "untrusted source excerpts" in (provider.last_prompt or "").lower()
+    assert "return valid json" not in (provider.last_prompt or "").lower()
 
     # Second read should hit the cache, not regenerate.
     client.get(
@@ -134,13 +152,11 @@ def test_generate_study_guide(
     headers = authentication_token_from_email(client=client, email=user.email, db=db)
     _add_ready_source(db, notebook.id)
     provider = FakeOverviewProvider(
-        summary="",
-        topics=[],
+        payload={
+            "sections": [{"title": "Core", "content": "The core idea."}],
+            "faqs": [{"question": "What?", "answer": "A thing."}],
+        }
     )
-    provider.complete_json = lambda prompt: {
-        "sections": [{"title": "Core", "content": "The core idea."}],
-        "faqs": [{"question": "What?", "answer": "A thing."}],
-    }
     monkeypatch.setattr(
         "app.api.routes.notebooks.get_chat_provider", lambda _config=None: provider
     )
@@ -152,3 +168,7 @@ def test_generate_study_guide(
     body = response.json()
     assert body["sections"][0] == {"title": "Core", "content": "The core idea."}
     assert body["faqs"][0] == {"question": "What?", "answer": "A thing."}
+    assert provider.last_system is not None
+    assert "untrusted" in (provider.last_system or "").lower()
+    assert "untrusted source excerpts" in (provider.last_prompt or "").lower()
+    assert "return valid json" not in (provider.last_prompt or "").lower()

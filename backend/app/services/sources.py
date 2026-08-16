@@ -405,6 +405,20 @@ def delete_notebook_files(notebook_id: uuid.UUID) -> None:
             pass
 
 
+def delete_owner_upload_files(*, session: Session, owner_id: uuid.UUID) -> None:
+    """Unlink every notebook upload dir owned by ``owner_id``.
+
+    Must run *before* the user (or their notebooks) are deleted so the ids are
+    still queryable. Both the self-service and admin deletion paths use this so
+    an account never leaves residue on the uploads volume.
+    """
+    notebook_ids = session.exec(
+        select(Notebook.id).where(col(Notebook.owner_id) == owner_id)
+    ).all()
+    for notebook_id in notebook_ids:
+        delete_notebook_files(notebook_id)
+
+
 def delete_source(*, session: Session, source: Source) -> None:
     delete_source_file(source)
     session.delete(source)

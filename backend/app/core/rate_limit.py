@@ -29,6 +29,28 @@ def reset() -> None:
         _recipient_sends.clear()
 
 
+def client_ip(request: Request) -> str:
+    """IP used as the rate-limit bucket key.
+
+    Uvicorn's ``--proxy-headers`` rewrites ``request.client`` from the
+    *leftmost* ``X-Forwarded-For`` hop. That is the original-client slot, and
+    it is trivially spoofable: a caller who reaches Traefik (or any trusted
+    proxy) with ``X-Forwarded-For: <fresh-ip>`` gets a new bucket each time.
+
+    The *rightmost* hop is the address the nearest reverse proxy actually
+    observed and appended. With a single Traefik/nginx in front that is the
+    real client; extra proxies only make the key coarser (safer), never
+    attacker-chosen. Direct connections without the header still use the TCP
+    peer.
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
+        if hops:
+            return hops[-1]
+    return request.client.host if request.client else "unknown"
+
+
 def _evict_oldest() -> None:
     """Drop the oldest-bucketed entries when the table grows too large, instead
     of wiping every bucket (which would momentarily open all limits)."""
@@ -45,7 +67,7 @@ def rate_limit(limit: int, window: int = 60) -> Callable[[Request], None]:
     def dependency(request: Request) -> None:
         if not settings.RATE_LIMIT_ENABLED:
             return
-        host = request.client.host if request.client else "unknown"
+        host = client_ip(request)
         # Key on the ROUTE template path (e.g. `/password-recovery/{email}`),
         # not the concrete path: otherwise each distinct path parameter gets
         # its own bucket and probing many values (e.g. different emails)
