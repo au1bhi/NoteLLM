@@ -1,5 +1,7 @@
 .vscode/*
 !.vscode/extensions.json
+# Agent-managed Git worktrees are local, disposable workspace state.
+/.claude/worktrees/
 node_modules/
 .env
 # install.sh --force backs the old env up as .env.bak.<ts>; never let those
