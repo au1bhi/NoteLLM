@@ -6,7 +6,7 @@ import {
   PanelRight,
   PanelRightClose,
 } from "lucide-react"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { z } from "zod"
 
 import {
@@ -42,6 +42,8 @@ const searchSchema = z.object({
   conversation: z.string().uuid().optional().catch(undefined),
 })
 
+type StreamPhase = "retrieving" | "generating" | "saving"
+
 export const Route = createFileRoute("/_layout/notebooks/$notebookId")({
   component: NotebookWorkspace,
   validateSearch: searchSchema,
@@ -60,6 +62,9 @@ function NotebookWorkspace() {
   )
   const [streamingAnswer, setStreamingAnswer] = useState("")
   const [isStreaming, setIsStreaming] = useState(false)
+  const [streamPhase, setStreamPhase] = useState<StreamPhase>("retrieving")
+  const [streamError, setStreamError] = useState<string | null>(null)
+  const streamControllerRef = useRef<AbortController | null>(null)
   const [sourcesOpen, setSourcesOpen] = useState(true)
   const [mobileSourcesOpen, setMobileSourcesOpen] = useState(false)
   const [selectedSourceIds, setSelectedSourceIds] = useState<Set<string>>(
@@ -72,6 +77,7 @@ function NotebookWorkspace() {
 
   const selectConversation = useCallback(
     (nextId: string | null) => {
+      setStreamError(null)
       setConversationId(nextId)
       void navigate({
         to: "/notebooks/$notebookId",
@@ -81,6 +87,13 @@ function NotebookWorkspace() {
       })
     },
     [navigate, notebookId],
+  )
+
+  useEffect(
+    () => () => {
+      streamControllerRef.current?.abort()
+    },
+    [],
   )
 
   const toggleSource = (sourceId: string) => {
@@ -285,15 +298,28 @@ function NotebookWorkspace() {
       (old) =>
         old ? { ...old, messages: [...old.messages, optimisticMessage] } : old,
     )
+    const controller = new AbortController()
+    streamControllerRef.current = controller
     setStreamingAnswer("")
+    setStreamError(null)
+    setStreamPhase(mode === "knowledge" ? "generating" : "retrieving")
     setIsStreaming(true)
     try {
-      await conversationsApi.stream(conversationId, content, {
-        mode,
-        sourceIds: selectedSourceIds.size ? [...selectedSourceIds] : undefined,
-        onCitations: () => undefined,
-        onDelta: (text) => setStreamingAnswer((answer) => answer + text),
-      })
+      await conversationsApi.stream(
+        conversationId,
+        content,
+        {
+          mode,
+          sourceIds: selectedSourceIds.size
+            ? [...selectedSourceIds]
+            : undefined,
+          onCitations: () => setStreamPhase("saving"),
+          onDelta: (text) => setStreamingAnswer((answer) => answer + text),
+          onDone: () => setStreamPhase("saving"),
+          onPhase: setStreamPhase,
+        },
+        controller.signal,
+      )
       await queryClient.invalidateQueries({
         queryKey: ["conversations", conversationId],
       })
@@ -301,14 +327,32 @@ function NotebookWorkspace() {
         queryKey: ["notebooks", notebookId, "conversations"],
       })
     } catch (error) {
-      showErrorToast(extractErrorMessage(error))
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setStreamError(
+          "已停止接收回答。回答可能仍会在后台完成并保存，可稍后刷新查看。",
+        )
+      } else {
+        const message = extractErrorMessage(error)
+        setStreamError(message)
+        showErrorToast(message)
+      }
       await queryClient.invalidateQueries({
         queryKey: ["conversations", conversationId],
       })
     } finally {
+      if (streamControllerRef.current === controller) {
+        streamControllerRef.current = null
+      }
       setIsStreaming(false)
       setStreamingAnswer("")
     }
+  }
+
+  const stopStreaming = () => streamControllerRef.current?.abort()
+
+  const retryConversation = () => {
+    void conversations.refetch()
+    if (conversationBelongsToNotebook) void conversation.refetch()
   }
 
   const handleToggleSources = () => {
@@ -447,10 +491,22 @@ function NotebookWorkspace() {
           conversations={conversations.data?.data ?? []}
           activeConversationId={conversationId}
           isConversationLoading={
-            Boolean(conversationId) && conversation.isLoading
+            (!conversations.data && conversations.isFetching) ||
+            (Boolean(conversationId) &&
+              !conversation.data &&
+              conversation.isFetching)
+          }
+          conversationError={
+            !conversations.data && conversations.error
+              ? extractErrorMessage(conversations.error)
+              : !conversation.data && conversation.error
+                ? extractErrorMessage(conversation.error)
+                : undefined
           }
           isStreaming={isStreaming}
           streamingAnswer={streamingAnswer}
+          streamPhase={streamPhase}
+          streamError={streamError}
           hasReadySources={hasReadySources}
           onCreatePending={createConversationMutation.isPending}
           isRenaming={renameConversationMutation.isPending}
@@ -473,6 +529,8 @@ function NotebookWorkspace() {
             deleteConversationMutation.mutate(conversationId)
           }
           isDeleting={deleteConversationMutation.isPending}
+          onCancelStream={stopStreaming}
+          onRetryConversation={retryConversation}
           onSend={(content, mode) => void sendQuestion(content, mode)}
         />
 

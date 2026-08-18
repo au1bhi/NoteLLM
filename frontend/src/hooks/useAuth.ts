@@ -3,7 +3,6 @@ import { useNavigate } from "@tanstack/react-router"
 
 import {
   type Body_login_login_access_token as AccessToken,
-  LoginService,
   type UserPublic,
   type UserRegister,
   UsersService,
@@ -15,6 +14,7 @@ import {
   isTokenExpired,
   setToken,
 } from "@/lib/auth"
+import { authApi } from "@/services/auth"
 import { handleError } from "@/utils"
 import useCustomToast from "./useCustomToast"
 
@@ -34,8 +34,11 @@ const useAuth = () => {
   })
 
   const signUpMutation = useMutation({
-    mutationFn: (data: UserRegister) =>
-      UsersService.registerUser({ requestBody: data }),
+    mutationFn: ({
+      turnstileToken,
+      ...data
+    }: UserRegister & { turnstileToken?: string }) =>
+      authApi.signUp(data, turnstileToken),
     // Navigation after a successful signup is the caller's choice: when a
     // verification email is required the signup page shows a "check your
     // inbox" screen instead of redirecting to /login.
@@ -45,10 +48,11 @@ const useAuth = () => {
     },
   })
 
-  const login = async (data: AccessToken) => {
-    const response = await LoginService.loginAccessToken({
-      formData: data,
-    })
+  const login = async ({
+    turnstileToken,
+    ...data
+  }: AccessToken & { turnstileToken?: string }) => {
+    const response = await authApi.login(data, turnstileToken)
     setToken(response.access_token)
   }
 

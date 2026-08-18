@@ -802,7 +802,7 @@ print_summary() {
   echo "=============================================================================="
   if [[ "$PROFILE" == "prod" ]]; then
     info "  前端:       https://${DOMAIN}"
-    info "  API 文档:   https://api.${DOMAIN}/docs"
+    info "  API 健康检查: https://api.${DOMAIN}/api/v1/utils/health-check/"
     info "  Adminer:    https://adminer.${DOMAIN}"
     info "  Traefik:    https://traefik.${DOMAIN}"
     info "  Adminer / Traefik 面板登录（HTTP Basic Auth）:"

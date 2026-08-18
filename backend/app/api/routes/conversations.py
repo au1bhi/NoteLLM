@@ -1,45 +1,27 @@
 import uuid
-from collections.abc import AsyncIterable
+from collections.abc import AsyncIterable, Iterable
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.sse import EventSourceResponse, ServerSentEvent
-from sqlmodel import Session, col, select
+from sqlmodel import Session, select
 from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import CurrentUser, SessionDep
-from app.core.db import engine
 from app.core.rate_limit import rate_limit
 from app.models import (
-    AnswerMode,
-    Chunk,
-    Citation,
-    CitationPublic,
     Conversation,
     ConversationDetailPublic,
-    ConversationMessage,
     ConversationMessageCreate,
-    ConversationMessagePublic,
     ConversationPublic,
     ConversationUpdate,
     Notebook,
-    Source,
     get_datetime_utc,
 )
-from app.services.answers import GroundedAnswer, answer_question
-from app.services.chat import ChatError, get_chat_provider
-from app.services.embeddings import EmbeddingError, get_embedding_provider
-from app.services.provider_settings import (
-    effective_chat_config,
-    effective_embedding_config,
-    load_user_provider_settings,
-)
-from app.services.usage import (
-    QuotaError,
-    estimate_chat_reserve,
-    reserve_usage,
-    settle_usage,
-)
+from app.services.chat import ChatError
+from app.services.conversations import conversation_detail, persist_answer
+from app.services.embeddings import EmbeddingError
+from app.services.usage import QuotaError
 
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
@@ -56,153 +38,6 @@ def get_conversation_or_404(
     if not conversation:
         raise HTTPException(status_code=404, detail="会话不存在")
     return conversation
-
-
-def citation_public(*, session: Session, citation: Citation) -> CitationPublic:
-    chunk = session.get(Chunk, citation.chunk_id)
-    source = session.get(Source, chunk.source_id) if chunk else None
-    if not chunk or not source:
-        raise RuntimeError("Citation references a deleted chunk")
-    return CitationPublic(
-        chunk_id=citation.chunk_id,
-        ordinal=citation.ordinal,
-        quote=citation.quote,
-        source_display_name=source.display_name,
-        page_number=chunk.page_number,
-    )
-
-
-def conversation_detail(
-    *, session: Session, conversation: Conversation
-) -> ConversationDetailPublic:
-    messages = session.exec(
-        select(ConversationMessage)
-        .where(ConversationMessage.conversation_id == conversation.id)
-        .order_by(col(ConversationMessage.created_at))
-    ).all()
-    message_public = []
-    for message in messages:
-        citations = session.exec(
-            select(Citation)
-            .where(Citation.message_id == message.id)
-            .order_by(col(Citation.ordinal))
-        ).all()
-        message_public.append(
-            ConversationMessagePublic(
-                id=message.id,
-                role=message.role,
-                content=message.content,
-                created_at=message.created_at,
-                suggestions=message.suggestions or [],
-                citations=[
-                    citation_public(session=session, citation=citation)
-                    for citation in citations
-                ],
-            )
-        )
-    return ConversationDetailPublic(
-        id=conversation.id,
-        notebook_id=conversation.notebook_id,
-        title=conversation.title,
-        is_pinned=conversation.is_pinned,
-        created_at=conversation.created_at,
-        updated_at=conversation.updated_at,
-        messages=message_public,
-    )
-
-
-def persist_answer(
-    *,
-    conversation_id: uuid.UUID,
-    question: str,
-    mode: AnswerMode = "grounded",
-    source_ids: list[uuid.UUID] | None = None,
-) -> GroundedAnswer:
-    with Session(engine) as session:
-        conversation = session.get(Conversation, conversation_id)
-        if not conversation:
-            raise RuntimeError("Conversation no longer exists")
-        user_message = ConversationMessage(
-            conversation_id=conversation.id, role="user", content=question
-        )
-        session.add(user_message)
-        notebook = session.get(Notebook, conversation.notebook_id)
-        user_settings = (
-            load_user_provider_settings(session, notebook.owner_id)
-            if notebook
-            else None
-        )
-        chat_reserved = 0
-        embedding_reserved = 0
-        embedding_reserve = len(question) if mode != "knowledge" else 0
-        if notebook:
-            # Reserve server-billed allowance atomically before spending any
-            # model call; concurrent requests cannot both pass the quota.
-            chat_reserved, embedding_reserved = reserve_usage(
-                session=session,
-                user_id=notebook.owner_id,
-                user_settings=user_settings,
-                chat_tokens=estimate_chat_reserve(question),
-                embedding_chars=embedding_reserve,
-            )
-        try:
-            answer = answer_question(
-                session=session,
-                notebook_id=conversation.notebook_id,
-                query=question,
-                chat_provider=get_chat_provider(effective_chat_config(user_settings)),
-                embedding_provider=get_embedding_provider(
-                    effective_embedding_config(user_settings)
-                ),
-                mode=mode,
-                source_ids=source_ids,
-            )
-        except Exception:
-            # The provider call failed after a reservation: refund it so a burst
-            # of failing calls cannot drain the monthly allowance. (Clamped at
-            # zero by settle_usage.)
-            if notebook and (chat_reserved or embedding_reserved):
-                settle_usage(
-                    session=session,
-                    user_id=notebook.owner_id,
-                    chat_tokens=-chat_reserved if chat_reserved else 0,
-                    embedding_chars=-embedding_reserved if embedding_reserved else 0,
-                )
-            raise
-        if notebook:
-            settle_usage(
-                session=session,
-                user_id=notebook.owner_id,
-                chat_tokens=(
-                    answer.tokens_used - chat_reserved if chat_reserved else 0
-                ),
-                embedding_chars=(
-                    embedding_reserve - embedding_reserved if embedding_reserved else 0
-                ),
-            )
-        assistant_message = ConversationMessage(
-            conversation_id=conversation.id,
-            role="assistant",
-            content=answer.content,
-            suggestions=answer.suggestions,
-        )
-        session.add(assistant_message)
-        session.flush()
-        for ordinal, citation in enumerate(answer.citations):
-            session.add(
-                Citation(
-                    message_id=assistant_message.id,
-                    chunk_id=citation.chunk_id,
-                    ordinal=ordinal,
-                    quote=citation.quote,
-                )
-            )
-        conversation.updated_at = get_datetime_utc()
-        if conversation.title == "New conversation":
-            conversation.title = question[:255]
-        session.add(conversation)
-        session.commit()
-        return answer
 
 
 @router.get("/{conversation_id}", response_model=ConversationDetailPublic)
@@ -269,6 +104,32 @@ def get_owned_conversation_or_404(
     )
 
 
+def _iter_stream_chunks(content: str) -> Iterable[str]:
+    """Yield small display chunks for SSE streaming.
+
+    Splitting on spaces alone breaks Chinese text (no spaces between words),
+    which would emit the whole answer as a single delta and defeat streaming.
+    Emit each CJK character individually and each Latin word (with its trailing
+    space) separately so both scripts stream at a natural reading pace.
+    """
+    buffer: list[str] = []
+
+    def flush() -> Iterable[str]:
+        if buffer:
+            yield "".join(buffer)
+            buffer.clear()
+
+    for char in content:
+        if ord(char) > 0x2E7F:  # CJK and full-width ranges start above U+2E7F
+            yield from flush()
+            yield char
+        else:
+            buffer.append(char)
+            if char == " ":
+                yield from flush()
+    yield from flush()
+
+
 @router.post(
     "/{conversation_id}/messages/stream",
     response_class=EventSourceResponse,
@@ -303,8 +164,8 @@ async def stream_message(
             data={"conversation_id": str(conversation_id)}, event="done"
         )
         return
-    for word in answer.content.split(" "):
-        yield ServerSentEvent(data={"text": f"{word} "}, event="delta")
+    for chunk in _iter_stream_chunks(answer.content):
+        yield ServerSentEvent(data={"text": chunk}, event="delta")
     yield ServerSentEvent(
         data={
             "citations": [

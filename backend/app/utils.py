@@ -6,7 +6,6 @@ from typing import Any
 from urllib.parse import urlparse
 
 import emails
-import jwt
 from jinja2 import Environment, select_autoescape
 from jwt.exceptions import InvalidTokenError
 
@@ -180,19 +179,12 @@ def _encode_purpose_token(
         # unchanged, so a successful reset (or any password change) invalidates
         # outstanding reset tokens immediately.
         claims["pwd"] = int(password_changed_at.timestamp() * 1_000_000)
-    encoded_jwt = jwt.encode(
-        claims,
-        settings.SECRET_KEY,
-        algorithm=security.ALGORITHM,
-    )
-    return encoded_jwt
+    return security.encode_jwt(claims)
 
 
 def _decode_purpose_token(token: str, purpose: str) -> str | None:
     try:
-        decoded_token = jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
-        )
+        decoded_token = security.decode_jwt(token)
     except InvalidTokenError:
         return None
     if decoded_token.get("purpose") != purpose:
@@ -219,9 +211,7 @@ def verify_password_reset_token(token: str) -> str | None:
 def reset_token_password_changed_at(token: str) -> int | None:
     """The `pwd` snapshot bound to a reset token, or None (unbound/legacy)."""
     try:
-        decoded = jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
-        )
+        decoded = security.decode_jwt(token)
     except InvalidTokenError:
         return None
     if decoded.get("purpose") != "password_reset":
@@ -269,16 +259,14 @@ def generate_email_change_token(
     }
     if password_changed_at is not None:
         claims["pwd"] = int(password_changed_at.timestamp() * 1_000_000)
-    return jwt.encode(claims, settings.SECRET_KEY, algorithm=security.ALGORITHM)
+    return security.encode_jwt(claims)
 
 
 def email_change_token_account(token: str) -> str | None:
     """The staging account's current email bound to an email-change verify
     token, or None if the token is a plain (signup) verification token."""
     try:
-        decoded = jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
-        )
+        decoded = security.decode_jwt(token)
     except InvalidTokenError:
         return None
     if decoded.get("purpose") != "email_verify":
@@ -290,9 +278,7 @@ def email_change_token_account(token: str) -> str | None:
 def email_change_token_password_changed_at(token: str) -> int | None:
     """The `pwd` snapshot bound to an email-change token, or None."""
     try:
-        decoded = jwt.decode(
-            token, settings.SECRET_KEY, algorithms=[security.ALGORITHM]
-        )
+        decoded = security.decode_jwt(token)
     except InvalidTokenError:
         return None
     if decoded.get("purpose") != "email_verify" or decoded.get("cur") is None:

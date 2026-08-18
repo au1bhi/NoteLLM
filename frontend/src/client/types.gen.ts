@@ -45,12 +45,14 @@ export type mode = 'grounded' | 'hybrid' | 'knowledge';
 
 export type ConversationMessagePublic = {
     id: string;
-    role: string;
+    role: 'user' | 'assistant';
     content: string;
     created_at: string;
     suggestions?: Array<(string)>;
     citations: Array<CitationPublic>;
 };
+
+export type role = 'user' | 'assistant';
 
 export type ConversationPublic = {
     id: string;
@@ -173,13 +175,15 @@ export type SourcePublic = {
     file_size_bytes: number;
     id: string;
     notebook_id: string;
-    status: string;
+    status: 'pending' | 'processing' | 'ready' | 'failed';
     error_message: (string | null);
     page_count: (number | null);
     char_count: (number | null);
     created_at: string;
     processed_at: (string | null);
 };
+
+export type status = 'pending' | 'processing' | 'ready' | 'failed';
 
 export type SourcesPublic = {
     data: Array<SourcePublic>;
@@ -272,6 +276,11 @@ export type StudyTaskUpdate = {
 export type Token = {
     access_token: string;
     token_type?: string;
+};
+
+export type TurnstilePublic = {
+    enabled?: boolean;
+    site_key?: (string | null);
 };
 
 export type UpdatePassword = {
@@ -426,6 +435,7 @@ export type ConversationsStreamMessageResponse = (unknown);
 
 export type LoginLoginAccessTokenData = {
     formData: Body_login_login_access_token;
+    xTurnstileToken?: (string | null);
 };
 
 export type LoginLoginAccessTokenResponse = (Token);
@@ -434,6 +444,7 @@ export type LoginTestTokenResponse = (UserPublic);
 
 export type LoginRecoverPasswordData = {
     email: string;
+    xTurnstileToken?: (string | null);
 };
 
 export type LoginRecoverPasswordResponse = (Message);
@@ -451,6 +462,8 @@ export type LoginRecoverPasswordHtmlContentData = {
 export type LoginRecoverPasswordHtmlContentResponse = (string);
 
 export type MetaGetWatermarkResponse = (WatermarkPublic);
+
+export type MetaGetTurnstileResponse = (TurnstilePublic);
 
 export type NotebooksReadNotebooksData = {
     limit?: number;
@@ -650,6 +663,7 @@ export type UsersFetchAvailableModelsResponse = (Array<ModelInfoPublic>);
 
 export type UsersRegisterUserData = {
     requestBody: UserRegister;
+    xTurnstileToken?: (string | null);
 };
 
 export type UsersRegisterUserResponse = (SignupResult);

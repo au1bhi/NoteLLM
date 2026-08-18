@@ -82,7 +82,13 @@
 
 2026-08-14 安全修复：管理员 `DELETE /users/{id}` 与自助删号一样先 `delete_owner_upload_files`，避免 volume 残留上传原文；认证限流改按 `X-Forwarded-For` 最右跳（代理实际观察到的地址）分桶，伪造最左跳不能绕过登录节流；概览/学习指南把规则放到 `system`、资料放到 `user`；前端 Markdown 只保留 http(s) 链接并加 `noopener noreferrer`。
 
+2026-08-18 配额与会话服务重构：新增统一的用量预留上下文，成功时按实际 provider 用量结算、异常时回滚会话并仅退还真实预留额度，BYOK 零预留维度不产生幽灵结算；搜索、资料处理、问答、概览、学习指南、模型发现与学习计划均移除手写 reserve/settle 分支。会话详情组装与回答持久化迁入 service 层，用户/助手消息在模型成功后成对提交，同时保留中文 SSE 分块及路由 monkeypatch 兼容入口。独立 pgvector 数据库中相关 API/service 测试 84 项通过，聚焦 Ruff、mypy、ty 均通过。
+
 ## 当前下一步
+
+2026-08-19 安全、服务重构与前端体验验收：登录、注册和找回密码已按公开元数据按需加载 Cloudflare Turnstile，并通过统一请求头提交一次性 token；CSP 仅增加官方 challenge 域名。认证限流迁入 PostgreSQL 以跨 worker 原子共享，可信代理链、IPv6 `/64`、活跃桶上限和 Cloudflare Tunnel 专用回源端口均有回归。JWT 与 Fernet 使用 HKDF 分域子密钥并兼容读取旧格式；CORS 方法/请求头显式列举。统一配额上下文覆盖检索、摄取、回答、概览、学习指南、模型发现和学习计划，BYOK 零预留与跨月结算有独立测试；会话详情和回答持久化迁入 service 层，provider 失败不再留下孤立消息。前端流式问答补充阶段状态、后端错误正文、断流提示和“停止接收”操作，明确客户端中止不等于取消已开始的后台模型调用或持久化；会话深链、加载、错误与重试状态已补齐。仓库尚无前端自动化测试框架，静态证据与人工验收矩阵见 `docs/evaluation/frontend-quality.md`。
+
+最终验收在独立 pgvector 数据库完成：后端 258 项测试全部通过，覆盖率 88%；mypy、ty、Ruff 与格式检查通过。OpenAPI 客户端重新生成且一致，前端 Biome lint、TypeScript `noEmit` 和 Vite 生产构建通过。Alembic 从模型检查无待生成操作，当前数据库与 head 均为 `6ea2d54c90f1`；本地、Traefik 生产、Traefik + 低内存三套 Compose 配置和 nginx 语法通过。完整 `uv run prek run --all-files`（含 Biome、Ruff、mypy、ty、OpenAPI、Zizmor）通过，`git diff --check` 无错误。三个独立代理分别复核前端、配额/service 与安全/部署；提交前安全评审未发现阻断项，残余风险保留在 `THREAT_MODEL.md`。
 
 在隔离库上按 `docs/evaluation/ablation-protocol.md` 与 `answer-mode-protocol.md` 实跑，把数字抄进空表；新报告写入 `docs/evaluation/runs/`，不要覆盖 2026-07-23 基线。然后完成新轮人工忠实度复核、按 `SCREENSHOTS.md` 本机截图，并将第 1—8 章草稿改写进学校模板且补齐文内引用。项目功能已足够，默认不再添加产品模块、依赖或服务；完整范围判断见 `THESIS_READINESS_AUDIT.md`。
 

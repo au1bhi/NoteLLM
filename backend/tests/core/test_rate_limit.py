@@ -1,6 +1,36 @@
+import threading
+from concurrent.futures import ThreadPoolExecutor
+
+import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from sqlalchemy import func
+from sqlmodel import Session, select
+from starlette.requests import Request
 
 from app.core.config import settings
+from app.core.db import engine
+from app.core.rate_limit import _consume, _rate_limit_identity, client_ip
+from app.models import RateLimitBucket
+
+
+def _request(peer: str, headers: dict[str, str]) -> Request:
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "scheme": "http",
+            "path": "/",
+            "raw_path": b"/",
+            "query_string": b"",
+            "headers": [
+                (name.lower().encode(), value.encode())
+                for name, value in headers.items()
+            ],
+            "client": (peer, 12345),
+            "server": ("testserver", 80),
+        }
+    )
 
 
 def test_login_endpoint_rate_limited_after_many_attempts(
@@ -18,7 +48,7 @@ def test_login_endpoint_rate_limited_after_many_attempts(
     response = client.post(url, data=form)
     assert response.status_code == 429
     assert "请求过于频繁" in response.json()["detail"]
-    assert response.headers["Retry-After"] == "60"
+    assert 1 <= int(response.headers["Retry-After"]) <= 60
 
 
 def test_spoofed_x_forwarded_for_shares_one_rate_limit_bucket(
@@ -48,3 +78,104 @@ def test_spoofed_x_forwarded_for_shares_one_rate_limit_bucket(
         headers={"X-Forwarded-For": "198.51.100.1, 127.0.0.1"},
     )
     assert response.status_code == 429
+
+
+def test_direct_client_cannot_spoof_forwarding_headers() -> None:
+    request = _request(
+        "198.51.100.20",
+        {
+            "X-Forwarded-For": "203.0.113.50",
+            "CF-Connecting-IP": "203.0.113.51",
+        },
+    )
+    assert client_ip(request) == "198.51.100.20"
+
+
+def test_trusted_proxy_chain_discards_spoofed_leftmost_hop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "TRUSTED_PROXY_CIDRS", ["10.0.0.0/8", "192.0.2.0/24"])
+    request = _request(
+        "10.0.0.2",
+        {"X-Forwarded-For": "203.0.113.99, 198.51.100.8, 192.0.2.5"},
+    )
+    assert client_ip(request) == "198.51.100.8"
+
+
+def test_cloudflare_header_is_ignored_behind_trusted_public_proxy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "TRUSTED_PROXY_CIDRS", ["10.0.0.0/8", "192.0.2.0/24"])
+    request = _request(
+        "10.0.0.2",
+        {
+            "CF-Connecting-IP": "203.0.113.25",
+            "X-Forwarded-For": "203.0.113.99, 198.51.100.8, 192.0.2.5",
+        },
+    )
+    assert client_ip(request) == "198.51.100.8"
+
+
+def test_tunnel_converted_xff_is_resolved_behind_trusted_ingress(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "TRUSTED_PROXY_CIDRS", ["172.16.0.0/12"])
+    request = _request(
+        "172.18.0.4",
+        {
+            "X-Forwarded-For": "203.0.113.25",
+            "CF-Connecting-IP": "198.51.100.99",
+        },
+    )
+    assert client_ip(request) == "203.0.113.25"
+
+
+def test_ipv6_rate_limit_identity_groups_by_64_without_truncating_client_ip(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "TRUSTED_PROXY_CIDRS", ["10.0.0.0/8"])
+    first = "2001:db8:1:2::1234"
+    second = "2001:db8:1:2:ffff::5678"
+    different = "2001:db8:1:3::1234"
+
+    request = _request("10.0.0.2", {"X-Forwarded-For": first})
+    assert client_ip(request) == first
+    assert _rate_limit_identity(first) == "2001:db8:1:2::/64"
+    assert _rate_limit_identity(first) == _rate_limit_identity(second)
+    assert _rate_limit_identity(first) != _rate_limit_identity(different)
+
+
+def test_new_bucket_capacity_fails_closed_but_existing_bucket_updates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "RATE_LIMIT_MAX_ACTIVE_BUCKETS", 2)
+
+    assert _consume("capacity", "first", 60)[0] == 1
+    assert _consume("capacity", "second", 60)[0] == 1
+    with pytest.raises(HTTPException) as exc_info:
+        _consume("capacity", "third", 60)
+    assert exc_info.value.status_code == 503
+    assert "容量已满" in str(exc_info.value.detail)
+    assert _consume("capacity", "first", 60)[0] == 2
+
+
+def test_new_bucket_capacity_is_atomic_across_concurrent_workers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "RATE_LIMIT_MAX_ACTIVE_BUCKETS", 1)
+    barrier = threading.Barrier(2)
+
+    def consume(value: str) -> int:
+        barrier.wait()
+        try:
+            return _consume("concurrent-capacity", value, 60)[0]
+        except HTTPException as error:
+            return error.status_code
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(consume, ["first", "second"]))
+
+    assert sorted(results) == [1, 503]
+    with Session(engine) as session:
+        count = session.exec(select(func.count()).select_from(RateLimitBucket)).one()
+    assert count == 1

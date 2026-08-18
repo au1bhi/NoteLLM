@@ -215,6 +215,7 @@ export const ConversationMessagePublicSchema = {
         },
         role: {
             type: 'string',
+            enum: ['user', 'assistant'],
             title: 'Role'
         },
         content: {
@@ -734,6 +735,7 @@ export const SourcePublicSchema = {
         },
         status: {
             type: 'string',
+            enum: ['pending', 'processing', 'ready', 'failed'],
             title: 'Status'
         },
         error_message: {
@@ -1162,6 +1164,29 @@ export const TokenSchema = {
     type: 'object',
     required: ['access_token'],
     title: 'Token'
+} as const;
+
+export const TurnstilePublicSchema = {
+    properties: {
+        enabled: {
+            type: 'boolean',
+            title: 'Enabled',
+            default: false
+        },
+        site_key: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Site Key'
+        }
+    },
+    type: 'object',
+    title: 'TurnstilePublic'
 } as const;
 
 export const UpdatePasswordSchema = {

@@ -1,9 +1,11 @@
 import {
+  AlertCircle,
   Loader2,
   MessageSquarePlus,
   MessagesSquare,
   Pencil,
   Send,
+  Square,
   Trash2,
 } from "lucide-react"
 import { type KeyboardEvent, useEffect, useRef, useState } from "react"
@@ -76,8 +78,11 @@ interface ChatPanelProps {
   conversations: ConversationPublic[]
   activeConversationId: string | null
   isConversationLoading: boolean
+  conversationError?: string
   isStreaming: boolean
   streamingAnswer: string
+  streamPhase: "retrieving" | "generating" | "saving"
+  streamError?: string | null
   hasReadySources: boolean
   onCreatePending: boolean
   isRenaming: boolean
@@ -90,6 +95,8 @@ interface ChatPanelProps {
   onPinConversation: (conversationId: string, isPinned: boolean) => void
   onDeleteConversation: (conversationId: string) => void
   isDeleting?: boolean
+  onCancelStream: () => void
+  onRetryConversation: () => void
   onSend: (content: string, mode: AnswerMode) => void
 }
 
@@ -147,10 +154,26 @@ function Suggestions({
   )
 }
 
-function StreamingBubble({ text }: { text: string }) {
+function StreamingBubble({
+  text,
+  phase,
+}: {
+  text: string
+  phase: "retrieving" | "generating" | "saving"
+}) {
+  const status =
+    phase === "retrieving"
+      ? "正在检索相关资料…"
+      : phase === "saving"
+        ? "正在保存回答…"
+        : "正在生成回答…"
   return (
     <div className="mr-auto max-w-full">
-      <div className="rounded-2xl rounded-bl-md border bg-background p-4 shadow-soft">
+      <div
+        className="rounded-2xl rounded-bl-md border bg-background p-4 shadow-soft"
+        aria-live="polite"
+        aria-busy="true"
+      >
         {text ? (
           <>
             <Markdown content={text} />
@@ -158,11 +181,15 @@ function StreamingBubble({ text }: { text: string }) {
               aria-hidden="true"
               className="ml-1 inline-block h-4 w-1.5 animate-caret rounded-sm bg-primary align-middle"
             />
+            <p className="mt-3 flex items-center gap-2 border-t pt-3 text-xs text-muted-foreground">
+              <Loader2 className="size-3.5 animate-spin" />
+              {status}
+            </p>
           </>
         ) : (
           <p className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin" />
-            正在检索资料并生成回答…
+            {status}
           </p>
         )}
       </div>
@@ -175,8 +202,11 @@ export function ChatPanel({
   conversations,
   activeConversationId,
   isConversationLoading,
+  conversationError,
   isStreaming,
   streamingAnswer,
+  streamPhase,
+  streamError,
   hasReadySources,
   onCreatePending,
   isRenaming,
@@ -189,6 +219,8 @@ export function ChatPanel({
   onPinConversation,
   onDeleteConversation,
   isDeleting,
+  onCancelStream,
+  onRetryConversation,
   onSend,
 }: ChatPanelProps) {
   const [question, setQuestion] = useState("")
@@ -210,7 +242,13 @@ export function ChatPanel({
   useEffect(() => {
     const el = scrollRef.current
     if (el) el.scrollTo({ top: el.scrollHeight })
-  }, [messages, streamingAnswer, isStreaming, activeConversationId])
+  }, [
+    messages,
+    streamingAnswer,
+    streamError,
+    isStreaming,
+    activeConversationId,
+  ])
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional — resize the composer as the question grows
   useEffect(() => {
@@ -241,8 +279,10 @@ export function ChatPanel({
       !event.shiftKey &&
       !event.nativeEvent.isComposing
     ) {
-      event.preventDefault()
-      handleSend()
+      if (canSend) {
+        event.preventDefault()
+        handleSend()
+      }
     }
   }
 
@@ -363,7 +403,27 @@ export function ChatPanel({
           </div>
         ) : null}
 
-        {!isConversationLoading && !activeConversationId ? (
+        {!isConversationLoading && conversationError ? (
+          <div
+            className="flex min-h-40 flex-col items-center justify-center gap-3 rounded-lg border border-destructive/35 bg-destructive/5 px-4 text-center text-sm text-destructive"
+            role="alert"
+          >
+            <AlertCircle className="size-5" />
+            <p>{conversationError}</p>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onRetryConversation}
+            >
+              重试加载
+            </Button>
+          </div>
+        ) : null}
+
+        {!isConversationLoading &&
+        !conversationError &&
+        !activeConversationId ? (
           <div className="flex h-full flex-col items-center justify-center gap-3 py-10 text-center">
             <span className="inline-flex size-12 items-center justify-center rounded-2xl bg-brand-gradient-soft text-primary">
               <MessagesSquare className="size-6" />
@@ -377,9 +437,17 @@ export function ChatPanel({
               </p>
             </div>
             {hasReadySources ? (
-              <Button size="sm" onClick={onNewConversation}>
-                <MessageSquarePlus className="size-4" />
-                新建会话
+              <Button
+                size="sm"
+                disabled={onCreatePending}
+                onClick={onNewConversation}
+              >
+                {onCreatePending ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <MessageSquarePlus className="size-4" />
+                )}
+                {onCreatePending ? "创建中…" : "新建会话"}
               </Button>
             ) : null}
           </div>
@@ -393,9 +461,22 @@ export function ChatPanel({
           />
         ))}
 
-        {isStreaming ? <StreamingBubble text={streamingAnswer} /> : null}
+        {isStreaming ? (
+          <StreamingBubble text={streamingAnswer} phase={streamPhase} />
+        ) : null}
+
+        {!isStreaming && streamError ? (
+          <div
+            className="flex items-start gap-2 rounded-lg border border-destructive/35 bg-destructive/5 px-3 py-2.5 text-sm text-destructive"
+            role="alert"
+          >
+            <AlertCircle className="mt-0.5 size-4 shrink-0" />
+            <p>{streamError}</p>
+          </div>
+        ) : null}
 
         {!isConversationLoading &&
+        !conversationError &&
         activeConversationId &&
         !isStreaming &&
         !messages?.length ? (
@@ -439,14 +520,14 @@ export function ChatPanel({
             ref={textareaRef}
             rows={1}
             value={question}
-            disabled={!activeConversationId || isStreaming}
+            disabled={!activeConversationId}
             aria-label="输入问题"
             onChange={(event) => setQuestion(event.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={
               activeConversationId
                 ? isStreaming
-                  ? "正在生成回答…"
+                  ? "可先输入下一条问题，回答完成后发送"
                   : hasReadySources
                     ? "基于当前笔记本的资料提问…"
                     : "资料处理完成后即可提问…"
@@ -454,17 +535,20 @@ export function ChatPanel({
             }
             className={cn(
               "max-h-48 min-h-10 flex-1 resize-none border-0 bg-transparent px-0 py-2.5 text-sm outline-none placeholder:text-muted-foreground",
-              isStreaming && "opacity-60",
             )}
           />
           <Button
             size="icon"
             className="size-9 shrink-0 rounded-xl bg-primary text-primary-foreground shadow-soft hover:opacity-95"
-            disabled={!canSend}
-            aria-label="发送问题"
-            onClick={handleSend}
+            disabled={isStreaming ? false : !canSend}
+            aria-label={isStreaming ? "停止接收回答" : "发送问题"}
+            onClick={isStreaming ? onCancelStream : handleSend}
           >
-            <Send className="size-4" />
+            {isStreaming ? (
+              <Square className="size-3.5 fill-current" />
+            ) : (
+              <Send className="size-4" />
+            )}
           </Button>
         </div>
         <p className="mt-2 text-center text-xs text-muted-foreground">

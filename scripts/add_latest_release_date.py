@@ -1,4 +1,4 @@
-"""Check release-notes.md and add today's date to the latest release header if missing."""
+"""Add today's date to the latest semantic-version release header, when present."""
 
 import re
 import sys
@@ -32,8 +32,7 @@ def main() -> None:
             f.writelines(lines)
         sys.exit(0)
 
-    print("No release header found")
-    sys.exit(1)
+    print("No semantic-version release header found; nothing to date")
 
 
 if __name__ == "__main__":

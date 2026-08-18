@@ -513,18 +513,10 @@ def test_server_model_forced_on_server_default_endpoint(
     assert config.model == "server-model"
 
 
-def test_models_probe_does_not_erase_usage_with_stored_key(
+def test_models_probe_uses_server_billing_when_request_uses_server_key(
     client: TestClient, db: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The server-billed models probe must settle only what it reserved.
-
-    A user with a stored own chat key is billed on that key (chat_source
-    "user"), so reserve_usage returns (0, 0) — nothing is debited and nothing
-    may be refunded. The old code hardcoded `reserved = 500` and unconditionally
-    settled -400 per probe against a counter that was never incremented, letting
-    repeated probes erase the user's usage and refresh their free allowance
-    after the switch-back cooldown.
-    """
+    """Billing follows the key used by this request, not a stored BYOK key."""
     monkeypatch.setattr(settings, "LLM_API_KEY", "server-secret-key")
     monkeypatch.setattr(settings, "LLM_BASE_URL", "https://api.example.com/v1")
     user, headers = _auth(client, db)
@@ -545,10 +537,13 @@ def test_models_probe_does_not_erase_usage_with_stored_key(
         )
     )
     db.commit()
-    monkeypatch.setattr(
-        "app.api.routes.users._fetch_models_payload",
-        lambda root, api_key: {"data": [{"id": "gpt-4o"}]},
-    )
+    used_keys: list[str] = []
+
+    def fake_fetch(_root: str, api_key: str) -> dict[str, object]:
+        used_keys.append(api_key)
+        return {"data": [{"id": "gpt-4o"}]}
+
+    monkeypatch.setattr("app.api.routes.users._fetch_models_payload", fake_fetch)
     for _ in range(3):
         r = client.post(_url() + "/models", headers=headers, json={})
         assert r.status_code == 200
@@ -556,4 +551,5 @@ def test_models_probe_does_not_erase_usage_with_stored_key(
     db.expire_all()
     usage = db.exec(select(UserUsage).where(UserUsage.user_id == user.id)).first()
     assert usage is not None
-    assert usage.chat_tokens == 42_000
+    assert usage.chat_tokens == 42_300
+    assert used_keys == ["server-secret-key"] * 3

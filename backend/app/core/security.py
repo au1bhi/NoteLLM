@@ -5,6 +5,8 @@ from typing import Any
 
 import jwt
 from cryptography.fernet import Fernet, InvalidToken
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from pwdlib import PasswordHash
 from pwdlib.hashers.argon2 import Argon2Hasher
 from pwdlib.hashers.bcrypt import BcryptHasher
@@ -19,11 +21,24 @@ password_hash = PasswordHash(
 )
 
 
-def _fernet() -> Fernet:
-    key = base64.urlsafe_b64encode(
-        hashlib.sha256(settings.SECRET_KEY.encode()).digest()
+def _derive_key(info: bytes) -> bytes:
+    """Derive a domain-separated key from the application master secret."""
+    return base64.urlsafe_b64encode(
+        HKDF(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=None,
+            info=b"notellm/" + info,
+        ).derive(settings.SECRET_KEY.encode())
     )
-    return Fernet(key)
+
+
+def jwt_signing_key() -> bytes:
+    return _derive_key(b"jwt-signing/v1")
+
+
+def _fernet() -> Fernet:
+    return Fernet(_derive_key(b"fernet/provider-secrets/v1"))
 
 
 def encrypt_secret(value: str) -> str:
@@ -36,7 +51,14 @@ def decrypt_secret(value: str) -> str | None:
     try:
         return _fernet().decrypt(value.encode()).decode()
     except (InvalidToken, ValueError):
-        return None
+        # Read pre-HKDF ciphertexts during migration; all new writes use HKDF.
+        try:
+            legacy_key = base64.urlsafe_b64encode(
+                hashlib.sha256(settings.SECRET_KEY.encode()).digest()
+            )
+            return Fernet(legacy_key).decrypt(value.encode()).decode()
+        except (InvalidToken, ValueError):
+            return None
 
 
 ALGORITHM = "HS256"
@@ -56,8 +78,23 @@ def create_access_token(
         # whose snapshot predates the user's current value, so a password
         # change revokes every previously issued JWT immediately.
         to_encode["pwd"] = int(password_changed_at.timestamp() * 1_000_000)
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, jwt_signing_key(), algorithm=ALGORITHM)
     return encoded_jwt
+
+
+def encode_jwt(claims: dict[str, Any]) -> str:
+    return jwt.encode(claims, jwt_signing_key(), algorithm=ALGORITHM)
+
+
+def decode_jwt(token: str) -> dict[str, Any]:
+    """Decode HKDF tokens, accepting legacy raw-secret tokens during upgrade."""
+    try:
+        return jwt.decode(token, jwt_signing_key(), algorithms=[ALGORITHM])
+    except jwt.InvalidTokenError as current_error:
+        try:
+            return jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        except jwt.InvalidTokenError:
+            raise current_error
 
 
 def verify_password(

@@ -1,118 +1,205 @@
-"""In-process fixed-window rate limiting for auth endpoints.
+"""PostgreSQL-backed fixed-window rate limiting shared by all workers."""
 
-Sufficient for a single-instance deployment; the bucket state lives only in
-this process. For multi-worker deployments, replace the store with a shared
-one (e.g. Redis) — the dependency interface stays the same.
-"""
-
-import threading
-import time
+import hashlib
+import ipaddress
+import math
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException, Request
+from sqlalchemy import text as sql_text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlmodel import Session
 
 from app.core.config import settings
+from app.core.db import engine
 
-_lock = threading.Lock()
-# key -> (count, window_start_seconds). Guarded by _lock.
-_buckets: dict[tuple[str, str], tuple[int, float]] = {}
-# recipient email -> last send timestamp. Guards against one address being
-# flooded with verification mail from many different IPs.
-_recipient_sends: dict[str, float] = {}
-_MAX_ENTRIES = 10_000
+_UPDATE_ACTIVE_SQL = sql_text(
+    """
+    UPDATE rate_limit_bucket SET
+      count = CASE
+        WHEN rate_limit_bucket.window_started_at <= :cutoff THEN 1
+        ELSE rate_limit_bucket.count + 1
+      END,
+      window_started_at = CASE
+        WHEN rate_limit_bucket.window_started_at <= :cutoff THEN :now
+        ELSE rate_limit_bucket.window_started_at
+      END,
+      updated_at = :now
+    WHERE key = :key AND updated_at >= :retention_cutoff
+    RETURNING count, window_started_at
+    """
+)
+
+_INSERT_SQL = sql_text(
+    """
+    INSERT INTO rate_limit_bucket (key, count, window_started_at, updated_at)
+    VALUES (:key, 1, :now, :now)
+    RETURNING count, window_started_at
+    """
+)
+
+# Transaction-level lock used only while admitting a new active bucket. Existing
+# buckets stay on the lock-free UPDATE path.
+_ADMISSION_LOCK_ID = 0x4E6F74654C4C4D
+_RETENTION = timedelta(hours=1)
 
 
-def reset() -> None:
-    """Clear all buckets (used by tests)."""
-    with _lock:
-        _buckets.clear()
-        _recipient_sends.clear()
+def _trusted_networks() -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
+    values = settings.TRUSTED_PROXY_CIDRS
+    if isinstance(values, str):
+        values = [item.strip() for item in values.split(",") if item.strip()]
+    networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
+    for value in values:
+        try:
+            networks.append(ipaddress.ip_network(value, strict=False))
+        except ValueError:
+            continue
+    return networks
+
+
+def _is_trusted(value: str) -> bool:
+    try:
+        address = ipaddress.ip_address(value)
+    except ValueError:
+        return False
+    return any(address in network for network in _trusted_networks())
+
+
+def _valid_ip(value: str) -> str | None:
+    try:
+        return str(ipaddress.ip_address(value.strip()))
+    except ValueError:
+        return None
 
 
 def client_ip(request: Request) -> str:
-    """IP used as the rate-limit bucket key.
+    """Resolve the client through a trusted proxy chain.
 
-    Uvicorn's ``--proxy-headers`` rewrites ``request.client`` from the
-    *leftmost* ``X-Forwarded-For`` hop. That is the original-client slot, and
-    it is trivially spoofable: a caller who reaches Traefik (or any trusted
-    proxy) with ``X-Forwarded-For: <fresh-ip>`` gets a new bucket each time.
-
-    The *rightmost* hop is the address the nearest reverse proxy actually
-    observed and appended. With a single Traefik/nginx in front that is the
-    real client; extra proxies only make the key coarser (safer), never
-    attacker-chosen. Direct connections without the header still use the TCP
-    peer.
+    Forwarding headers are ignored unless the raw TCP peer is trusted. The
+    application never consumes provider-specific headers; ingress must convert
+    a verified client address to XFF. XFF is peeled from right to left,
+    discarding only configured proxy hops.
     """
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        hops = [hop.strip() for hop in forwarded.split(",") if hop.strip()]
-        if hops:
-            return hops[-1]
-    return request.client.host if request.client else "unknown"
+    peer = request.client.host if request.client else "unknown"
+    if not _is_trusted(peer):
+        return peer
+
+    forwarded = request.headers.get("x-forwarded-for", "")
+    hops = [parsed for hop in forwarded.split(",") if (parsed := _valid_ip(hop))]
+    for hop in reversed([*hops, peer]):
+        if not _is_trusted(hop):
+            return hop
+    return hops[0] if hops else peer
 
 
-def _evict_oldest() -> None:
-    """Drop the oldest-bucketed entries when the table grows too large, instead
-    of wiping every bucket (which would momentarily open all limits)."""
-    with _lock:
-        while len(_buckets) > _MAX_ENTRIES:
-            oldest_key = min(_buckets, key=lambda k: _buckets[k][1])
-            del _buckets[oldest_key]
+def _rate_limit_identity(value: str) -> str:
+    """Keep IPv4 exact and group IPv6 clients by their canonical /64."""
+    try:
+        address = ipaddress.ip_address(value)
+    except ValueError:
+        return value
+    if isinstance(address, ipaddress.IPv6Address):
+        return str(ipaddress.ip_network((address, 64), strict=False))
+    return str(address)
+
+
+def _bucket_key(namespace: str, value: str) -> str:
+    return hashlib.sha256(f"{namespace}\0{value}".encode()).hexdigest()
+
+
+def _consume(namespace: str, value: str, window: int) -> tuple[int, datetime]:
+    now = datetime.now(UTC)
+    params = {
+        "key": _bucket_key(namespace, value),
+        "now": now,
+        "cutoff": now - timedelta(seconds=window),
+        "retention_cutoff": now - _RETENTION,
+    }
+    try:
+        with Session(engine) as session:
+            row = session.execute(  # ty: ignore[deprecated] -- raw SQL returns Row
+                _UPDATE_ACTIVE_SQL, params
+            ).one_or_none()
+            if row is None:
+                # Serialize only new active-key admission across workers. The
+                # recheck handles a concurrent insert of this same key.
+                session.execute(  # ty: ignore[deprecated] -- raw cleanup SQL
+                    sql_text("SELECT pg_advisory_xact_lock(:lock_id)"),
+                    {"lock_id": _ADMISSION_LOCK_ID},
+                )
+                session.execute(  # ty: ignore[deprecated] -- raw cleanup SQL
+                    sql_text(
+                        "DELETE FROM rate_limit_bucket "
+                        "WHERE updated_at < :retention_cutoff"
+                    ),
+                    params,
+                )
+                row = session.execute(  # ty: ignore[deprecated] -- raw SQL Row
+                    _UPDATE_ACTIVE_SQL, params
+                ).one_or_none()
+                if row is None:
+                    active_count = session.execute(  # ty: ignore[deprecated]
+                        sql_text(
+                            "SELECT count(*) FROM rate_limit_bucket "
+                            "WHERE updated_at >= :retention_cutoff"
+                        ),
+                        params,
+                    ).one()[0]
+                    if int(active_count) >= settings.RATE_LIMIT_MAX_ACTIVE_BUCKETS:
+                        raise HTTPException(
+                            status_code=503,
+                            detail="请求保护服务容量已满，请稍后重试",
+                        )
+                    row = session.execute(  # ty: ignore[deprecated] -- raw SQL Row
+                        _INSERT_SQL, params
+                    ).one()
+            session.commit()
+            return int(row[0]), row[1]
+    except SQLAlchemyError as error:
+        raise HTTPException(
+            status_code=503, detail="请求保护服务暂时不可用，请稍后重试"
+        ) from error
+
+
+def reset() -> None:
+    """Clear shared buckets (test-only helper)."""
+    try:
+        with Session(engine) as session:
+            session.execute(  # ty: ignore[deprecated] -- raw test cleanup SQL
+                sql_text("DELETE FROM rate_limit_bucket")
+            )
+            session.commit()
+    except SQLAlchemyError:
+        # The test/bootstrap database may not have applied the new migration yet.
+        pass
 
 
 def rate_limit(limit: int, window: int = 60) -> Callable[[Request], None]:
-    """Build a FastAPI dependency allowing `limit` requests per `window`
-    seconds, keyed by route path and client IP."""
+    """Allow ``limit`` requests per route/client fixed window."""
 
     def dependency(request: Request) -> None:
         if not settings.RATE_LIMIT_ENABLED:
             return
-        host = client_ip(request)
-        # Key on the ROUTE template path (e.g. `/password-recovery/{email}`),
-        # not the concrete path: otherwise each distinct path parameter gets
-        # its own bucket and probing many values (e.g. different emails)
-        # bypasses the intended per-endpoint throttle.
         route = request.scope.get("route")
         path = getattr(route, "path", None) or request.url.path
-        key = (path, host)
-        now = time.monotonic()
-        with _lock:
-            count, start = _buckets.get(key, (0, now))
-            if now - start >= window:
-                count, start = 0, now
-            if count >= limit:
-                raise HTTPException(
-                    status_code=429,
-                    detail=f"请求过于频繁，请稍后再试（{window} 秒内最多 {limit} 次）",
-                    headers={"Retry-After": str(window)},
-                )
-            _buckets[key] = (count + 1, start)
-        _evict_oldest()
+        identity = _rate_limit_identity(client_ip(request))
+        count, started_at = _consume(path, identity, window)
+        if count > limit:
+            elapsed = (datetime.now(UTC) - started_at).total_seconds()
+            retry_after = max(1, math.ceil(window - elapsed))
+            raise HTTPException(
+                status_code=429,
+                detail=f"请求过于频繁，请稍后再试（{window} 秒内最多 {limit} 次）",
+                headers={"Retry-After": str(retry_after)},
+            )
 
     return dependency
 
 
 def recipient_send_cooldown(email: str, window: int = 60) -> bool:
-    """Return True if a message may be sent to `email` now.
-
-    Enforces at most one send per `window` seconds per recipient, independent of
-    which IP triggers it, so a distributed caller cannot flood a target mailbox
-    with verification messages. A rejected call is silently skipped (the caller
-    still returns its generic success response).
-    """
+    """Coordinate recipient mail cooldowns across all worker processes."""
     if not settings.RATE_LIMIT_ENABLED:
         return True
-    now = time.monotonic()
-    with _lock:
-        last = _recipient_sends.get(email)
-        if last is not None and now - last < window:
-            return False
-        _recipient_sends[email] = now
-        # Bound the dict: attackers can enumerate many distinct recipients (or
-        # sign up for many addresses) to grow it without bound. Drop the oldest
-        # entry past the cap — a cooldown that falls off early only re-opens
-        # that one address slightly sooner, never a security boundary.
-        if len(_recipient_sends) > _MAX_ENTRIES:
-            oldest = min(_recipient_sends, key=lambda k: _recipient_sends[k])
-            del _recipient_sends[oldest]
-    return True
+    count, _ = _consume("recipient-send", email.strip().lower(), window)
+    return count == 1

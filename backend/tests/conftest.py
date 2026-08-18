@@ -39,6 +39,8 @@ def _pin_external_service_test_defaults() -> Generator[None]:
         ),
         patch.object(app_settings, "EMBEDDING_API_KEY", "ci-fake-embedding-key"),
         patch.object(app_settings, "EMBEDDING_MODEL", "ci-fake-embedding-model"),
+        patch.object(app_settings, "TURNSTILE_SITE_KEY", None),
+        patch.object(app_settings, "TURNSTILE_SECRET_KEY", None),
     ):
         yield
 

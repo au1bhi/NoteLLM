@@ -11,6 +11,7 @@ import { useForm } from "react-hook-form"
 import { z } from "zod"
 
 import { AuthLayout } from "@/components/Common/AuthLayout"
+import { Turnstile, useTurnstile } from "@/components/Common/Turnstile"
 import {
   Form,
   FormControl,
@@ -64,6 +65,7 @@ export const Route = createFileRoute("/signup")({
 
 function SignUp() {
   const { signUpMutation } = useAuth()
+  const turnstile = useTurnstile()
   const navigate = useNavigate()
   // A just-registered address is remembered in this tab, so refreshing or
   // going back after signup keeps the "check your inbox" screen instead of
@@ -94,18 +96,22 @@ function SignUp() {
 
     // exclude confirm_password from submission data
     const { confirm_password: _confirm_password, ...submitData } = data
-    signUpMutation.mutate(submitData, {
-      onSuccess: (created) => {
-        if (created.is_email_verified) {
-          // Mail backend not configured — account is already usable.
-          sessionStorage.removeItem(PENDING_VERIFY_KEY)
-          navigate({ to: "/login" })
-        } else {
-          sessionStorage.setItem(PENDING_VERIFY_KEY, created.email)
-          setRegistered({ email: created.email })
-        }
+    signUpMutation.mutate(
+      { ...submitData, turnstileToken: turnstile.token ?? undefined },
+      {
+        onSuccess: (created) => {
+          if (created.is_email_verified) {
+            // Mail backend not configured — account is already usable.
+            sessionStorage.removeItem(PENDING_VERIFY_KEY)
+            navigate({ to: "/login" })
+          } else {
+            sessionStorage.setItem(PENDING_VERIFY_KEY, created.email)
+            setRegistered({ email: created.email })
+          }
+        },
+        onError: turnstile.reset,
       },
-    })
+    )
   }
 
   if (registered) {
@@ -250,10 +256,21 @@ function SignUp() {
               )}
             />
 
+            <Turnstile
+              enabled={turnstile.enabled}
+              siteKey={turnstile.siteKey}
+              resetKey={turnstile.resetKey}
+              isLoading={turnstile.isLoading}
+              isError={turnstile.isError}
+              onTokenChange={turnstile.setToken}
+              onRetryConfig={() => void turnstile.retryConfig()}
+            />
+
             <LoadingButton
               type="submit"
               className="w-full"
               loading={signUpMutation.isPending}
+              disabled={!turnstile.canSubmit}
             >
               注册
             </LoadingButton>

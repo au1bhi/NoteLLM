@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from app.core.config import settings
-from app.models import WatermarkPublic
+from app.models import TurnstilePublic, WatermarkPublic
 
 router = APIRouter(prefix="/meta", tags=["meta"])
 
@@ -18,4 +18,12 @@ def get_watermark() -> WatermarkPublic:
     """
     return WatermarkPublic(
         enabled=settings.WATERMARK_ENABLED, text=settings.WATERMARK_TEXT
+    )
+
+
+@router.get("/turnstile", response_model=TurnstilePublic)
+def get_turnstile() -> TurnstilePublic:
+    """Public widget configuration used before authentication."""
+    return TurnstilePublic(
+        enabled=settings.turnstile_enabled, site_key=settings.TURNSTILE_SITE_KEY
     )

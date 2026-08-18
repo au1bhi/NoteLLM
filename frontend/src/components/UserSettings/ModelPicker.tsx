@@ -49,7 +49,6 @@ export function ModelPicker({
   // the form at a different (baseUrl, apiKey, apiFormat).
   useEffect(() => {
     fetchMutation.reset()
-    // biome-ignore lint/correctness/useExhaustiveDependencies: reset only reacts to endpoint inputs
   }, [fetchMutation.reset])
 
   const models = fetchMutation.data?.map((model) => model.id) ?? []

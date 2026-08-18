@@ -34,17 +34,13 @@ To check the logs of a specific service, add the name of the service, e.g.:
 docker compose logs backend
 ```
 
-## Mailcatcher
+## 本地邮件行为
 
-Mailcatcher is a simple SMTP server that catches all emails sent by the backend during local development. Instead of sending real emails, they are captured and displayed in a web interface.
+当前 Compose 不包含 Mailcatcher 或其他邮件捕获服务。未配置 `SMTP_HOST`
+时，后端不会发送邮件，并把新注册账户直接标记为已验证，避免阻塞本地开发。
 
-This is useful for:
-
-* Testing email functionality during development
-* Verifying email content and formatting
-* Debugging email-related functionality without sending real emails
-
-The backend is automatically configured to use Mailcatcher when running with Docker Compose locally (SMTP on port 1025). All captured emails can be viewed at <http://localhost:1080>.
+需要验证真实的注册确认、找回密码或学习提醒邮件时，请在 `.env` 中配置测试
+SMTP 账户，并只向你控制的收件地址发送。不要把 SMTP 密钥提交到仓库。
 
 ## Local Development
 
@@ -190,5 +186,3 @@ Automatic Alternative Docs (ReDoc): <http://localhost:8000/redoc>
 Adminer: <http://localhost:8080>
 
 Traefik UI: <http://localhost:8090>
-
-MailCatcher: <http://localhost:1080>

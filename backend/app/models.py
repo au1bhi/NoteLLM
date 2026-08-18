@@ -4,7 +4,16 @@ from typing import Literal
 
 from pgvector.sqlalchemy import Vector
 from pydantic import EmailStr, field_validator
-from sqlalchemy import JSON, Column, DateTime
+from sqlalchemy import (
+    JSON,
+    Column,
+    DateTime,
+    Index,
+    String,
+    Text,
+    UniqueConstraint,
+    text,
+)
 from sqlmodel import Field, Relationship, SQLModel
 
 from app.core.config import settings
@@ -390,13 +399,18 @@ class SourceBase(SQLModel):
     file_size_bytes: int = Field(ge=0)
 
 
+SourceStatus = Literal["pending", "processing", "ready", "failed"]
+
+
 class Source(SourceBase, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     notebook_id: uuid.UUID = Field(
         foreign_key="notebook.id", nullable=False, ondelete="CASCADE", index=True
     )
     storage_path: str = Field(max_length=1024)
-    status: str = Field(default="pending", max_length=32)
+    status: SourceStatus = Field(
+        default="pending", sa_column=Column(String(32), nullable=False)
+    )
     error_message: str | None = Field(default=None, max_length=1000)
     page_count: int | None = Field(default=None, ge=0)
     char_count: int | None = Field(default=None, ge=0)
@@ -415,7 +429,7 @@ class Source(SourceBase, table=True):
 class SourcePublic(SourceBase):
     id: uuid.UUID
     notebook_id: uuid.UUID
-    status: str
+    status: SourceStatus
     error_message: str | None
     page_count: int | None
     char_count: int | None
@@ -511,6 +525,7 @@ class StudyTaskUpdate(SQLModel):
 
 class StudyPlan(SQLModel, table=True):
     __tablename__ = "study_plan"
+    __table_args__ = (UniqueConstraint("conversation_id"),)
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     conversation_id: uuid.UUID = Field(
@@ -518,10 +533,9 @@ class StudyPlan(SQLModel, table=True):
         nullable=False,
         ondelete="CASCADE",
         index=True,
-        unique=True,
     )
     title: str = Field(max_length=255)
-    summary: str
+    summary: str = Field(sa_column=Column(Text, nullable=False))
     difficulty: str = Field(max_length=16)
     start_date: date
     end_date: date
@@ -551,7 +565,7 @@ class StudyTask(SQLModel, table=True):
         index=True,
     )
     title: str = Field(max_length=255)
-    description: str
+    description: str = Field(sa_column=Column(Text, nullable=False))
     start_date: date
     end_date: date
     estimated_minutes: int = Field(default=45, ge=15, le=480)
@@ -619,8 +633,10 @@ class ConversationMessage(SQLModel, table=True):
     conversation_id: uuid.UUID = Field(
         foreign_key="conversation.id", nullable=False, ondelete="CASCADE", index=True
     )
-    role: str = Field(max_length=16)
-    content: str
+    role: Literal["user", "assistant"] = Field(
+        sa_column=Column(String(16), nullable=False)
+    )
+    content: str = Field(sa_column=Column(Text, nullable=False))
     suggestions: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     created_at: datetime = Field(
         default_factory=get_datetime_utc,
@@ -658,7 +674,7 @@ class CitationPublic(SQLModel):
 
 class ConversationMessagePublic(SQLModel):
     id: uuid.UUID
-    role: str
+    role: Literal["user", "assistant"]
     content: str
     created_at: datetime
     suggestions: list[str] = []
@@ -670,12 +686,23 @@ class ConversationDetailPublic(ConversationPublic):
 
 
 class Chunk(SQLModel, table=True):
+    __table_args__ = (
+        UniqueConstraint("source_id", "ordinal", name="uq_chunk_source_ordinal"),
+        Index(
+            "ix_chunk_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+            postgresql_where=text("embedding IS NOT NULL"),
+        ),
+    )
+
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     source_id: uuid.UUID = Field(
         foreign_key="source.id", nullable=False, ondelete="CASCADE", index=True
     )
     ordinal: int = Field(ge=0)
-    content: str
+    content: str = Field(sa_column=Column(Text, nullable=False))
     page_number: int | None = Field(default=None, ge=1)
     char_start: int = Field(ge=0)
     char_end: int = Field(ge=0)
@@ -700,6 +727,20 @@ class Message(SQLModel):
 class WatermarkPublic(SQLModel):
     enabled: bool = True
     text: str
+
+
+class TurnstilePublic(SQLModel):
+    enabled: bool = False
+    site_key: str | None = None
+
+
+class RateLimitBucket(SQLModel, table=True):
+    __tablename__ = "rate_limit_bucket"
+
+    key: str = Field(primary_key=True, max_length=64)
+    count: int = Field(default=0, ge=0)
+    window_started_at: datetime = Field(sa_type=DateTime(timezone=True))  # type: ignore
+    updated_at: datetime = Field(index=True, sa_type=DateTime(timezone=True))  # type: ignore
 
 
 # JSON payload containing access token

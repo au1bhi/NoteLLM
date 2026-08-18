@@ -39,8 +39,7 @@ from app.services.study_plans import (
 from app.services.usage import (
     QuotaError,
     estimate_chat_reserve,
-    reserve_usage,
-    settle_usage,
+    usage_reservation,
 )
 
 router = APIRouter(tags=["study-plans"])
@@ -135,44 +134,27 @@ def create_or_regenerate_study_plan(
         )
     user_settings = load_user_provider_settings(session, current_user.id)
     provider = get_chat_provider(effective_chat_config(user_settings))
-    reserved = 0
     try:
-        reserved, _ = reserve_usage(
+        with usage_reservation(
             session=session,
             user_id=current_user.id,
             user_settings=user_settings,
             chat_tokens=estimate_chat_reserve(context),
-        )
-        generated = generate_study_plan(
-            session=session,
-            conversation_id=conversation.id,
-            chat_provider=provider,
-        )
+        ) as reservation:
+            generated = generate_study_plan(
+                session=session,
+                conversation_id=conversation.id,
+                chat_provider=provider,
+            )
+            reservation.set_actual(
+                chat_tokens=getattr(provider, "total_tokens_used", 0)
+            )
     except QuotaError as error:
         raise HTTPException(status_code=429, detail=str(error)) from error
     except ValueError as error:
-        if reserved:
-            settle_usage(
-                session=session,
-                user_id=current_user.id,
-                chat_tokens=-reserved,
-            )
         raise HTTPException(status_code=400, detail=str(error)) from error
     except (ChatError, RuntimeError) as error:
-        if reserved:
-            settle_usage(
-                session=session,
-                user_id=current_user.id,
-                chat_tokens=-reserved,
-            )
         raise HTTPException(status_code=503, detail=str(error)) from error
-
-    if reserved:
-        settle_usage(
-            session=session,
-            user_id=current_user.id,
-            chat_tokens=getattr(provider, "total_tokens_used", 0) - reserved,
-        )
     try:
         plan = store_generated_plan(
             session=session,

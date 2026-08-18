@@ -42,3 +42,44 @@ def test_watermark_is_public_no_auth(client: TestClient) -> None:
     response = client.get(f"{settings.API_V1_STR}/meta/watermark")
     assert response.status_code == 200
     assert "WWW-Authenticate" not in response.headers
+
+
+def test_turnstile_metadata_disabled_by_default(client: TestClient) -> None:
+    response = client.get(f"{settings.API_V1_STR}/meta/turnstile")
+    assert response.status_code == 200
+    assert response.json() == {"enabled": False, "site_key": None}
+
+
+def test_turnstile_metadata_exposes_only_site_key(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "TURNSTILE_SITE_KEY", "public-site-key")
+    monkeypatch.setattr(settings, "TURNSTILE_SECRET_KEY", "private-secret-key")
+    response = client.get(f"{settings.API_V1_STR}/meta/turnstile")
+    assert response.status_code == 200
+    assert response.json() == {"enabled": True, "site_key": "public-site-key"}
+    assert "private-secret-key" not in response.text
+
+
+def test_cors_preflight_allows_declared_turnstile_header(client: TestClient) -> None:
+    response = client.options(
+        f"{settings.API_V1_STR}/login/access-token",
+        headers={
+            "Origin": settings.FRONTEND_HOST,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "authorization,content-type,x-turnstile-token",
+        },
+    )
+    assert response.status_code == 200
+
+
+def test_cors_preflight_rejects_undeclared_header(client: TestClient) -> None:
+    response = client.options(
+        f"{settings.API_V1_STR}/login/access-token",
+        headers={
+            "Origin": settings.FRONTEND_HOST,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "x-not-allowed",
+        },
+    )
+    assert response.status_code == 400

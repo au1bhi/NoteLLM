@@ -97,6 +97,39 @@ def test_message_stream_emits_delta_citations_and_done(
     assert "event: done" in response.text
 
 
+def test_message_stream_chunks_chinese_content(
+    client: TestClient,
+    db: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    user = create_random_user(db)
+    notebook = create_random_notebook(db=db, owner_id=user.id)
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+    conversation = client.post(
+        f"{settings.API_V1_STR}/notebooks/{notebook.id}/conversations/",
+        headers=headers,
+        json={},
+    ).json()
+    monkeypatch.setattr(
+        "app.api.routes.conversations.persist_answer",
+        lambda **_: GroundedAnswer(content="资料不足，无法回答。", citations=[]),
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/conversations/{conversation['id']}/messages/stream",
+        headers=headers,
+        json={"content": "笔记里写了什么？"},
+    )
+
+    assert response.status_code == 200
+    # Chinese text has no spaces, so a space-split would emit one giant delta.
+    # Each CJK character must stream as its own small chunk instead. SSE
+    # escapes non-ASCII as \uXXXX, so 资料不足 streams as 8 separate deltas.
+    delta_events = response.text.count("event: delta")
+    assert delta_events == len("资料不足，无法回答。")
+    assert "\\u8d44" in response.text  # 资
+
+
 def test_message_stream_forwards_answer_mode(
     client: TestClient,
     db: Session,

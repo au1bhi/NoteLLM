@@ -8,8 +8,8 @@ import {
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 
-import { LoginService } from "@/client"
 import { AuthLayout } from "@/components/Common/AuthLayout"
+import { Turnstile, useTurnstile } from "@/components/Common/Turnstile"
 import {
   Form,
   FormControl,
@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input"
 import { LoadingButton } from "@/components/ui/loading-button"
 import { isLoggedIn } from "@/hooks/useAuth"
 import useCustomToast from "@/hooks/useCustomToast"
+import { authApi } from "@/services/auth"
 import { handleError } from "@/utils"
 
 const formSchema = z.object({
@@ -49,6 +50,7 @@ export const Route = createFileRoute("/recover-password")({
 })
 
 function RecoverPassword() {
+  const turnstile = useTurnstile()
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -58,9 +60,7 @@ function RecoverPassword() {
   const { showSuccessToast, showErrorToast } = useCustomToast()
 
   const recoverPassword = async (data: FormData) => {
-    await LoginService.recoverPassword({
-      email: data.email,
-    })
+    await authApi.recoverPassword(data.email, turnstile.token ?? undefined)
   }
 
   const mutation = useMutation({
@@ -70,6 +70,7 @@ function RecoverPassword() {
       form.reset()
     },
     onError: handleError.bind(showErrorToast),
+    onSettled: turnstile.reset,
   })
 
   const onSubmit = async (data: FormData) => {
@@ -111,10 +112,21 @@ function RecoverPassword() {
               )}
             />
 
+            <Turnstile
+              enabled={turnstile.enabled}
+              siteKey={turnstile.siteKey}
+              resetKey={turnstile.resetKey}
+              isLoading={turnstile.isLoading}
+              isError={turnstile.isError}
+              onTokenChange={turnstile.setToken}
+              onRetryConfig={() => void turnstile.retryConfig()}
+            />
+
             <LoadingButton
               type="submit"
               className="w-full"
               loading={mutation.isPending}
+              disabled={!turnstile.canSubmit}
             >
               继续
             </LoadingButton>

@@ -44,6 +44,15 @@ class Settings(BaseSettings):
     # internal deployment that does not need anti-screenshot branding).
     WATERMARK_ENABLED: bool = True
 
+    # Optional Cloudflare Turnstile protection for public auth endpoints.
+    TURNSTILE_SITE_KEY: str | None = None
+    TURNSTILE_SECRET_KEY: str | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def turnstile_enabled(self) -> bool:
+        return bool(self.TURNSTILE_SITE_KEY and self.TURNSTILE_SECRET_KEY)
+
     BACKEND_CORS_ORIGINS: Annotated[
         list[AnyUrl] | str, BeforeValidator(parse_cors)
     ] = []
@@ -86,6 +95,16 @@ class Settings(BaseSettings):
     STUDY_REMINDER_POLL_SECONDS: int = 60
     # Whether brute-force protection is active on auth endpoints.
     RATE_LIMIT_ENABLED: bool = True
+    # Maximum active route/IP and recipient cooldown buckets. New identities
+    # fail closed when capacity is exhausted; existing active buckets continue.
+    RATE_LIMIT_MAX_ACTIVE_BUCKETS: int = 10_000
+    # Only these direct TCP peers may supply client-IP forwarding headers.
+    # Defaults cover loopback and Docker bridge networks used by nginx/Traefik.
+    TRUSTED_PROXY_CIDRS: Annotated[list[str] | str, BeforeValidator(parse_cors)] = [
+        "127.0.0.1/32",
+        "::1/128",
+        "172.16.0.0/12",
+    ]
     POSTGRES_SERVER: str
     POSTGRES_PORT: int = 5432
     POSTGRES_USER: str
@@ -171,17 +190,24 @@ class Settings(BaseSettings):
         )
         if len(self.SECRET_KEY or "") < 32:
             message = (
-                "SECRET_KEY must be at least 32 characters — it signs JWTs and "
-                "derives the key that encrypts stored API keys. Generate one "
+                "SECRET_KEY must be at least 32 characters — HKDF derives "
+                "separate JWT-signing and provider-encryption keys from it. Generate one "
                 'with e.g. `python -c "import secrets; print(secrets.token_urlsafe(48))"`.'
             )
             if self.ENVIRONMENT == "local":
                 warnings.warn(message, stacklevel=1)
             else:
                 raise ValueError(message)
+        if self.RATE_LIMIT_MAX_ACTIVE_BUCKETS < 1:
+            raise ValueError("RATE_LIMIT_MAX_ACTIVE_BUCKETS must be positive")
 
         if self.SMTP_TLS and self.SMTP_SSL:
             raise ValueError("SMTP_TLS and SMTP_SSL cannot both be enabled")
+
+        if bool(self.TURNSTILE_SITE_KEY) != bool(self.TURNSTILE_SECRET_KEY):
+            raise ValueError(
+                "TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY must be configured together"
+            )
 
         if self.ENVIRONMENT != "local":
             if not str(self.FRONTEND_HOST).startswith("https://"):

@@ -49,8 +49,7 @@ from app.services.usage import (
     QuotaError,
     check_embedding_quota,
     estimate_chat_reserve,
-    reserve_usage,
-    settle_usage,
+    usage_reservation,
 )
 
 router = APIRouter(prefix="/notebooks", tags=["notebooks"])
@@ -243,36 +242,24 @@ def search_notebook(
     get_notebook_or_404(
         session=session, current_user=current_user, notebook_id=notebook_id
     )
-    embedding_reserved = 0
     try:
         user_settings = load_user_provider_settings(session, current_user.id)
-        # Capture the amount ACTUALLY reserved. BYOK / unconfigured embedding
-        # returns (0, 0); refunding len(query) would decrement a counter that
-        # was never incremented and refresh the free allowance.
-        _, embedding_reserved = reserve_usage(
+        with usage_reservation(
             session=session,
             user_id=current_user.id,
             user_settings=user_settings,
             embedding_chars=len(search_in.query),
-        )
-        retrieved = retrieve_chunks(
-            session=session,
-            embedding_provider=get_embedding_provider(
-                effective_embedding_config(user_settings)
-            ),
-            notebook_id=notebook_id,
-            query=search_in.query,
-            limit=search_in.limit,
-        )
-    except EmbeddingError as error:
-        # Refund the embedding reservation — the provider call failed, so the
-        # allowance must not be permanently consumed.
-        if embedding_reserved:
-            settle_usage(
+        ):
+            retrieved = retrieve_chunks(
                 session=session,
-                user_id=current_user.id,
-                embedding_chars=-embedding_reserved,
+                embedding_provider=get_embedding_provider(
+                    effective_embedding_config(user_settings)
+                ),
+                notebook_id=notebook_id,
+                query=search_in.query,
+                limit=search_in.limit,
             )
+    except EmbeddingError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
     except QuotaError as error:
         raise HTTPException(status_code=429, detail=str(error)) from error
@@ -304,36 +291,24 @@ def _generate_and_store_overview(
 ) -> None:
     user_settings = load_user_provider_settings(session, current_user.id)
     chat_provider = get_chat_provider(effective_chat_config(user_settings))
-    chat_reserved = 0
     try:
-        chat_reserved, _ = reserve_usage(
+        with usage_reservation(
             session=session,
             user_id=current_user.id,
             user_settings=user_settings,
             chat_tokens=estimate_chat_reserve(notebook.title or ""),
-        )
-        overview = generate_overview(
-            session=session, notebook_id=notebook.id, chat_provider=chat_provider
-        )
+        ) as reservation:
+            overview = generate_overview(
+                session=session, notebook_id=notebook.id, chat_provider=chat_provider
+            )
+            reservation.set_actual(
+                chat_tokens=getattr(chat_provider, "total_tokens_used", 0)
+            )
     except QuotaError as error:
         raise HTTPException(status_code=429, detail=str(error)) from error
     except ChatError as error:
-        # The provider call failed after a reservation was made: refund it so a
-        # burst of failing calls cannot drain the monthly allowance.
-        if chat_reserved:
-            settle_usage(
-                session=session,
-                user_id=current_user.id,
-                chat_tokens=-chat_reserved,
-            )
         raise HTTPException(status_code=503, detail=str(error)) from error
     store_overview(session=session, notebook=notebook, overview=overview)
-    if chat_reserved:
-        settle_usage(
-            session=session,
-            user_id=current_user.id,
-            chat_tokens=getattr(chat_provider, "total_tokens_used", 0) - chat_reserved,
-        )
 
 
 @router.get("/{notebook_id}/overview", response_model=NotebookOverviewPublic)
@@ -396,34 +371,23 @@ def generate_notebook_study_guide(
     )
     user_settings = load_user_provider_settings(session, current_user.id)
     chat_provider = get_chat_provider(effective_chat_config(user_settings))
-    chat_reserved = 0
     try:
-        chat_reserved, _ = reserve_usage(
+        with usage_reservation(
             session=session,
             user_id=current_user.id,
             user_settings=user_settings,
             chat_tokens=estimate_chat_reserve("学习指南"),
-        )
-        guide = generate_study_guide(
-            session=session, notebook_id=notebook_id, chat_provider=chat_provider
-        )
+        ) as reservation:
+            guide = generate_study_guide(
+                session=session, notebook_id=notebook_id, chat_provider=chat_provider
+            )
+            reservation.set_actual(
+                chat_tokens=getattr(chat_provider, "total_tokens_used", 0)
+            )
     except QuotaError as error:
         raise HTTPException(status_code=429, detail=str(error)) from error
     except ChatError as error:
-        # Refund the reservation on a failed provider call (see overview).
-        if chat_reserved:
-            settle_usage(
-                session=session,
-                user_id=current_user.id,
-                chat_tokens=-chat_reserved,
-            )
         raise HTTPException(status_code=503, detail=str(error)) from error
-    if chat_reserved:
-        settle_usage(
-            session=session,
-            user_id=current_user.id,
-            chat_tokens=getattr(chat_provider, "total_tokens_used", 0) - chat_reserved,
-        )
     return StudyGuidePublic(
         sections=[
             StudySectionPublic(title=section.title, content=section.content)

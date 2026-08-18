@@ -23,6 +23,11 @@
 | SSRF：非 HTTP 协议 | 同上 | `test_rejects_non_http_scheme` | `ftp://`、`file://` 拒绝，**422** |
 | SSRF：公网主机放行 | 同上 | `test_allows_public_host` | 解析到公网地址时放行 `https://api.example.com/v1`（测试桩，非真实业务端点） |
 | SSRF：IPv4-mapped IPv6 / CGNAT | 同上 | `test_blocks_ipv4_mapped_ipv6_private_forms` | 拒绝 mapped 形式的 CGNAT（`100.64.0.0/10`）、回环、RFC1918、链路本地 / 元数据；公网 mapped 地址仍可通过 |
+| Turnstile 覆盖公开认证 | `backend/tests/core/test_turnstile.py` | `test_protected_auth_endpoints_require_turnstile_header`、`test_valid_turnstile_token_reaches_login` | 启用后登录、注册、找回密码缺 token 均 **400**；有效 token 才进入原认证逻辑 |
+| Turnstile 失败关闭与配置 | 同上 | `test_turnstile_network_failure_returns_503`、`test_overlong_token_is_rejected_without_provider_call`、`test_turnstile_keys_must_be_configured_together` | Cloudflare 网络失败 **503**；超长 token 本地拒绝；site/secret 单边配置启动校验失败 |
+| CORS 请求面收窄 | `backend/tests/api/routes/test_meta.py` | `test_cors_preflight_allows_declared_turnstile_header`、`test_cors_preflight_rejects_undeclared_header` | 明确允许认证所需 header；未声明 header 的预检 **400** |
+| 代理头伪造 / Tunnel 单桶 | `backend/tests/core/test_rate_limit.py` | `test_direct_client_cannot_spoof_forwarding_headers`、`test_cloudflare_header_is_ignored_behind_trusted_public_proxy`、`test_tunnel_converted_xff_is_resolved_behind_trusted_ingress` | 非可信 peer 的头无效；公网代理后的伪造 CF 头被忽略；Tunnel 经 nginx 转换的 XFF 可恢复真实客户端 |
+| 限流存储上限 | 同上 | `test_ipv6_rate_limit_identity_groups_by_64_without_truncating_client_ip`、`test_new_bucket_capacity_fails_closed_but_existing_bucket_updates`、`test_new_bucket_capacity_is_atomic_across_concurrent_workers` | IPv6 按 `/64` 聚合；新桶容量满时 503；并发准入不突破硬上限，已有桶仍可计数 |
 | 额度耗尽：嵌入检索 | `backend/tests/api/routes/test_usage.py` | `test_embedding_quota_exhausted_blocks_search` | 搜索 **429**，detail 含「免费嵌入额度已用完」 |
 | 额度耗尽：资料上传 | 同上 | `test_embedding_quota_exhausted_blocks_upload` | 上传 **429**，detail 含「免费嵌入额度已用完」 |
 | 额度耗尽：笔记本概览 | 同上 | `test_chat_quota_exhausted_blocks_overview` | 概览 **429**，detail 含「免费对话额度已用完」 |
@@ -30,6 +35,10 @@
 | 额度预留结算 | 同上 | `test_reserve_usage_is_atomic_and_stops_at_quota` | 两次半额预留后第三次抛 `QuotaError`；计数器不超过免费上限 |
 | 周期滚动结算 | 同上 | `test_usage_rolls_over_when_period_changes` | 过期周期用量归零，查询 **200** |
 | 自备 Key 不计服务端额度 | 同上 | `test_reserve_with_own_key_is_unlimited` | BYOK 预留量为 0，不计入免费额度 |
+| 配额失败退款 / 零预留 | `backend/tests/services/test_usage.py` | `test_usage_reservation_refunds_only_reserved_amounts_on_failure`、`test_usage_reservation_ignores_actual_for_zero_reserved_dimension` | 异常只退本次真实预留；BYOK 的零预留维度不产生结算 |
+| Fernet / JWT 用途分离 | `backend/tests/core/test_security.py` | `test_hkdf_separates_jwt_and_fernet_keys`、`test_new_jwt_uses_derived_key_and_legacy_jwt_still_decodes` | HKDF 子密钥不同；新 JWT 不能用 raw `SECRET_KEY` 验证，旧 JWT 仍可迁移读取 |
+| 旧 Fernet 密文兼容 | 同上 | `test_decrypt_secret_accepts_legacy_sha256_ciphertext` | 升级后仍能解密旧 SHA-256 派生密钥写入的 BYOK |
+| PDF 页码与损坏处理 | `backend/tests/services/test_sources.py` | `test_extract_pages_from_real_pdf_preserves_page_numbers`、`test_corrupt_pdf_marks_source_failed_and_removes_existing_chunks` | 真实两页 PDF 保留 1/2 页码；损坏 PDF 变为 `failed`、清掉旧 chunk 且不调用 embedding provider |
 | 笔记本跨用户 / 不存在 | `backend/tests/api/routes/test_notebooks.py` | `test_notebook_is_not_visible_to_another_user` | 他人笔记本不出现在列表；`GET` / `PUT` / `DELETE` 均为 **404**（不是 403） |
 | 笔记本不存在 | 同上 | `test_read_notebook_not_found` | 随机 UUID **404** |
 | 会话跨用户读取 | `backend/tests/api/routes/test_conversations.py` | `test_user_cannot_read_another_users_conversation` | **404** |
@@ -44,7 +53,7 @@
 
 | 威胁 | 测试文件 | 测试函数 | 期望结果 |
 | --- | --- | --- | --- |
-| 登录接口限流 | `backend/tests/core/test_rate_limit.py` | `test_login_endpoint_rate_limited_after_many_attempts` | 窗口内第 21 次 **429**，带 `Retry-After: 60` |
+| 登录接口跨 worker 共享限流 | `backend/tests/core/test_rate_limit.py` | `test_login_endpoint_rate_limited_after_many_attempts` | PostgreSQL 共享窗口内第 21 次 **429**，`Retry-After` 为 1—60 秒 |
 | 邮箱域名白名单绕过 | `backend/tests/api/routes/test_email_domain_whitelist.py` | `test_is_allowed_email_bypass_battery`、`test_signup_rejects_lookalike_domains`、`test_signup_malformed_email_cannot_bypass` | 形似域名、畸形地址不能绕过允许列表 |
 | 令牌用途隔离 | `backend/tests/api/routes/test_email_verification.py` | `test_verify_token_is_purpose_scoped`、`test_purpose_token_as_bearer_is_403_not_500` | 验证令牌不能当登录令牌；误用为 Bearer 时 **403** 而非 500 |
 | 改密撤销旧 JWT | `backend/tests/api/routes/test_users.py` | `test_access_token_without_pwd_snapshot_is_rejected`、`test_admin_password_reset_revokes_existing_jwts` | 无口令快照或改密前签发的令牌失效 |
@@ -66,12 +75,18 @@ POSTGRES_PORT=<isolated> uv run pytest tests/core/test_ssrf.py tests/api/routes/
 ```bash
 POSTGRES_PORT=<isolated> uv run pytest \
   tests/core/test_ssrf.py \
+  tests/core/test_rate_limit.py \
+  tests/core/test_security.py \
+  tests/core/test_turnstile.py \
+  tests/api/routes/test_meta.py \
   tests/api/routes/test_usage.py \
   tests/api/routes/test_study_plans.py \
   tests/api/routes/test_notebooks.py \
   tests/api/routes/test_conversations.py \
   tests/api/routes/test_sources.py \
   tests/services/test_answers.py \
+  tests/services/test_sources.py \
+  tests/services/test_usage.py \
   -q
 ```
 
@@ -86,7 +101,9 @@ CI 在独立服务里跑完整 `backend/scripts/test.sh`，不依赖本机 `5433
 | 学习计划跨用户 / 聚合列表 / 笔记本与会话 404 | 笔记本、会话、学习计划（IDOR，统一 404） |
 | 提醒需验证邮箱 | 学习提醒邮箱 |
 | SSRF 绕过表 | 服务器出站网络（BYOK URL） |
+| Turnstile / 共享限流 / 代理链 / CORS | 公开认证与限流 |
 | 额度预留与超限 | 服务端免费额度 |
+| HKDF 与旧密文兼容 | Provider 密钥与 `SECRET_KEY` |
 | 引用白名单 | 系统提示词与引用集合 |
 | schema 503 | 部署完整性（缺表时拒绝服务式失败，而不是空白 500） |
 

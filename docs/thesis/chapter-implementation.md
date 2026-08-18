@@ -10,7 +10,7 @@
 
 默认分块常量是 `CHUNK_SIZE = 1000`、`CHUNK_OVERLAP = 150`。`split_page` 还接受同名可选参数，供评测脚本做分块消融；线上上传 API **不**暴露这两项。切分前 `validate_chunk_params` 要求长度大于 0、重叠非负且严格小于长度。切点优先在窗口内从 `CHUNK_MIN_BREAK = 500` 起向右找换行，其次空格，避免在词中间硬切。空页不产生块。
 
-来源状态只能是 `pending` → `processing` → `ready` / `failed`。`process_source` 在 `try` 之前就把 `notebook` 和 `embedded_reserved` 赋成安全初值：提取失败或文本为空时，异常处理仍能 `mark_failed`，而不会在未赋值变量上再抛 `UnboundLocalError` 把来源卡在 `processing`。嵌入按 64 条一批调用；维度错误或 provider 缺失标记 `failed`，不写入半截索引。删除来源时级联删分块、向量和本地文件。
+来源状态只能是 `pending` → `processing` → `ready` / `failed`，该字段在模型与公开 schema 中使用 `Literal` 收窄。提取失败或文本为空时，异常处理仍会 `mark_failed`，不会把来源卡在 `processing`。嵌入按 64 条一批调用；统一额度上下文在异常时回滚未提交分块并退款，维度错误或 provider 缺失标记 `failed`，不写入半截索引。删除来源时级联删分块、向量和本地文件。
 
 额度在调用嵌入之前按「全部分块字符数之和」原子预留。自备嵌入 Key 的预留量为 0，不计入服务端免费额度。
 
@@ -18,7 +18,7 @@
 
 `retrieve_chunks` 只在**当前笔记本**、状态为 `ready`、且 `embedding` 非空的分块上检索。度量是 pgvector 的 `cosine_distance`；返回给上层的 `score` 定义为 `1.0 - distance`，只用于排序，界面不得把它解释成「回答正确的概率」。默认 `limit = 5`，接口允许 1—10，超过 10 会被拒绝。可选 `source_ids` 把检索收窄到用户勾选的来源，但不能跨笔记本。
 
-提问时的查询文本同样要走嵌入。`search` 路由把 `reserve_usage` 的**实际预留量**记下来，失败时按该量退还；不能假设「预留量等于查询字符数」，否则自备 Key（预留为 0）的退还会把当月嵌入用量清成负数或抹掉无关计数。
+提问时的查询文本同样要走嵌入。`usage_reservation` 保存 `reserve_usage` 返回的**实际预留量**，失败时只按该量退还；自备 Key 的预留为 0，不能用查询字符数制造退款。
 
 ## 4.3 三种模式与引用白名单
 
@@ -65,7 +65,7 @@ RETURNING id
 
 访问 JWT、密码重置令牌和换邮令牌都绑定账户的 `password_changed_at` 微秒快照（声明名 `pwd`）。改密或管理员重置会清空 `pending_email`，并使旧令牌立即失效。无快照的遗留 access token 一律拒绝。
 
-服务端免费额度为对话 10 万 token、嵌入 30 万字符，按自然月惰性重置。调用前 `reserve_usage` 原子预留，返回后 `settle_usage` 按「实际 − 预留」结算。自备 Key 的对应维度预留为 0。删除账户会把当月用量写入按规范邮箱索引的墓碑，同址再注册不能刷新额度。
+服务端免费额度为对话 10 万 token、嵌入 30 万字符，按自然月惰性重置。所有 provider 调用通过 `usage_reservation` 在调用前原子预留，成功按实际用量结算，失败先回滚再退款。自备 Key 的对应维度预留为 0。删除账户会把当月用量写入按规范邮箱索引的墓碑，同址再注册不能刷新额度。
 
 用户填写的 BYOK `base_url` 每次出站都经 `validate_outbound_url` + `pinned_request`：解析时刻拒绝回环、RFC1918、链路本地、云元数据、CGNAT 以及十进制 / 十六进制 / IPv4-mapped 绕过，并连接到当时校验过的公网 IP。运营者可选的 `SERVER_PROVIDER_PROXY_URL` 只服务端配置的模型能用，用来避开 Fake-IP DNS 把公网域名解析成保留地址；用户 URL 不得走这条代理。
 

@@ -11,6 +11,7 @@ import { z } from "zod"
 
 import type { Body_login_login_access_token as AccessToken } from "@/client"
 import { AuthLayout } from "@/components/Common/AuthLayout"
+import { Turnstile, useTurnstile } from "@/components/Common/Turnstile"
 import {
   Form,
   FormControl,
@@ -55,6 +56,7 @@ export const Route = createFileRoute("/login")({
 
 function Login() {
   const { loginMutation } = useAuth()
+  const turnstile = useTurnstile()
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     mode: "onBlur",
@@ -76,7 +78,10 @@ function Login() {
 
   const onSubmit = (data: FormData) => {
     if (loginMutation.isPending) return
-    loginMutation.mutate(data)
+    loginMutation.mutate(
+      { ...data, turnstileToken: turnstile.token ?? undefined },
+      { onError: turnstile.reset },
+    )
   }
 
   return (
@@ -137,7 +142,21 @@ function Login() {
               )}
             />
 
-            <LoadingButton type="submit" loading={loginMutation.isPending}>
+            <Turnstile
+              enabled={turnstile.enabled}
+              siteKey={turnstile.siteKey}
+              resetKey={turnstile.resetKey}
+              isLoading={turnstile.isLoading}
+              isError={turnstile.isError}
+              onTokenChange={turnstile.setToken}
+              onRetryConfig={() => void turnstile.retryConfig()}
+            />
+
+            <LoadingButton
+              type="submit"
+              loading={loginMutation.isPending}
+              disabled={!turnstile.canSubmit}
+            >
               登录
             </LoadingButton>
           </div>

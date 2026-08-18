@@ -22,6 +22,7 @@ from app.core.security import (
     verify_password,
 )
 from app.core.ssrf import pinned_request, validate_outbound_url
+from app.core.turnstile import require_turnstile
 from app.models import (
     Message,
     ModelFetchRequest,
@@ -53,10 +54,9 @@ from app.services.sources import delete_owner_upload_files
 from app.services.usage import (
     QuotaError,
     quota_status,
-    reserve_usage,
     restore_tombstone_usage,
     save_usage_tombstone,
-    settle_usage,
+    usage_reservation,
 )
 from app.utils import (
     allowed_email_domains_text,
@@ -531,37 +531,14 @@ def fetch_available_models(
             status_code=422,
             detail="请先配置 API Key，或使用服务端默认配置",
         )
-    if not user_key:
-        # Server-billed probe (the operator's key is spent on a live /models
-        # request): account for it against the free allowance so repeated
-        # model-list probes cannot spend the operator's LLM budget outside
-        # quota. A small reservation is settled afterwards (nominal cost kept
-        # on success, fully refunded on failure).
-        user_settings = load_user_provider_settings(session, current_user.id)
-        try:
-            # Capture the amount ACTUALLY reserved. A user with their own stored
-            # chat key is billed on that key (chat_source "user"), so
-            # reserve_usage returns (0, 0) — nothing was debited and the settles
-            # below must be skipped. Hardcoding `reserved = 500` here would
-            # decrement a counter that was never incremented, letting repeated
-            # probes erase the user's usage and refresh their free allowance.
-            reserved, _ = reserve_usage(
-                session=session,
-                user_id=current_user.id,
-                user_settings=user_settings,
-                chat_tokens=500,
-            )
-        except QuotaError as error:
-            raise HTTPException(status_code=429, detail=str(error)) from error
-    else:
-        reserved = 0
     root = resolve_api_base(base_url, body.api_format)
     # When the base URL has no version path, the service may still serve the
     # OpenAI API under /v1 (common for aggregator gateways) — probe it.
     fallback_root: str | None = resolve_api_base(base_url, "openai_v1")
     if body.api_format == "openai_v1" or fallback_root == root:
         fallback_root = None
-    try:
+
+    def fetch_models() -> list[str]:
         try:
             payload = _fetch_models_payload(root, api_key)
         except (httpx.HTTPError, ValueError, TypeError) as error:
@@ -594,28 +571,36 @@ def fetch_available_models(
         ][:100]
         if not model_ids:
             raise HTTPException(status_code=502, detail="模型提供方未返回任何模型")
-    except HTTPException:
-        # Refund the full server-billed reservation on any failure.
-        if reserved:
-            settle_usage(
-                session=session, user_id=current_user.id, chat_tokens=-reserved
-            )
-        raise
-    if reserved:
-        # Keep a nominal cost (~100 tokens) for the successful server-billed
-        # probe; refund the rest of the reservation.
-        settle_usage(
-            session=session,
-            user_id=current_user.id,
-            chat_tokens=-(reserved - 100),
-        )
+        return model_ids
+
+    if user_key:
+        model_ids = fetch_models()
+    else:
+        # A server-billed probe reserves a bounded amount and keeps a nominal
+        # cost on success. The context refunds the full reservation on errors.
+        user_settings = load_user_provider_settings(session, current_user.id)
+        try:
+            with usage_reservation(
+                session=session,
+                user_id=current_user.id,
+                user_settings=user_settings,
+                chat_tokens=500,
+                chat_source="server",
+            ) as reservation:
+                model_ids = fetch_models()
+                reservation.set_actual(chat_tokens=100)
+        except QuotaError as error:
+            raise HTTPException(status_code=429, detail=str(error)) from error
     return [ModelInfoPublic(id=model_id) for model_id in model_ids]
 
 
 @router.post(
     "/signup",
     response_model=SignupResult,
-    dependencies=[Depends(rate_limit(limit=5, window=60))],
+    dependencies=[
+        Depends(rate_limit(limit=5, window=60)),
+        Depends(require_turnstile),
+    ],
 )
 def register_user(session: SessionDep, user_in: UserRegister) -> SignupResult:
     """

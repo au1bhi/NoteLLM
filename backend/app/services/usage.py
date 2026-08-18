@@ -1,5 +1,6 @@
 import uuid
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Literal
@@ -30,7 +31,12 @@ class QuotaError(Exception):
 
 
 def _require_verified_for_server_usage(
-    session: Session, user_id: uuid.UUID, status: "QuotaStatus"
+    session: Session,
+    user_id: uuid.UUID,
+    status: "QuotaStatus",
+    *,
+    chat_tokens: int = 0,
+    embedding_chars: int = 0,
 ) -> None:
     """Server-billed free allowance requires a verified email.
 
@@ -41,7 +47,10 @@ def _require_verified_for_server_usage(
     """
     if not settings.emails_enabled:
         return
-    if status.chat_source != "server" and status.embedding_source != "server":
+    server_usage_requested = (chat_tokens > 0 and status.chat_source == "server") or (
+        embedding_chars > 0 and status.embedding_source == "server"
+    )
+    if not server_usage_requested:
         return
     user = session.get(User, user_id)
     if user is not None and not user.is_email_verified:
@@ -185,6 +194,9 @@ def quota_status(
     session: Session,
     user_id: uuid.UUID,
     user_settings: UserProviderSettings | None = None,
+    *,
+    chat_source: ProviderSource | None = None,
+    embedding_source: ProviderSource | None = None,
 ) -> QuotaStatus:
     """Describe the user's current usage and the free allowance that applies.
 
@@ -195,8 +207,10 @@ def quota_status(
     usage = ensure_period(session, user_id)
     if user_settings is None:
         user_settings = load_user_provider_settings(session, user_id)
-    chat_source = _source(has_own_chat_key(user_settings), _chat_server_configured())
-    embedding_source = _source(
+    chat_source = chat_source or _source(
+        has_own_chat_key(user_settings), _chat_server_configured()
+    )
+    embedding_source = embedding_source or _source(
         has_own_embedding_key(user_settings), _embedding_server_configured()
     )
     return QuotaStatus(
@@ -227,7 +241,7 @@ def check_chat_quota(
 ) -> QuotaStatus:
     """Raise QuotaError when the server-billed chat allowance is exhausted."""
     status = quota_status(session, user_id, user_settings)
-    _require_verified_for_server_usage(session, user_id, status)
+    _require_verified_for_server_usage(session, user_id, status, chat_tokens=1)
     if status.chat_quota is not None and status.chat_tokens >= status.chat_quota:
         raise QuotaError(
             "本月的免费对话额度已用完（"
@@ -245,7 +259,7 @@ def check_embedding_quota(
 ) -> QuotaStatus:
     """Raise QuotaError when the server-billed embedding allowance is exhausted."""
     status = quota_status(session, user_id, user_settings)
-    _require_verified_for_server_usage(session, user_id, status)
+    _require_verified_for_server_usage(session, user_id, status, embedding_chars=1)
     if (
         status.embedding_quota is not None
         and status.embedding_chars >= status.embedding_quota
@@ -289,7 +303,7 @@ _SETTLE_SQL = sql_text(
       chat_tokens = GREATEST(0, chat_tokens + :chat_delta),
       embedding_chars = GREATEST(0, embedding_chars + :embedding_delta),
       updated_at = :now
-    WHERE user_id = :user_id
+    WHERE user_id = :user_id AND period_start = :period
     """
 )
 
@@ -347,6 +361,9 @@ def reserve_usage(
     user_settings: UserProviderSettings | None = None,
     chat_tokens: int = 0,
     embedding_chars: int = 0,
+    chat_source: ProviderSource | None = None,
+    embedding_source: ProviderSource | None = None,
+    period: datetime | None = None,
 ) -> tuple[int, int]:
     """Atomically reserve free-allowance capacity before a model call.
 
@@ -358,8 +375,21 @@ def reserve_usage(
     Returns the (chat, embedding) amounts actually reserved so the caller can
     reconcile the real cost afterwards with `settle_usage`.
     """
-    status = quota_status(session, user_id, user_settings)
-    _require_verified_for_server_usage(session, user_id, status)
+    period = period or current_period()
+    status = quota_status(
+        session,
+        user_id,
+        user_settings,
+        chat_source=chat_source,
+        embedding_source=embedding_source,
+    )
+    _require_verified_for_server_usage(
+        session,
+        user_id,
+        status,
+        chat_tokens=chat_tokens,
+        embedding_chars=embedding_chars,
+    )
     if status.chat_quota is None:
         chat_tokens = 0
     if status.embedding_quota is None:
@@ -378,7 +408,7 @@ def reserve_usage(
             "user_id": user_id,
             "ct": chat_tokens,
             "ec": embedding_chars,
-            "period": current_period(),
+            "period": period,
             "now": datetime.now(UTC),
             "chat_limit": (
                 status.chat_quota if status.chat_quota is not None else _MAX_LIMIT
@@ -393,7 +423,15 @@ def reserve_usage(
     if result.first() is None:
         # A concurrent request reserved the last of the allowance first.
         session.rollback()
-        error = _quota_error_for(quota_status(session, user_id, user_settings))
+        error = _quota_error_for(
+            quota_status(
+                session,
+                user_id,
+                user_settings,
+                chat_source=chat_source,
+                embedding_source=embedding_source,
+            )
+        )
         if error is not None:
             raise error
         raise QuotaError("本月的免费额度已用完")
@@ -407,6 +445,7 @@ def settle_usage(
     user_id: uuid.UUID,
     chat_tokens: int = 0,
     embedding_chars: int = 0,
+    period: datetime | None = None,
 ) -> None:
     """Reconcile a previous reservation with the real cost.
 
@@ -416,13 +455,116 @@ def settle_usage(
     """
     if not chat_tokens and not embedding_chars:
         return
+    period = period or current_period()
     session.execute(  # ty: ignore[deprecated] -- raw SQL is intentional
         _SETTLE_SQL,
         {
             "user_id": user_id,
             "chat_delta": chat_tokens,
             "embedding_delta": embedding_chars,
+            "period": period,
             "now": datetime.now(UTC),
         },
     )
     session.commit()
+
+
+@dataclass
+class UsageReservation:
+    """A quota reservation that reconciles only dimensions actually reserved."""
+
+    session: Session
+    user_id: uuid.UUID
+    chat_tokens: int
+    embedding_chars: int
+    period: datetime
+    _actual_chat_tokens: int | None = None
+    _actual_embedding_chars: int | None = None
+
+    def set_actual(
+        self,
+        *,
+        chat_tokens: int | None = None,
+        embedding_chars: int | None = None,
+    ) -> None:
+        """Record actual provider usage for reconciliation on successful exit.
+
+        Unspecified dimensions keep their full reservation. Values for BYOK or
+        otherwise unreserved dimensions are ignored, preventing phantom refunds.
+        """
+        if chat_tokens is not None and self.chat_tokens:
+            self._actual_chat_tokens = max(0, chat_tokens)
+        if embedding_chars is not None and self.embedding_chars:
+            self._actual_embedding_chars = max(0, embedding_chars)
+
+    def _reconcile(self, *, succeeded: bool) -> None:
+        actual_chat = (
+            self._actual_chat_tokens
+            if succeeded and self._actual_chat_tokens is not None
+            else self.chat_tokens
+            if succeeded
+            else 0
+        )
+        actual_embedding = (
+            self._actual_embedding_chars
+            if succeeded and self._actual_embedding_chars is not None
+            else self.embedding_chars
+            if succeeded
+            else 0
+        )
+        settle_usage(
+            session=self.session,
+            user_id=self.user_id,
+            chat_tokens=(actual_chat - self.chat_tokens if self.chat_tokens else 0),
+            embedding_chars=(
+                actual_embedding - self.embedding_chars if self.embedding_chars else 0
+            ),
+            period=self.period,
+        )
+
+
+@contextmanager
+def usage_reservation(
+    *,
+    session: Session,
+    user_id: uuid.UUID,
+    user_settings: UserProviderSettings | None = None,
+    chat_tokens: int = 0,
+    embedding_chars: int = 0,
+    chat_source: ProviderSource | None = None,
+    embedding_source: ProviderSource | None = None,
+) -> Iterator[UsageReservation]:
+    """Reserve quota and automatically reconcile success or refund failure.
+
+    The yielded object contains the amounts actually reserved. Call
+    ``set_actual`` after a successful provider call when its real usage differs
+    from the reservation. If the body raises, the reservation is fully refunded.
+    """
+    period = current_period()
+    chat_reserved, embedding_reserved = reserve_usage(
+        session=session,
+        user_id=user_id,
+        user_settings=user_settings,
+        chat_tokens=chat_tokens,
+        embedding_chars=embedding_chars,
+        chat_source=chat_source,
+        embedding_source=embedding_source,
+        period=period,
+    )
+    reservation = UsageReservation(
+        session=session,
+        user_id=user_id,
+        chat_tokens=chat_reserved,
+        embedding_chars=embedding_reserved,
+        period=period,
+    )
+    try:
+        yield reservation
+    except BaseException:
+        # Provider or persistence failures can leave pending writes or a failed
+        # transaction in this session. Clear those before issuing the refund.
+        session.rollback()
+        reservation._reconcile(succeeded=False)
+        raise
+    else:
+        reservation._reconcile(succeeded=True)

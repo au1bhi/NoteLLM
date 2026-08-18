@@ -10,6 +10,7 @@ from app.api.deps import CurrentUser, SessionDep, get_current_active_superuser
 from app.core import security
 from app.core.config import settings
 from app.core.rate_limit import rate_limit, recipient_send_cooldown
+from app.core.turnstile import require_turnstile
 from app.models import (
     Message,
     NewPassword,
@@ -31,7 +32,10 @@ router = APIRouter(tags=["login"])
 
 @router.post(
     "/login/access-token",
-    dependencies=[Depends(rate_limit(limit=20, window=60))],
+    dependencies=[
+        Depends(rate_limit(limit=20, window=60)),
+        Depends(require_turnstile),
+    ],
 )
 def login_access_token(
     session: SessionDep, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
@@ -66,7 +70,10 @@ def test_token(current_user: CurrentUser) -> Any:
 
 @router.post(
     "/password-recovery/{email}",
-    dependencies=[Depends(rate_limit(limit=5, window=60))],
+    dependencies=[
+        Depends(rate_limit(limit=5, window=60)),
+        Depends(require_turnstile),
+    ],
 )
 def recover_password(
     email: str, session: SessionDep, background_tasks: BackgroundTasks

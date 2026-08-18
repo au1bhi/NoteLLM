@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ConversationsReadConversationData, ConversationsReadConversationResponse, ConversationsUpdateConversationData, ConversationsUpdateConversationResponse, ConversationsDeleteConversationData, ConversationsDeleteConversationResponse, ConversationsStreamMessageData, ConversationsStreamMessageResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, MetaGetWatermarkResponse, NotebooksReadNotebooksData, NotebooksReadNotebooksResponse, NotebooksCreateNotebookData, NotebooksCreateNotebookResponse, NotebooksReadNotebookData, NotebooksReadNotebookResponse, NotebooksUpdateNotebookData, NotebooksUpdateNotebookResponse, NotebooksDeleteNotebookData, NotebooksDeleteNotebookResponse, NotebooksReadSourcesData, NotebooksReadSourcesResponse, NotebooksUploadSourceData, NotebooksUploadSourceResponse, NotebooksReadConversationsData, NotebooksReadConversationsResponse, NotebooksCreateConversationData, NotebooksCreateConversationResponse, NotebooksSearchNotebookData, NotebooksSearchNotebookResponse, NotebooksReadNotebookOverviewData, NotebooksReadNotebookOverviewResponse, NotebooksRegenerateNotebookOverviewData, NotebooksRegenerateNotebookOverviewResponse, NotebooksGenerateNotebookStudyGuideData, NotebooksGenerateNotebookStudyGuideResponse, NotebooksRemoveSourceData, NotebooksRemoveSourceResponse, NotebooksRetrySourceData, NotebooksRetrySourceResponse, StudyPlansReadStudyPlansData, StudyPlansReadStudyPlansResponse, StudyPlansReadConversationStudyPlanData, StudyPlansReadConversationStudyPlanResponse, StudyPlansCreateOrRegenerateStudyPlanData, StudyPlansCreateOrRegenerateStudyPlanResponse, StudyPlansUpdateStudyPlanData, StudyPlansUpdateStudyPlanResponse, StudyPlansDeleteStudyPlanData, StudyPlansDeleteStudyPlanResponse, StudyPlansUpdateStudyTaskData, StudyPlansUpdateStudyTaskResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersReadUserUsageResponse, UsersReadUserProviderSettingsResponse, UsersUpsertUserProviderSettingsData, UsersUpsertUserProviderSettingsResponse, UsersDeleteUserProviderSettingsResponse, UsersFetchAvailableModelsData, UsersFetchAvailableModelsResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersVerifyEmailData, UsersVerifyEmailResponse, UsersResendVerificationData, UsersResendVerificationResponse, UsersResendVerificationMeResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsHealthCheckResponse } from './types.gen';
+import type { ConversationsReadConversationData, ConversationsReadConversationResponse, ConversationsUpdateConversationData, ConversationsUpdateConversationResponse, ConversationsDeleteConversationData, ConversationsDeleteConversationResponse, ConversationsStreamMessageData, ConversationsStreamMessageResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, MetaGetWatermarkResponse, MetaGetTurnstileResponse, NotebooksReadNotebooksData, NotebooksReadNotebooksResponse, NotebooksCreateNotebookData, NotebooksCreateNotebookResponse, NotebooksReadNotebookData, NotebooksReadNotebookResponse, NotebooksUpdateNotebookData, NotebooksUpdateNotebookResponse, NotebooksDeleteNotebookData, NotebooksDeleteNotebookResponse, NotebooksReadSourcesData, NotebooksReadSourcesResponse, NotebooksUploadSourceData, NotebooksUploadSourceResponse, NotebooksReadConversationsData, NotebooksReadConversationsResponse, NotebooksCreateConversationData, NotebooksCreateConversationResponse, NotebooksSearchNotebookData, NotebooksSearchNotebookResponse, NotebooksReadNotebookOverviewData, NotebooksReadNotebookOverviewResponse, NotebooksRegenerateNotebookOverviewData, NotebooksRegenerateNotebookOverviewResponse, NotebooksGenerateNotebookStudyGuideData, NotebooksGenerateNotebookStudyGuideResponse, NotebooksRemoveSourceData, NotebooksRemoveSourceResponse, NotebooksRetrySourceData, NotebooksRetrySourceResponse, StudyPlansReadStudyPlansData, StudyPlansReadStudyPlansResponse, StudyPlansReadConversationStudyPlanData, StudyPlansReadConversationStudyPlanResponse, StudyPlansCreateOrRegenerateStudyPlanData, StudyPlansCreateOrRegenerateStudyPlanResponse, StudyPlansUpdateStudyPlanData, StudyPlansUpdateStudyPlanResponse, StudyPlansDeleteStudyPlanData, StudyPlansDeleteStudyPlanResponse, StudyPlansUpdateStudyTaskData, StudyPlansUpdateStudyTaskResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersReadUserUsageResponse, UsersReadUserProviderSettingsResponse, UsersUpsertUserProviderSettingsData, UsersUpsertUserProviderSettingsResponse, UsersDeleteUserProviderSettingsResponse, UsersFetchAvailableModelsData, UsersFetchAvailableModelsResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersVerifyEmailData, UsersVerifyEmailResponse, UsersResendVerificationData, UsersResendVerificationResponse, UsersResendVerificationMeResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsHealthCheckResponse } from './types.gen';
 
 export class ConversationsService {
     /**
@@ -100,6 +100,7 @@ export class LoginService {
      * OAuth2 compatible token login, get an access token for future requests
      * @param data The data for the request.
      * @param data.formData
+     * @param data.xTurnstileToken
      * @returns Token Successful Response
      * @throws ApiError
      */
@@ -107,6 +108,9 @@ export class LoginService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/login/access-token',
+            headers: {
+                'X-Turnstile-Token': data.xTurnstileToken
+            },
             formData: data.formData,
             mediaType: 'application/x-www-form-urlencoded',
             errors: {
@@ -133,6 +137,7 @@ export class LoginService {
      * Password Recovery
      * @param data The data for the request.
      * @param data.email
+     * @param data.xTurnstileToken
      * @returns Message Successful Response
      * @throws ApiError
      */
@@ -142,6 +147,9 @@ export class LoginService {
             url: '/api/v1/password-recovery/{email}',
             path: {
                 email: data.email
+            },
+            headers: {
+                'X-Turnstile-Token': data.xTurnstileToken
             },
             errors: {
                 422: 'Validation Error'
@@ -208,6 +216,19 @@ export class MetaService {
         return __request(OpenAPI, {
             method: 'GET',
             url: '/api/v1/meta/watermark'
+        });
+    }
+
+    /**
+     * Get Turnstile
+     * Public widget configuration used before authentication.
+     * @returns TurnstilePublic Successful Response
+     * @throws ApiError
+     */
+    public static getTurnstile(): CancelablePromise<MetaGetTurnstileResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/meta/turnstile'
         });
     }
 }
@@ -895,6 +916,7 @@ export class UsersService {
      * existed, and to make probing expensive.
      * @param data The data for the request.
      * @param data.requestBody
+     * @param data.xTurnstileToken
      * @returns SignupResult Successful Response
      * @throws ApiError
      */
@@ -902,6 +924,9 @@ export class UsersService {
         return __request(OpenAPI, {
             method: 'POST',
             url: '/api/v1/users/signup',
+            headers: {
+                'X-Turnstile-Token': data.xTurnstileToken
+            },
             body: data.requestBody,
             mediaType: 'application/json',
             errors: {

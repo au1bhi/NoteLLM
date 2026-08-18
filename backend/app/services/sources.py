@@ -15,7 +15,7 @@ from app.services.provider_settings import (
     effective_embedding_config,
     load_user_provider_settings,
 )
-from app.services.usage import QuotaError, reserve_usage, settle_usage
+from app.services.usage import QuotaError, usage_reservation
 
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 150
@@ -207,7 +207,6 @@ def process_source(
     # Assigned before extract so a failed extract / empty-text raise still
     # reaches mark_failed instead of UnboundLocalError in the except handler.
     notebook: Notebook | None = None
-    embedded_reserved = 0
     try:
         pages = extract_pages(get_upload_path(source), source.media_type)
         chunks = [
@@ -220,55 +219,48 @@ def process_source(
         if not chunks:
             raise ValueError("该资料没有可提取的文本")
         notebook = session.get(Notebook, source.notebook_id)
-        user_settings = (
-            load_user_provider_settings(session, notebook.owner_id)
-            if notebook
-            else None
-        )
-        embedded_chars = 0
-        embedded_reserved = 0
-        if notebook:
-            # Reserve the exact embedding char count atomically before calling
-            # the provider, so a single oversized upload cannot blow past the
-            # monthly allowance and concurrent uploads serialize correctly.
-            embedded_chars = sum(len(chunk.content) for chunk in chunks)
-            _, embedded_reserved = reserve_usage(
-                session=session,
-                user_id=notebook.owner_id,
-                user_settings=user_settings,
-                embedding_chars=embedded_chars,
+        if notebook is None:
+            raise ValueError("资料所属笔记本不存在")
+        user_settings = load_user_provider_settings(session, notebook.owner_id)
+        embedded_chars = sum(len(chunk.content) for chunk in chunks)
+        with usage_reservation(
+            session=session,
+            user_id=notebook.owner_id,
+            user_settings=user_settings,
+            embedding_chars=embedded_chars,
+        ) as reservation:
+            embedding_provider = get_embedding_provider(
+                effective_embedding_config(user_settings)
             )
-        embedding_provider = get_embedding_provider(
-            effective_embedding_config(user_settings)
-        )
-        embeddings = [
-            embedding
-            for start in range(0, len(chunks), EMBEDDING_BATCH_SIZE)
-            for embedding in embedding_provider.embed(
-                [
-                    chunk.content
-                    for chunk in chunks[start : start + EMBEDDING_BATCH_SIZE]
-                ]
-            )
-        ]
-        for ordinal, chunk in enumerate(chunks):
-            session.add(
-                Chunk(
-                    source_id=source.id,
-                    ordinal=ordinal,
-                    content=chunk.content,
-                    page_number=chunk.page_number,
-                    char_start=chunk.char_start,
-                    char_end=chunk.char_end,
-                    embedding=embeddings[ordinal],
+            embeddings = [
+                embedding
+                for start in range(0, len(chunks), EMBEDDING_BATCH_SIZE)
+                for embedding in embedding_provider.embed(
+                    [
+                        chunk.content
+                        for chunk in chunks[start : start + EMBEDDING_BATCH_SIZE]
+                    ]
                 )
+            ]
+            for ordinal, chunk in enumerate(chunks):
+                session.add(
+                    Chunk(
+                        source_id=source.id,
+                        ordinal=ordinal,
+                        content=chunk.content,
+                        page_number=chunk.page_number,
+                        char_start=chunk.char_start,
+                        char_end=chunk.char_end,
+                        embedding=embeddings[ordinal],
+                    )
+                )
+            reservation.set_actual(embedding_chars=embedded_chars)
+            source.status = "ready"
+            source.page_count = (
+                len(pages) if source.media_type == "application/pdf" else None
             )
-        source.status = "ready"
-        source.page_count = (
-            len(pages) if source.media_type == "application/pdf" else None
-        )
-        source.char_count = sum(len(page.text) for page in pages)
-        source.processed_at = get_datetime_utc()
+            source.char_count = sum(len(page.text) for page in pages)
+            source.processed_at = get_datetime_utc()
     except (
         EmbeddingError,
         OSError,
@@ -276,18 +268,8 @@ def process_source(
         QuotaError,
         fitz.FileDataError,
     ) as error:
-        # Refund the embedding reservation when the provider call failed, so a
-        # burst of failed uploads cannot drain the monthly allowance. Only
-        # refund what was ACTUALLY reserved: on the QuotaError path the
-        # reservation failed (nothing was debited), so settling here would be a
-        # phantom decrement that lets an oversized upload erase the user's
-        # accumulated usage and reset their free allowance.
-        if notebook and embedded_reserved:
-            settle_usage(
-                session=session,
-                user_id=notebook.owner_id,
-                embedding_chars=-embedded_reserved,
-            )
+        # The context already refunded any actual reservation. QuotaError
+        # itself never debits usage, so it needs no special settlement branch.
         mark_failed(str(error))
     except Exception as error:
         # Never leave the source stuck in "processing" on an unexpected error.

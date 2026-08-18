@@ -15,7 +15,7 @@ bun install
 bun run --filter frontend dev
 ```
 
-浏览器打开 <http://localhost:5173>。完整栈（后端、数据库、邮件捕获）用根目录 `docker compose watch`，见 [`../development.md`](../development.md)。
+浏览器打开 <http://localhost:5173>。完整栈（后端、数据库与可选邮件服务）用根目录 `docker compose watch`，见 [`../development.md`](../development.md)。
 
 改了后端 OpenAPI 契约后，重新生成 `src/client`，不要手改生成文件。
 

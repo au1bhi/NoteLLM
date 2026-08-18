@@ -2,17 +2,21 @@ import uuid
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import fitz  # type: ignore[import-untyped]
 import pytest
 from pytest import MonkeyPatch
+from sqlmodel import Session, select
 
 from app.core.config import settings
-from app.models import Source
+from app.models import Chunk, Notebook, Source
 from app.services.sources import (
     CHUNK_SIZE,
     ExtractedPage,
+    extract_pages,
     process_source,
     split_page,
 )
+from tests.utils.user import create_random_user
 
 
 def _long_page_text(length: int = 2500) -> str:
@@ -100,3 +104,93 @@ def test_process_source_marks_empty_text_failed(
     assert source.error_message is not None
     assert "没有可提取的文本" in source.error_message
     session.commit.assert_called()
+
+
+def test_process_source_stops_before_provider_when_notebook_is_missing(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "UPLOADS_DIR", tmp_path)
+    provider_factory = MagicMock()
+    monkeypatch.setattr("app.services.sources.get_embedding_provider", provider_factory)
+    source = Source(
+        notebook_id=uuid.uuid4(),
+        display_name="orphan.txt",
+        media_type="text/plain",
+        file_size_bytes=12,
+        storage_path="orphan.txt",
+    )
+    upload_dir = tmp_path / str(source.notebook_id)
+    upload_dir.mkdir(parents=True)
+    (upload_dir / source.storage_path).write_text(
+        "orphan source text", encoding="utf-8"
+    )
+    session = MagicMock()
+    session.get.return_value = None
+
+    process_source(session=session, source=source)
+
+    assert source.status == "failed"
+    assert source.error_message == "资料所属笔记本不存在"
+    provider_factory.assert_not_called()
+
+
+def test_extract_pages_from_real_pdf_preserves_page_numbers(tmp_path: Path) -> None:
+    path = tmp_path / "two-pages.pdf"
+    document = fitz.open()
+    first = document.new_page()
+    first.insert_text((72, 72), "First page evidence")
+    second = document.new_page()
+    second.insert_text((72, 72), "Second page citation")
+    document.save(path)
+    document.close()
+
+    pages = extract_pages(path, "application/pdf")
+
+    assert [page.page_number for page in pages] == [1, 2]
+    assert "First page evidence" in pages[0].text
+    assert "Second page citation" in pages[1].text
+
+
+def test_corrupt_pdf_marks_source_failed_and_removes_existing_chunks(
+    db: Session, tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "UPLOADS_DIR", tmp_path)
+    provider = MagicMock()
+    monkeypatch.setattr("app.services.sources.get_embedding_provider", provider)
+    user = create_random_user(db)
+    notebook = Notebook(owner_id=user.id, title="PDF failure test")
+    db.add(notebook)
+    db.commit()
+    db.refresh(notebook)
+    source = Source(
+        notebook_id=notebook.id,
+        display_name="broken.pdf",
+        media_type="application/pdf",
+        file_size_bytes=17,
+        storage_path="broken.pdf",
+    )
+    db.add(source)
+    db.commit()
+    db.refresh(source)
+    db.add(
+        Chunk(
+            source_id=source.id,
+            ordinal=0,
+            content="stale chunk",
+            page_number=1,
+            char_start=0,
+            char_end=11,
+        )
+    )
+    db.commit()
+    upload_dir = tmp_path / str(notebook.id)
+    upload_dir.mkdir(parents=True)
+    (upload_dir / source.storage_path).write_bytes(b"not a valid PDF")
+
+    process_source(session=db, source=source)
+
+    db.refresh(source)
+    assert source.status == "failed"
+    assert source.error_message == "无法打开该 PDF"
+    assert db.exec(select(Chunk).where(Chunk.source_id == source.id)).all() == []
+    provider.assert_not_called()
