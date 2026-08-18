@@ -5,6 +5,7 @@ import {
   Link as RouterLink,
   redirect,
 } from "@tanstack/react-router"
+import { useRef } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 
@@ -51,6 +52,7 @@ export const Route = createFileRoute("/recover-password")({
 
 function RecoverPassword() {
   const turnstile = useTurnstile()
+  const submitLock = useRef(false)
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -70,11 +72,15 @@ function RecoverPassword() {
       form.reset()
     },
     onError: handleError.bind(showErrorToast),
-    onSettled: turnstile.reset,
+    onSettled: () => {
+      submitLock.current = false
+      turnstile.reset()
+    },
   })
 
   const onSubmit = async (data: FormData) => {
-    if (mutation.isPending) return
+    if (submitLock.current || mutation.isPending) return
+    submitLock.current = true
     mutation.mutate(data)
   }
 

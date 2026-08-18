@@ -69,8 +69,11 @@ if [[ ! -f "$PWD/compose.yml" ]]; then
     if [[ -d "$INSTALL_DIR/.git" ]] && command -v git >/dev/null 2>&1; then
       echo "==> 更新 $INSTALL_DIR ..."
       # timeout 防止被墙网络让 git pull 无限挂起。
-      timeout 60 git -C "$INSTALL_DIR" pull --ff-only >/dev/null 2>&1 \
-        || warn "git pull 失败或超时（网络受限/本地改动），使用现有代码继续。"
+      if ! timeout 60 git -C "$INSTALL_DIR" pull --ff-only >/dev/null 2>&1; then
+        err "git pull 失败或超时，已停止升级，避免用旧代码/镜像冒充最新版本。"
+        err "请处理本地改动或网络问题后重试；现有服务不会被本次操作修改。"
+        exit 1
+      fi
     else
       # 源码包安装（无 .git）：重新下载源码包即是最新代码，直接覆盖更新。
       echo "==> 更新 $INSTALL_DIR（源码包安装，重新下载最新代码）..."
@@ -626,6 +629,7 @@ write_env() {
 
   env_header "数据库"
   env_put POSTGRES_SERVER "localhost"
+  env_put POSTGRES_HOST_PORT "5433"
   env_put POSTGRES_PORT "5432"
   env_put POSTGRES_DB "$POSTGRES_DB"
   env_put POSTGRES_USER "$POSTGRES_USER"
@@ -732,6 +736,11 @@ sync_frontend_dist() {
 # ---------- 构建并启动 ----------
 build_and_start() {
   local compose_cmd
+  # Compose v2 may default to Bake when a buildx plugin is present. A broken or
+  # non-executable plugin then crashes Compose before the Dockerfile runs. The
+  # backend Dockerfile intentionally supports the standard builder; callers
+  # can still opt back into Bake with COMPOSE_BAKE=true.
+  export COMPOSE_BAKE="${COMPOSE_BAKE:-false}"
   if [[ "$PROFILE" == "prod" ]]; then
     # 生产：显式指定文件，跳过 compose.override.yml 的本地端口映射。
     compose_cmd=(docker compose -f compose.yml -f compose.traefik.yml)
@@ -751,6 +760,11 @@ build_and_start() {
   fi
 
   step "构建并启动服务（首次构建需要几分钟）"
+  # A completed one-shot container may otherwise be reused across an upgrade
+  # when its mutable image tag did not change as expected. Removing only this
+  # stateless container guarantees the freshly built migration graph runs; the
+  # database and upload volumes are untouched.
+  "${compose_cmd[@]}" rm -sf prestart >/dev/null
   "${compose_cmd[@]}" up -d --build
 
   # 低内存模式：前端 dist 由外部注入（构建时已跳过 SPA）。

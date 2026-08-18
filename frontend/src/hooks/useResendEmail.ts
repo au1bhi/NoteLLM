@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { UsersService } from "@/client"
 import { handleError } from "@/utils"
@@ -19,6 +19,7 @@ export function useResendEmail(email?: string) {
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const queryClient = useQueryClient()
   const [cooldown, setCooldown] = useState(0)
+  const submitLock = useRef(false)
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -33,6 +34,9 @@ export function useResendEmail(email?: string) {
       queryClient.invalidateQueries({ queryKey: ["currentUser"] })
     },
     onError: handleError.bind(showErrorToast),
+    onSettled: () => {
+      submitLock.current = false
+    },
   })
 
   useEffect(() => {
@@ -42,7 +46,11 @@ export function useResendEmail(email?: string) {
   }, [cooldown])
 
   return {
-    resend: () => mutation.mutate(),
+    resend: () => {
+      if (submitLock.current || mutation.isPending || cooldown > 0) return
+      submitLock.current = true
+      mutation.mutate()
+    },
     isPending: mutation.isPending,
     cooldown,
     disabled: mutation.isPending || cooldown > 0,

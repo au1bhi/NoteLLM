@@ -8,6 +8,10 @@
 docker compose watch
 ```
 
+Compose 默认把 PostgreSQL 发布到环回地址 `127.0.0.1:5433`。若该端口已被
+其他项目占用，只修改 `.env` 中的 `POSTGRES_HOST_PORT`（例如 55432）；
+`POSTGRES_PORT` 是容器间连接端口，必须保持 `5432`。
+
 * Now you can open your browser and interact with these URLs:
 
 Frontend, built with Docker, with routes handled based on the path: <http://localhost:5173>
@@ -81,6 +85,23 @@ The Compose Postgres published on `5433` does not auto-migrate when the backend 
 cd backend
 POSTGRES_PORT=5433 uv run alembic upgrade head
 ```
+
+若 `.env` 把 `POSTGRES_HOST_PORT` 改成了其他值，上述两条宿主机命令中的
+`5433` 也替换成同一端口；`.env` 不会自动导出为当前 shell 变量。
+
+容器内 API 与 scheduler 每次启动都会先幂等执行 `alembic upgrade head`，因此
+`docker compose restart backend` 或代码 watch 同步不会让新代码在旧 schema 上
+继续运行。宿主机直接运行 `fastapi dev` 不经过该包装器，仍需先执行上面的迁移。
+
+启动后分别检查进程存活与依赖就绪：
+
+```bash
+curl -fsS http://localhost:8000/api/v1/utils/health-check/
+curl -fsS http://localhost:8000/api/v1/utils/readiness-check/
+```
+
+前者只判断 API 进程是否能响应；后者还查询 PostgreSQL 的
+`rate_limit_bucket`，可在打开登录页前发现端口指错、数据库未启动或漏迁移。
 
 ## 本地地址
 

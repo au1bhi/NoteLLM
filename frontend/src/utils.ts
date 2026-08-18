@@ -13,9 +13,15 @@ export function extractErrorMessage(err: unknown): string {
       const first = detail[0] as { msg?: unknown }
       if (typeof first?.msg === "string") return first.msg
     }
+    if (err.status === 429) return "请求过于频繁，请稍后重试"
+    if (err.status === 503) return "服务暂时不可用，请稍后重试"
+    if (err.status >= 500) return "服务器暂时无法处理请求，请稍后重试"
   }
-  if (err instanceof AxiosError && err.message) {
-    return err.message
+  if (err instanceof AxiosError) {
+    if (err.code === "ECONNABORTED" || err.code === "ETIMEDOUT") {
+      return "请求超时，请检查网络后重试"
+    }
+    if (err.message) return err.message
   }
   if (err instanceof Error && err.message) {
     return err.message

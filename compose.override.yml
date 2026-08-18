@@ -48,7 +48,9 @@ services:
     restart: "no"
     ports:
       # Loopback-only — never expose Postgres on the network.
-      - "127.0.0.1:5433:5432"
+      # POSTGRES_PORT remains the container port (5432). Change only this host
+      # port when another local stack already occupies 5433.
+      - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
 
   adminer:
     restart: "no"
@@ -65,6 +67,8 @@ services:
       dockerfile: backend/Dockerfile
     # command: sleep infinity  # Infinite loop to keep container alive doing nothing
     command:
+      - bash
+      - scripts/start-service.sh
       - fastapi
       - run
       - --reload
@@ -79,10 +83,6 @@ services:
             - .venv
         - path: ./backend/pyproject.toml
           action: rebuild
-    # TODO: remove once coverage is done locally
-    volumes:
-      - ./backend/htmlcov:/app/backend/htmlcov
-
   frontend:
     restart: "no"
     ports:

@@ -172,7 +172,12 @@ services:
         restart: true
       prestart:
         condition: service_completed_successfully
-    command: python -m app.services.study_plans
+    command:
+      - bash
+      - scripts/start-service.sh
+      - python
+      - -m
+      - app.services.study_plans
     env_file:
       - .env
     extra_hosts:

@@ -2,6 +2,7 @@
 
 import hashlib
 import ipaddress
+import logging
 import math
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -43,6 +44,13 @@ _INSERT_SQL = sql_text(
 # buckets stay on the lock-free UPDATE path.
 _ADMISSION_LOCK_ID = 0x4E6F74654C4C4D
 _RETENTION = timedelta(hours=1)
+_UNDEFINED_TABLE_SQLSTATE = "42P01"
+_UNAVAILABLE_DETAIL = "请求保护服务暂时不可用，请稍后重试"
+_UNINITIALIZED_DETAIL = "请求保护服务尚未初始化，请联系管理员"
+_TRANSIENT_RETRY_SECONDS = 5
+_SCHEMA_RETRY_SECONDS = 30
+
+logger = logging.getLogger(__name__)
 
 
 def _trusted_networks() -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
@@ -108,6 +116,28 @@ def _bucket_key(namespace: str, value: str) -> str:
     return hashlib.sha256(f"{namespace}\0{value}".encode()).hexdigest()
 
 
+def _database_error_response(error: SQLAlchemyError) -> HTTPException:
+    """Translate storage failures without ever bypassing abuse protection."""
+    original = getattr(error, "orig", None)
+    sqlstate = getattr(original, "sqlstate", None) or getattr(original, "pgcode", None)
+    if sqlstate == _UNDEFINED_TABLE_SQLSTATE:
+        logger.exception(
+            "Rate-limit schema is missing; run `alembic upgrade head` before "
+            "starting the API"
+        )
+        return HTTPException(
+            status_code=503,
+            detail=_UNINITIALIZED_DETAIL,
+            headers={"Retry-After": str(_SCHEMA_RETRY_SECONDS)},
+        )
+    logger.exception("Rate-limit database operation failed")
+    return HTTPException(
+        status_code=503,
+        detail=_UNAVAILABLE_DETAIL,
+        headers={"Retry-After": str(_TRANSIENT_RETRY_SECONDS)},
+    )
+
+
 def _consume(namespace: str, value: str, window: int) -> tuple[int, datetime]:
     now = datetime.now(UTC)
     params = {
@@ -150,6 +180,7 @@ def _consume(namespace: str, value: str, window: int) -> tuple[int, datetime]:
                         raise HTTPException(
                             status_code=503,
                             detail="请求保护服务容量已满，请稍后重试",
+                            headers={"Retry-After": "60"},
                         )
                     row = session.execute(  # ty: ignore[deprecated] -- raw SQL Row
                         _INSERT_SQL, params
@@ -157,9 +188,7 @@ def _consume(namespace: str, value: str, window: int) -> tuple[int, datetime]:
             session.commit()
             return int(row[0]), row[1]
     except SQLAlchemyError as error:
-        raise HTTPException(
-            status_code=503, detail="请求保护服务暂时不可用，请稍后重试"
-        ) from error
+        raise _database_error_response(error) from error
 
 
 def reset() -> None:

@@ -6,6 +6,7 @@ import {
   redirect,
   useNavigate,
 } from "@tanstack/react-router"
+import { useRef } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 
@@ -74,6 +75,7 @@ function ResetPassword() {
   const { token } = Route.useRouteContext()
   const { showSuccessToast, showErrorToast } = useCustomToast()
   const navigate = useNavigate()
+  const submitLock = useRef(false)
 
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
@@ -94,9 +96,14 @@ function ResetPassword() {
       navigate({ to: "/login" })
     },
     onError: handleError.bind(showErrorToast),
+    onSettled: () => {
+      submitLock.current = false
+    },
   })
 
   const onSubmit = (data: FormData) => {
+    if (submitLock.current || mutation.isPending) return
+    submitLock.current = true
     mutation.mutate({ new_password: data.new_password, token })
   }
 

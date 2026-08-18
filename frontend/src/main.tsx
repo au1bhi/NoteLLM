@@ -25,6 +25,51 @@ import { routeTree } from "./routeTree.gen"
 OpenAPI.BASE = import.meta.env.VITE_API_URL ?? ""
 OpenAPI.TOKEN = async () => getToken() ?? ""
 
+const AUTH_REQUEST_TIMEOUT_MS = 15_000
+const AUTH_REQUEST_PATHS = [
+  "/api/v1/login/access-token",
+  "/api/v1/users/signup",
+  "/api/v1/password-recovery/",
+  "/api/v1/reset-password/",
+  "/api/v1/meta/turnstile",
+  "/api/v1/users/verify-email",
+  "/api/v1/users/resend-verification",
+  "/api/v1/users/me/resend-verification",
+]
+
+OpenAPI.interceptors.request.use((config) => {
+  const url = config.url ?? ""
+  if (!AUTH_REQUEST_PATHS.some((path) => url.includes(path))) return config
+  return { ...config, timeout: AUTH_REQUEST_TIMEOUT_MS }
+})
+
+OpenAPI.interceptors.response.use((response) => {
+  if (response.status !== 429) return response
+
+  const retryAfterHeader = response.headers["retry-after"]
+  const retryAfter =
+    typeof retryAfterHeader === "string"
+      ? Number.parseInt(retryAfterHeader, 10)
+      : Number.NaN
+  const body = response.data
+  if (
+    !Number.isFinite(retryAfter) ||
+    retryAfter <= 0 ||
+    typeof body !== "object" ||
+    body === null ||
+    !("detail" in body) ||
+    typeof body.detail !== "string"
+  ) {
+    return response
+  }
+
+  response.data = {
+    ...body,
+    detail: `${body.detail} 请在 ${retryAfter} 秒后重试。`,
+  }
+  return response
+})
+
 // An expired token at startup is the "fake offline" bug: the dashboard renders
 // as if usable while every request 401s and only redirects to /login after
 // retries. Clear it before the first render so `_layout.beforeLoad` redirects

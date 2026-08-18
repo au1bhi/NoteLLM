@@ -61,11 +61,20 @@ DOMAIN=example.com bash install.sh --prod --yes --dry-run
 docker compose ps
 docker compose logs --tail=200 backend scheduler
 curl -fsS https://api.example.com/api/v1/utils/health-check/
+curl -fsS https://api.example.com/api/v1/utils/readiness-check/
 ```
 
 还应确认：
 
 - `docker compose run --rm prestart` 能把 Alembic 升级到当前 `head`。
+- `docker compose exec -T backend alembic current --check-heads` 返回成功，且
+  `rate_limit_bucket` 等当前版本数据表已存在。API 与 scheduler 的容器启动命令
+  也会幂等执行该迁移门禁；镜像落后于数据库时容器会明确启动失败，不会带着
+  不完整 schema 对外提供登录接口。所有启动路径使用 PostgreSQL advisory lock
+  串行迁移，避免 DB 重启时多个服务竞跑同一 DDL。
+- `/api/v1/utils/health-check/` 返回 200 表示 API 进程存活；
+  `/api/v1/utils/readiness-check/` 返回 200 才表示 PostgreSQL 和认证限流 schema
+  均可用。监控应同时记录二者，但不要因短暂数据库抖动反复重启仍存活的 API。
 - 生产 `/docs` 与 `/redoc` 返回 404。
 - Adminer 与 Traefik Dashboard 受 HTTP Basic Auth 保护。
 - HTTPS、HSTS、CSP 等安全响应头存在，CSP 的 `script-src` 未加入
@@ -83,6 +92,10 @@ curl -fsS https://api.example.com/api/v1/utils/health-check/
 git pull
 bash install.sh --prod --yes
 ```
+
+安装器会删除并重建无状态的 `prestart` one-shot 容器，强制新镜像中的 Alembic
+迁移图运行；数据库和上传 volume 不受影响。远程安装模式下若 `git pull` 失败，
+升级会停止并保留当前服务，而不会继续构建旧源码并误报升级成功。
 
 低内存模式同样重跑安装脚本，它会重新获取或注入前端产物。更新前备份数据库
 与上传 volume，并记录当前 Git 提交和镜像标签；Alembic 迁移默认只向前执行，

@@ -4,7 +4,7 @@ import {
   Link as RouterLink,
   redirect,
 } from "@tanstack/react-router"
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { useForm } from "react-hook-form"
 import { toast } from "sonner"
 import { z } from "zod"
@@ -57,6 +57,7 @@ export const Route = createFileRoute("/login")({
 function Login() {
   const { loginMutation } = useAuth()
   const turnstile = useTurnstile()
+  const submitLock = useRef(false)
   const form = useForm<FormData>({
     resolver: zodResolver(formSchema),
     mode: "onBlur",
@@ -77,10 +78,16 @@ function Login() {
   }, [])
 
   const onSubmit = (data: FormData) => {
-    if (loginMutation.isPending) return
+    if (submitLock.current || loginMutation.isPending) return
+    submitLock.current = true
     loginMutation.mutate(
       { ...data, turnstileToken: turnstile.token ?? undefined },
-      { onError: turnstile.reset },
+      {
+        onError: turnstile.reset,
+        onSettled: () => {
+          submitLock.current = false
+        },
+      },
     )
   }
 

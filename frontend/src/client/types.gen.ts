@@ -702,3 +702,5 @@ export type UsersDeleteUserData = {
 export type UsersDeleteUserResponse = (Message);
 
 export type UtilsHealthCheckResponse = (boolean);
+
+export type UtilsReadinessCheckResponse = (boolean);

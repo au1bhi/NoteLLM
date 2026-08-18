@@ -1,17 +1,54 @@
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
+from unittest.mock import Mock
 
 import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import func
+from sqlalchemy.exc import OperationalError
 from sqlmodel import Session, select
 from starlette.requests import Request
 
+from app.core import rate_limit as rate_limit_module
 from app.core.config import settings
 from app.core.db import engine
-from app.core.rate_limit import _consume, _rate_limit_identity, client_ip
+from app.core.rate_limit import (
+    _consume,
+    _rate_limit_identity,
+    client_ip,
+)
 from app.models import RateLimitBucket
+
+
+class _FrozenClock:
+    current = datetime(2026, 8, 19, tzinfo=UTC)
+
+    @classmethod
+    def now(cls, tz: object = None) -> datetime:
+        return cls.current
+
+
+class _DatabaseFailure(Exception):
+    def __init__(self, sqlstate: str) -> None:
+        self.sqlstate = sqlstate
+
+
+class _FailingSession:
+    def __init__(self, sqlstate: str) -> None:
+        self.sqlstate = sqlstate
+
+    def __enter__(self) -> "_FailingSession":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        return None
+
+    def execute(self, *_: object, **__: object) -> None:
+        raise OperationalError(
+            "rate-limit operation", {}, _DatabaseFailure(self.sqlstate)
+        )
 
 
 def _request(peer: str, headers: dict[str, str]) -> Request:
@@ -35,7 +72,10 @@ def _request(peer: str, headers: dict[str, str]) -> Request:
 
 def test_login_endpoint_rate_limited_after_many_attempts(
     client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _FrozenClock.current = datetime(2026, 8, 19, tzinfo=UTC)
+    monkeypatch.setattr(rate_limit_module, "datetime", _FrozenClock)
     url = f"{settings.API_V1_STR}/login/access-token"
     form = {"username": "nobody@example.com", "password": "wrong-password"}
 
@@ -45,10 +85,78 @@ def test_login_endpoint_rate_limited_after_many_attempts(
         assert response.status_code == 400
 
     # The 21st attempt within the same window is blocked by the limiter.
-    response = client.post(url, data=form)
+    response = client.post(
+        url,
+        data=form,
+        headers={"Origin": settings.FRONTEND_HOST},
+    )
     assert response.status_code == 429
     assert "请求过于频繁" in response.json()["detail"]
     assert 1 <= int(response.headers["Retry-After"]) <= 60
+    assert response.headers["Access-Control-Expose-Headers"] == "Retry-After"
+
+    _FrozenClock.current += timedelta(seconds=61)
+    response = client.post(url, data=form)
+    assert response.status_code == 400
+    assert response.json()["detail"] == "邮箱或密码错误"
+
+
+def test_login_missing_rate_limit_schema_fails_closed_before_authentication(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    authenticate = Mock(return_value=None)
+    monkeypatch.setattr("app.api.routes.login.crud.authenticate", authenticate)
+    monkeypatch.setattr(
+        rate_limit_module,
+        "Session",
+        lambda _: _FailingSession("42P01"),
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/login/access-token",
+        data={"username": "nobody@example.com", "password": "wrong-password"},
+        headers={"Origin": settings.FRONTEND_HOST},
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "请求保护服务尚未初始化，请联系管理员"
+    assert response.headers["Retry-After"] == "30"
+    assert response.headers["Access-Control-Expose-Headers"] == "Retry-After"
+    authenticate.assert_not_called()
+
+
+def test_login_recovers_on_next_request_after_rate_limit_database_recovers(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    authenticate = Mock(return_value=None)
+    real_session = Session
+    monkeypatch.setattr("app.api.routes.login.crud.authenticate", authenticate)
+    monkeypatch.setattr(
+        rate_limit_module,
+        "Session",
+        lambda _: _FailingSession("08006"),
+    )
+
+    url = f"{settings.API_V1_STR}/login/access-token"
+    form = {"username": "nobody@example.com", "password": "wrong-password"}
+    unavailable = client.post(
+        url,
+        data=form,
+        headers={"Origin": settings.FRONTEND_HOST},
+    )
+    assert unavailable.status_code == 503
+    assert unavailable.json()["detail"] == "请求保护服务暂时不可用，请稍后重试"
+    assert unavailable.headers["Retry-After"] == "5"
+    assert unavailable.headers["Access-Control-Expose-Headers"] == "Retry-After"
+    authenticate.assert_not_called()
+
+    monkeypatch.setattr(rate_limit_module, "Session", real_session)
+    recovered = client.post(url, data=form)
+    assert recovered.status_code == 400
+    assert recovered.json()["detail"] == "邮箱或密码错误"
+    authenticate.assert_called_once()
 
 
 def test_spoofed_x_forwarded_for_shares_one_rate_limit_bucket(
@@ -156,6 +264,7 @@ def test_new_bucket_capacity_fails_closed_but_existing_bucket_updates(
         _consume("capacity", "third", 60)
     assert exc_info.value.status_code == 503
     assert "容量已满" in str(exc_info.value.detail)
+    assert exc_info.value.headers == {"Retry-After": "60"}
     assert _consume("capacity", "first", 60)[0] == 2
 
 
@@ -179,3 +288,17 @@ def test_new_bucket_capacity_is_atomic_across_concurrent_workers(
     with Session(engine) as session:
         count = session.exec(select(func.count()).select_from(RateLimitBucket)).one()
     assert count == 1
+
+
+def test_same_bucket_count_is_atomic_across_concurrent_workers() -> None:
+    worker_count = 8
+    barrier = threading.Barrier(worker_count)
+
+    def consume(_: int) -> int:
+        barrier.wait()
+        return _consume("concurrent-same-bucket", "shared-client", 60)[0]
+
+    with ThreadPoolExecutor(max_workers=worker_count) as executor:
+        results = list(executor.map(consume, range(worker_count)))
+
+    assert sorted(results) == list(range(1, worker_count + 1))

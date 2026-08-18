@@ -33,6 +33,7 @@ declare global {
 const SCRIPT_ID = "cloudflare-turnstile-script"
 const SCRIPT_SRC =
   "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
+const SCRIPT_TIMEOUT_MS = 12_000
 let scriptPromise: Promise<TurnstileApi> | null = null
 
 function loadTurnstile(): Promise<TurnstileApi> {
@@ -47,20 +48,32 @@ function loadTurnstile(): Promise<TurnstileApi> {
     // Replace it so a visible retry always starts a fresh initialization.
     existing?.remove()
     const script = document.createElement("script")
+    let settled = false
 
-    const onLoad = () => {
-      if (window.turnstile) resolve(window.turnstile)
-      else {
-        script.remove()
-        scriptPromise = null
-        reject(new Error("安全验证脚本未正确初始化"))
-      }
-    }
-    const onError = () => {
+    const fail = (message: string) => {
+      if (settled) return
+      settled = true
+      window.clearTimeout(timeoutId)
       script.remove()
       scriptPromise = null
-      reject(new Error("安全验证加载失败"))
+      reject(new Error(message))
     }
+
+    const onLoad = () => {
+      if (settled) return
+      if (!window.turnstile) {
+        fail("安全验证脚本未正确初始化")
+        return
+      }
+      settled = true
+      window.clearTimeout(timeoutId)
+      resolve(window.turnstile)
+    }
+    const onError = () => fail("安全验证加载失败")
+    const timeoutId = window.setTimeout(
+      () => fail("安全验证加载超时"),
+      SCRIPT_TIMEOUT_MS,
+    )
 
     script.addEventListener("load", onLoad, { once: true })
     script.addEventListener("error", onError, { once: true })
@@ -95,7 +108,10 @@ export function useTurnstile() {
       setResetKey((key) => key + 1)
     },
     canSubmit: config.isSuccess && (!enabled || Boolean(token)),
-    isLoading: config.isLoading,
+    // `isLoading` is false when an errored query is being refetched. Expose
+    // `isFetching` so clicking the visible retry button immediately replaces
+    // the error state with progress feedback and cannot look like a no-op.
+    isLoading: config.isFetching,
     isError: config.isError,
     retryConfig: () => config.refetch(),
   }
@@ -126,6 +142,7 @@ export function Turnstile({
   const onTokenChangeRef = useRef(onTokenChange)
   const previousResetKey = useRef(resetKey)
   const [widgetError, setWidgetError] = useState(false)
+  const [widgetLoading, setWidgetLoading] = useState(false)
   const [renderAttempt, setRenderAttempt] = useState(0)
   const renderAttemptRef = useRef(renderAttempt)
   renderAttemptRef.current = renderAttempt
@@ -140,29 +157,41 @@ export function Turnstile({
     let renderedWidgetId: string | null = null
     const currentAttempt = renderAttempt
     setWidgetError(false)
+    setWidgetLoading(true)
 
     void loadTurnstile()
       .then((turnstile) => {
         if (disposed || !containerRef.current) return
+        const isCurrentWidget = () =>
+          !disposed && currentAttempt === renderAttemptRef.current
         renderedWidgetId = turnstile.render(containerRef.current, {
           sitekey: siteKey,
           theme: resolvedTheme === "dark" ? "dark" : "light",
           language: "zh-cn",
           size: "flexible",
-          callback: (token) => onTokenChangeRef.current(token),
-          "expired-callback": () => onTokenChangeRef.current(null),
-          "error-callback": () => {
-            onTokenChangeRef.current(null)
-            if (currentAttempt === renderAttemptRef.current) {
-              setWidgetError(true)
-            }
+          callback: (token) => {
+            if (isCurrentWidget()) onTokenChangeRef.current(token)
           },
-          "timeout-callback": () => onTokenChangeRef.current(null),
+          "expired-callback": () => {
+            if (isCurrentWidget()) onTokenChangeRef.current(null)
+          },
+          "error-callback": () => {
+            if (!isCurrentWidget()) return
+            onTokenChangeRef.current(null)
+            setWidgetError(true)
+          },
+          "timeout-callback": () => {
+            if (isCurrentWidget()) onTokenChangeRef.current(null)
+          },
         })
         widgetIdRef.current = renderedWidgetId
+        if (currentAttempt === renderAttemptRef.current) {
+          setWidgetLoading(false)
+        }
       })
       .catch(() => {
         if (!disposed && currentAttempt === renderAttemptRef.current) {
+          setWidgetLoading(false)
           setWidgetError(true)
         }
       })
@@ -246,10 +275,24 @@ export function Turnstile({
   }
 
   return (
-    <fieldset
-      ref={containerRef}
-      className="min-h-[65px] min-w-0 w-full overflow-hidden"
-      aria-label="人机验证"
-    />
+    <div
+      className="relative -mx-4 min-h-[65px] w-[calc(100%+2rem)] min-w-0 sm:mx-0 sm:w-full"
+      aria-busy={widgetLoading}
+    >
+      {widgetLoading && (
+        <p
+          className="absolute inset-0 flex items-center justify-center gap-2 rounded-md border bg-muted/30 px-3 text-xs text-muted-foreground"
+          aria-live="polite"
+        >
+          <ShieldCheck className="size-4" />
+          正在加载安全验证…
+        </p>
+      )}
+      <fieldset
+        ref={containerRef}
+        className={`min-h-[65px] min-w-0 w-full overflow-hidden ${widgetLoading ? "invisible" : ""}`}
+        aria-label="人机验证"
+      />
+    </div>
   )
 }

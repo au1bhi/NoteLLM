@@ -6,7 +6,7 @@ import {
   useNavigate,
 } from "@tanstack/react-router"
 import { MailCheck } from "lucide-react"
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 
@@ -66,6 +66,7 @@ export const Route = createFileRoute("/signup")({
 function SignUp() {
   const { signUpMutation } = useAuth()
   const turnstile = useTurnstile()
+  const submitLock = useRef(false)
   const navigate = useNavigate()
   // A just-registered address is remembered in this tab, so refreshing or
   // going back after signup keeps the "check your inbox" screen instead of
@@ -92,7 +93,8 @@ function SignUp() {
   })
 
   const onSubmit = (data: FormData) => {
-    if (signUpMutation.isPending) return
+    if (submitLock.current || signUpMutation.isPending) return
+    submitLock.current = true
 
     // exclude confirm_password from submission data
     const { confirm_password: _confirm_password, ...submitData } = data
@@ -110,6 +112,9 @@ function SignUp() {
           }
         },
         onError: turnstile.reset,
+        onSettled: () => {
+          submitLock.current = false
+        },
       },
     )
   }
@@ -126,7 +131,8 @@ function SignUp() {
               验证邮件已发送
             </h1>
             <p className="text-sm text-muted-foreground">
-              我们已向 {registered.email}{" "}
+              我们已向{" "}
+              <span className="break-all font-medium">{registered.email}</span>{" "}
               提交发送了一封验证邮件，请点击邮件中的链接完成验证。
             </p>
           </div>

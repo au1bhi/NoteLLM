@@ -64,4 +64,4 @@ WORKDIR /app/backend/
 
 # Preserve the raw TCP peer. The app validates trusted proxy networks and
 # resolves sanitized XFF itself before assigning rate-limit buckets.
-CMD ["bash", "-c", "exec fastapi run --workers 4 --no-proxy-headers"]
+CMD ["bash", "scripts/start-service.sh", "fastapi", "run", "--workers", "4", "--no-proxy-headers"]

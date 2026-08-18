@@ -27,7 +27,10 @@ jobs:
         id: prepare
         run: cp .env.example .env
       - name: Validate Docker Compose configuration
-        run: docker compose config --quiet
+        run: |
+          docker compose config --quiet
+          POSTGRES_HOST_PORT=55439 docker compose config --format json |
+            jq -e '.services.db.ports[] | select(.host_ip == "127.0.0.1" and .published == "55439" and .target == 5432)'
       - name: Build application images
         run: docker compose build backend frontend
       - name: Start application stack
@@ -36,6 +39,15 @@ jobs:
         run: >-
           curl --fail --silent --show-error --retry 5 --retry-all-errors
           --retry-delay 2 http://127.0.0.1:8000/api/v1/utils/health-check/
+      - name: Test backend dependencies are ready
+        run: >-
+          curl --fail --silent --show-error --retry 5 --retry-all-errors
+          --retry-delay 2 http://127.0.0.1:8000/api/v1/utils/readiness-check/
+      - name: Verify migrations are current and repeatable
+        run: |
+          docker compose exec -T backend alembic current --check-heads
+          docker compose run --rm prestart
+          test "$(docker compose exec -T db psql -U postgres -d app -Atc "SELECT to_regclass('public.rate_limit_bucket')")" = "rate_limit_bucket"
       - name: Test frontend is up
         run: >-
           curl --fail --silent --show-error --retry 5 --retry-all-errors
