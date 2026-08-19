@@ -23,13 +23,16 @@ uv sync
 source .venv/bin/activate
 ```
 
-数据库 schema 用 Alembic。`fastapi dev` **不会**自动迁移；缺学习计划表时接口返回 503，需要：
+数据库 schema 用 Alembic。宿主机开发应从仓库根目录运行：
 
 ```bash
-alembic upgrade head
+bash scripts/run-local-backend.sh
 ```
 
-本地 Compose 数据库映射在主机 `5433`。**不要**对这个端口跑 pytest：套件会删用户数据。测试必须另起隔离的 pgvector 实例，见 `scripts/test.sh` 与 `docs/evaluation/security-experiments.md`。
+该脚本读取 Compose 的实际 PostgreSQL 映射端口并在启动 FastAPI 前执行迁移门禁，
+避免自定义 `POSTGRES_HOST_PORT` 时误连本机 5432。本地 Compose 数据库默认映射在
+主机 `5433`。**不要**对开发库跑 pytest：套件会删用户数据。测试必须另起隔离的
+pgvector 实例，见 `scripts/test.sh` 与 `docs/evaluation/security-experiments.md`。
 
 ```bash
 bash scripts/lint.sh

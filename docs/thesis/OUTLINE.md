@@ -155,7 +155,7 @@ User 1 ── * Notebook 1 ── * Source 1 ── * Chunk
 正文按 [`chapter-deploy.md`](chapter-deploy.md) 粘贴。
 
 - 后端 Python ≥ 3.12，Alembic 管理 schema；前端 React / Vite，OpenAPI 生成客户端。
-- 本地：`docker compose` 拉起 `pgvector/pgvector:pg18`（主机 5433），`backend` 目录执行 `alembic upgrade head`。
+- 本地：`docker compose` 拉起 `pgvector/pgvector:pg18`（宿主机端口可配置），容器自动运行迁移门禁；宿主机直启后端使用 `scripts/run-local-backend.sh` 发现实际端口并迁移。
 - 一键安装：仓库根目录 `install.sh`（`--local` / `--prod` / `--low-mem` / `--dry-run`）。生产侧 Traefik + TLS；低内存机下载 Release 中的预构建 `frontend-dist`。
 - 检查：后端 pytest、Ruff、mypy、ty；前端 lint 与生产构建。单元测试使用假 provider，不在 CI 消耗外部模型额度。
 - 真实评测只对合成语料、在隔离库上跑，结束后清理临时用户与文件。

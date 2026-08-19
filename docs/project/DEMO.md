@@ -16,12 +16,10 @@ cp .env.example .env
 
 ```bash
 docker compose up -d db
-cd backend
-POSTGRES_PORT=5433 uv run alembic upgrade head
-cd ..
+bash scripts/run-local-backend.sh
 ```
 
-5433 是 Compose 开发库，只给应用和 `seed_demo.py` 用。pytest 必须另起隔离 pgvector，不要指到 5433 或本机 5432。
+脚本读取 Compose 数据库的实际映射端口并在启动 FastAPI 前执行迁移门禁。开发库只给应用和 `seed_demo.py` 用；pytest 必须另起隔离 pgvector，不要指到开发库或本机 5432。
 
 `db` 使用 `pgvector/pgvector:pg18`。验证扩展：
 
@@ -47,7 +45,10 @@ docker compose exec db psql -U postgres -d app -c \
 注册并登录一个本地账户后，可从 `backend` 目录把仓库内的合成 Markdown 资料导入该账户：
 
 ```bash
-POSTGRES_PORT=5433 uv run python scripts/seed_demo.py --email your-local-email@example.com
+db_binding="$(docker compose port db 5432)"
+cd backend
+POSTGRES_SERVER=127.0.0.1 POSTGRES_PORT="${db_binding##*:}" \
+  uv run python scripts/seed_demo.py --email your-local-email@example.com
 ```
 
 重复运行不会覆盖已有演示笔记本；确认需要重建时才增加 `--replace`。该脚本不创建账户、不包含密码或密钥，并且只导入 `docs/demo/notellm_demo_source.md`。导入后在浏览器打开“NoteLLM 答辩演示”笔记本即可提问。

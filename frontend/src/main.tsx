@@ -109,6 +109,12 @@ const redirectToLogin = (expired: boolean) => {
 const isAuthFailure = (error: Error) =>
   error instanceof ApiError && (error.status === 401 || error.status === 403)
 
+const shouldRetryQuery = (failureCount: number, error: Error) => {
+  if (isAuthFailure(error)) return false
+  if (error instanceof ApiError && error.status === 429) return false
+  return failureCount < 3
+}
+
 const handleApiError = (error: Error) => {
   if (isAuthFailure(error)) redirectToLogin(true)
 }
@@ -122,11 +128,9 @@ const queryClient = new QueryClient({
   }),
   defaultOptions: {
     queries: {
-      // Don't retry auth failures. The default 3 retries keep the dashboard on
-      // skeletons for seconds before the onError redirect finally fires — the
-      // exact "clicking around a page that doesn't work" symptom. Fail fast so
-      // the 401 handling above runs on the very first response.
-      retry: (_failureCount, error) => !isAuthFailure(error),
+      // Auth failures and 429 responses must not be replayed. Other transient
+      // query failures keep the library's normal three-retry ceiling.
+      retry: shouldRetryQuery,
     },
   },
 })

@@ -21,6 +21,9 @@ export function extractErrorMessage(err: unknown): string {
     if (err.code === "ECONNABORTED" || err.code === "ETIMEDOUT") {
       return "请求超时，请检查网络后重试"
     }
+    if (err.code === "ERR_NETWORK" || !err.response) {
+      return "网络连接失败，请检查网络后重试"
+    }
     if (err.message) return err.message
   }
   if (err instanceof Error && err.message) {

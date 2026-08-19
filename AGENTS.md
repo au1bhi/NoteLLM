@@ -62,7 +62,7 @@ Notebook overview generation is lazy and persisted; regeneration replaces the st
 - Stopping a streamed answer aborts client reception only. The backend currently completes and persists the answer before emitting display chunks, so UI copy must never claim that stopping reception cancels the provider call or prevents persistence.
 - Upload/retry toasts are status-aware (ready / processing / failed) — a fresh upload returns `processing`, not an error.
 - `OpenAPI.BASE` is build-time configuration. Local Vite development may use an ignored `frontend/.env.local` with `VITE_API_URL=http://localhost:8000`; production and release artifacts must keep `VITE_API_URL=""` for same-origin `/api` proxying. Use `scripts/build-frontend-dist.sh` for low-memory deployment artifacts; do not bake a developer URL into a release bundle.
-- Public authentication requests have a bounded Axios timeout, and login/signup/recovery/reset/resend actions use synchronous submit locks in addition to rendered loading states. Keep network/timeout errors recoverable without clearing user input; `Retry-After` must remain CORS-exposed so 429 feedback can show an exact wait.
+- Public authentication requests have a bounded Axios timeout, and login/signup/recovery/reset/resend actions use synchronous submit locks in addition to rendered loading states. Keep network/timeout errors recoverable without clearing user input; `Retry-After` must remain CORS-exposed so 429 feedback can show an exact wait. Never automatically replay 429 requests; ordinary queries may retry at most three times, while 401/403/429 queries do not retry.
 - The full-page watermark is server-controlled by `WATERMARK_ENABLED` / `WATERMARK_TEXT` through the public `/api/v1/meta/watermark` endpoint and intentionally covers unauthenticated pages too. Keep its static and JavaScript-managed layers aligned.
 - Production CSP uses an nginx `$request_id` nonce so Cloudflare Bot Fight Mode can nonce its edge-injected JavaScript Detection snippet; `static.cloudflareinsights.com` is explicitly allowed for Web Analytics. Keep `unsafe-inline` and `unsafe-eval` out of `script-src`. Console violations attributed to browser-extension `content.js` are extension-side and must not be fixed by weakening the site's CSP.
 
@@ -71,14 +71,14 @@ Notebook overview generation is lazy and persisted; regeneration replaces the st
 - `docker compose watch`: run all services.
 - `bash install.sh --local`: guided local installation; `DOMAIN=example.com bash install.sh --prod --yes` performs unattended production setup.
 - `bun run dev`: run Vite at `http://localhost:5173`.
-- `cd backend && fastapi dev app/main.py`: run the API at `http://localhost:8000`.
+- `bash scripts/run-local-backend.sh`: discover the Compose database's published port, migrate it, and run the API at `http://localhost:8000`.
 - `bun run --filter frontend build && bun run lint`: build and check the frontend.
 - `cd backend && bash scripts/lint.sh && bash scripts/test.sh`: run mypy, ty, Ruff, pytest, and coverage.
 - `uv run prek run --all-files`: run the complete pre-commit suite.
 
 Compose files are `compose.yml` plus environment-specific overlays: `compose.override.yml` for local development, `compose.traefik.yml` for HTTPS production, and `compose.lowmem.yml` for serving a prebuilt SPA on small servers. CI (`.github/workflows/`) runs `test-backend` (pytest + coverage, gate at 80%) and `test-docker-compose` on pushes to `master` and pull requests. There are no Playwright/e2e tests and no `playwright` or `mailcatcher` compose services — do not add a Playwright workflow or reference those services without first adding the real setup.
 
-Local Compose publishes PostgreSQL through `POSTGRES_HOST_PORT` (default `5433`), while containers always use `POSTGRES_PORT=5432`. API and scheduler containers run the advisory-locked Alembic migration gate before serving; direct host `fastapi dev` still requires an explicit `alembic upgrade head`. `/utils/health-check/` is process liveness, while `/utils/readiness-check/` verifies the database and auth-protection schema.
+Local Compose publishes PostgreSQL through `POSTGRES_HOST_PORT` (default `5433`), while containers always use `POSTGRES_PORT=5432`. API and scheduler containers run the advisory-locked Alembic migration gate before serving; its lock ID must remain distinct from request-path rate-limit locks. Use `scripts/run-local-backend.sh` for host development so the actual published port and migration gate cannot be skipped. `/utils/health-check/` is process liveness, while `/utils/readiness-check/` verifies the database and auth-protection schema.
 
 ## Code & Testing Standards
 

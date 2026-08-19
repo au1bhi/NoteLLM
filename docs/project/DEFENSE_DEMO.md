@@ -6,10 +6,10 @@
 
 ```bash
 docker compose up -d
-cd backend
-uv run alembic upgrade head
-cd ..
+curl -fsS http://localhost:8000/api/v1/utils/readiness-check/
 ```
+
+Compose 的 prestart 与服务启动门禁会串行执行迁移；readiness 返回 200 后再开始演示。
 
 本地打开 `http://localhost:5173`。生产环境没有 `/docs`。演示账户用 `docs/demo/` 与 `backend/scripts/seed_demo.py`，或当场注册。屏幕、终端和截图里不要出现 `.env`、真实邮箱、真实供应商地址或密钥。
 

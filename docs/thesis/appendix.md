@@ -58,7 +58,7 @@ uv run python scripts/evaluate_retrieval.py \
   --report ../docs/evaluation/runs/baseline-rerun.md
 ```
 
-本地开发：仓库根目录 `docker compose up -d` 后，在 `backend` 执行 `alembic upgrade head`。`fastapi dev` 不会自动迁移。
+本地开发：仓库根目录 `docker compose up -d` 会在容器服务前执行迁移门禁；若在宿主机直启后端，运行 `bash scripts/run-local-backend.sh`，由脚本发现实际数据库映射端口并先迁移。
 
 ## 附录 E　截图与演示
 

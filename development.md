@@ -72,26 +72,20 @@ Or you could stop the `backend` Docker Compose service:
 docker compose stop backend
 ```
 
-And then you can run the local development server for the backend:
+And then you can run the local development server for the backend from the
+repository root:
 
 ```bash
-cd backend
-POSTGRES_PORT=5433 fastapi dev app/main.py
+bash scripts/run-local-backend.sh
 ```
 
-The Compose Postgres published on `5433` does not auto-migrate when the backend runs locally. After pulling a revision that adds tables (for example study plans), apply it before opening `/gantt`:
-
-```bash
-cd backend
-POSTGRES_PORT=5433 uv run alembic upgrade head
-```
-
-若 `.env` 把 `POSTGRES_HOST_PORT` 改成了其他值，上述两条宿主机命令中的
-`5433` 也替换成同一端口；`.env` 不会自动导出为当前 shell 变量。
+脚本通过 `docker compose port db 5432` 获取实际的宿主机端口，因此即使 `.env`
+把 `POSTGRES_HOST_PORT` 改成了 55432 等其他值，也不会误连本机 5432 或别的项目。
+它会先运行 advisory-lock 保护的 Alembic 迁移门禁，再启动 `fastapi dev`。
 
 容器内 API 与 scheduler 每次启动都会先幂等执行 `alembic upgrade head`，因此
 `docker compose restart backend` 或代码 watch 同步不会让新代码在旧 schema 上
-继续运行。宿主机直接运行 `fastapi dev` 不经过该包装器，仍需先执行上面的迁移。
+继续运行。不要绕过脚本直接在宿主机运行 `fastapi dev`。
 
 启动后分别检查进程存活与依赖就绪：
 

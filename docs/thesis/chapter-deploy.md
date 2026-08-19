@@ -11,8 +11,8 @@
 ## 7.2 本地复现
 
 1. 复制 `.env.example` 为 `.env`，填入服务端模型地址与密钥。不要把填好的 `.env` 提交进版本库。
-2. 仓库根目录 `docker compose up -d` 拉起 `pgvector/pgvector:pg18`（开发端口映射到主机 **5433**）和前后端。
-3. 在 `backend` 目录执行 `alembic upgrade head`。`fastapi dev` **不会**自动迁移；学习计划表缺失时相关接口返回 503。
+2. 仓库根目录 `docker compose up -d` 拉起 `pgvector/pgvector:pg18`（开发端口默认映射到主机 **5433**）和前后端；容器启动门禁会在服务前串行迁移。
+3. 若改为宿主机直启后端，运行 `bash scripts/run-local-backend.sh`。脚本读取 Compose 的实际映射端口并先执行迁移门禁，避免自定义端口时误连其他 PostgreSQL。
 4. 浏览器打开 `http://localhost:5173`，API 在 `http://localhost:8000`。生产环境关闭 `/docs`。
 
 检查：后端 `uv run pytest`（必须另起隔离 pgvector，**不要**把 pytest 指到 5433 或本机 5432）、Ruff、mypy、ty；前端 `bun run lint` 与生产构建。单元测试使用假 provider，不消耗外部额度。
