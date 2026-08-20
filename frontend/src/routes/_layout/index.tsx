@@ -175,7 +175,7 @@ function Dashboard() {
 
   return (
     <div className="flex flex-col gap-6">
-      <section className="relative isolate overflow-hidden rounded-2xl bg-[oklch(0.975_0.015_80)] p-6 shadow-card dark:bg-brand-gradient md:p-10">
+      <section className="relative isolate overflow-hidden rounded-2xl border bg-card p-6 shadow-card dark:bg-brand-gradient md:p-10">
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 bg-paper-grain opacity-40"
