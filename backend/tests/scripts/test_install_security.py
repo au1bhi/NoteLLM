@@ -79,3 +79,23 @@ def test_sha256_verification_fails_closed(tmp_path: Path) -> None:
 
     assert _run_function("verify_sha256", str(artifact), expected).returncode == 0
     assert _run_function("verify_sha256", str(artifact), "0" * 64).returncode != 0
+
+
+def test_is_port_in_use_detects_listening_socket() -> None:
+    import socket
+
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    port = server.getsockname()[1]
+    try:
+        assert _run_function("is_port_in_use", str(port)).returncode == 0
+    finally:
+        server.close()
+
+    assert _run_function("is_port_in_use", str(port)).returncode != 0
+
+
+def test_check_domain_dns_handles_localhost() -> None:
+    assert _run_function("check_domain_dns", "localhost").returncode == 0
+    assert _run_function("check_domain_dns", "").returncode == 0

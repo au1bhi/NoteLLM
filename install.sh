@@ -151,6 +151,9 @@ if [[ "${BASH_SOURCE[0]}" == "$0" && ! -f "$PWD/compose.yml" ]]; then
   INSTALL_DIR="${NOTELLM_DIR:-$HOME/NoteLLM}"
   REPO_URL="${NOTELLM_REPO:-https://github.com/au1bhi/NoteLLM.git}"
   BRANCH="${NOTELLM_BRANCH:-master}"
+  # 禁止 git 弹交互式凭据提示（网络受限时挂起/等待输入）。
+  # 必须在任何 git 命令（包括 ls-remote）之前设置。
+  export GIT_TERMINAL_PROMPT=0
   # 大陆服务器常无法直连 github.com / raw.githubusercontent.com，但
   # codeload.github.com 的源码包通常可达——git 克隆失败时用源码包兜底。
   TARBALL_URL="${NOTELLM_TARBALL:-}"
@@ -158,10 +161,17 @@ if [[ "${BASH_SOURCE[0]}" == "$0" && ! -f "$PWD/compose.yml" ]]; then
   if [[ -z "$TARBALL_URL" ]]; then
     SOURCE_COMMIT="${NOTELLM_COMMIT:-}"
     if [[ -z "$SOURCE_COMMIT" ]]; then
-      SOURCE_COMMIT="$(curl -fsSL --max-time 30 \
-        "https://api.github.com/repos/au1bhi/NoteLLM/commits/$BRANCH" 2>/dev/null \
-        | sed -nE 's/.*"sha"[[:space:]]*:[[:space:]]*"([0-9a-f]{40})".*/\1/p' \
-        | head -n 1 || true)"
+      # 优先使用 git ls-remote（不走 GitHub REST API，不受未鉴权 IP 每小时 60 次限流影响）。
+      if command -v git >/dev/null 2>&1; then
+        SOURCE_COMMIT="$(timeout 20 git ls-remote "$REPO_URL" "refs/heads/$BRANCH" 2>/dev/null | awk '{print $1}' | head -n 1 || true)"
+      fi
+      # git 不可用或未获取到时，降级走 GitHub API。
+      if [[ ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+        SOURCE_COMMIT="$(curl -fsSL --max-time 30 \
+          "https://api.github.com/repos/au1bhi/NoteLLM/commits/$BRANCH" 2>/dev/null \
+          | sed -nE 's/.*"sha"[[:space:]]*:[[:space:]]*"([0-9a-f]{40})".*/\1/p' \
+          | head -n 1 || true)"
+      fi
     fi
     if [[ ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
       err "无法把源码包绑定到不可变 Git 提交；请恢复 Git 网络后重试。"
@@ -172,8 +182,6 @@ if [[ "${BASH_SOURCE[0]}" == "$0" && ! -f "$PWD/compose.yml" ]]; then
     err "自定义 NOTELLM_TARBALL 必须同时提供 NOTELLM_TARBALL_SHA256。"
     exit 1
   fi
-  # 禁止 git 弹交互式凭据提示（网络受限时挂起/等待输入）。
-  export GIT_TERMINAL_PROMPT=0
 
   if [[ -f "$INSTALL_DIR/compose.yml" ]]; then
     if [[ -d "$INSTALL_DIR/.git" ]] && command -v git >/dev/null 2>&1; then
@@ -363,6 +371,115 @@ check_prereqs() {
     exit 1
   fi
   ok "Docker 环境就绪。"
+}
+
+# ---------- 域名 DNS 解析预检（生产） ----------
+check_domain_dns() {
+  local domain="$1"
+  [[ -n "$domain" && "$domain" != "localhost" ]] || return 0
+
+  step "检查域名 DNS 解析"
+  local server_ip=""
+  if command -v curl >/dev/null 2>&1; then
+    server_ip="$(curl -fsSL --max-time 3 https://api.ipify.org 2>/dev/null || curl -fsSL --max-time 3 https://ifconfig.me/ip 2>/dev/null || true)"
+    [[ "$server_ip" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || server_ip=""
+  fi
+
+  local resolved_ips=()
+  if command -v python3 >/dev/null 2>&1; then
+    local py_res
+    py_res="$(python3 -c "import socket, sys; print(' '.join(sorted(list(set(info[4][0] for info in socket.getaddrinfo(sys.argv[1], None, socket.AF_INET))))))" "$domain" 2>/dev/null || true)"
+    if [[ -n "$py_res" ]]; then
+      read -ra resolved_ips <<< "$py_res"
+    fi
+  elif command -v getent >/dev/null 2>&1; then
+    local getent_res
+    getent_res="$(getent ahostsv4 "$domain" 2>/dev/null | awk '{print $1}' | sort -u | tr '\n' ' ' || true)"
+    if [[ -n "$getent_res" ]]; then
+      read -ra resolved_ips <<< "$getent_res"
+    fi
+  elif command -v dig >/dev/null 2>&1; then
+    local dig_res
+    dig_res="$(dig +short A "$domain" 2>/dev/null | grep -E '^[0-9.]+$' | sort -u | tr '\n' ' ' || true)"
+    if [[ -n "$dig_res" ]]; then
+      read -ra resolved_ips <<< "$dig_res"
+    fi
+  elif command -v nslookup >/dev/null 2>&1; then
+    local ns_res
+    ns_res="$(nslookup "$domain" 2>/dev/null | awk '/^Address: / {print $2}' | grep -E '^[0-9.]+$' | sort -u | tr '\n' ' ' || true)"
+    if [[ -n "$ns_res" ]]; then
+      read -ra resolved_ips <<< "$ns_res"
+    fi
+  fi
+
+  if [[ "${#resolved_ips[@]}" -eq 0 ]]; then
+    warn "域名 ${domain} 暂未检测到有效 IPv4 解析记录（DNS 尚未生效或当前网络无法解析）。"
+    warn "  Let's Encrypt 证书签发需要域名 DNS 解析生效；若 DNS 尚未配置，请先添加 A 记录。"
+  elif [[ -n "$server_ip" ]] && [[ ! " ${resolved_ips[*]} " =~ " ${server_ip} " ]]; then
+    warn "域名 ${domain} 解析结果 (${resolved_ips[*]}) 与本机外网 IP (${server_ip}) 不一致。"
+    warn "  若 DNS 未正确指向本服务器，Traefik 申请 SSL 证书可能会失败并触发 Let's Encrypt 频控限制。"
+  else
+    ok "域名 ${domain} DNS 解析检查正常${server_ip:+（指向本机公网 IP: ${server_ip}）}。"
+  fi
+}
+
+# ---------- 端口占用预检 ----------
+is_port_in_use() {
+  local port="$1"
+  if command -v ss >/dev/null 2>&1; then
+    ss -tlnH "sport = :$port" 2>/dev/null | grep -q . && return 0
+  elif command -v lsof >/dev/null 2>&1; then
+    lsof -iTCP:"$port" -sTCP:LISTEN -n -P >/dev/null 2>&1 && return 0
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -c "import socket, sys; s = socket.socket(); s.settimeout(0.5); sys.exit(0 if s.connect_ex(('127.0.0.1', int(sys.argv[1]))) == 0 else 1)" "$port" 2>/dev/null && return 0
+  fi
+  return 1
+}
+
+check_port_conflicts() {
+  local ports_to_check=()
+  if [[ "$PROFILE" == "prod" ]]; then
+    ports_to_check=(80 443)
+  else
+    local pg_port="${POSTGRES_HOST_PORT:-$(env_get POSTGRES_HOST_PORT || true)}"
+    pg_port="${pg_port:-5433}"
+    ports_to_check=(8000 5173 "$pg_port")
+  fi
+
+  local occupied_ports=()
+  local sname="${COMPOSE_PROJECT_NAME:-${STACK_NAME:-$(env_get STACK_NAME || true)}}"
+  local dir_name="$(basename "$SCRIPT_DIR" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9_-')"
+
+  for p in "${ports_to_check[@]}"; do
+    if is_port_in_use "$p"; then
+      local our_containers=""
+      if command -v docker >/dev/null 2>&1; then
+        [[ -n "$sname" ]] && our_containers+="$(docker ps --filter "label=com.docker.compose.project=${sname}" --format '{{.Ports}}' 2>/dev/null || true)"$'\n'
+        [[ -n "$dir_name" && "$dir_name" != "$sname" ]] && our_containers+="$(docker ps --filter "label=com.docker.compose.project=${dir_name}" --format '{{.Ports}}' 2>/dev/null || true)"$'\n'
+      fi
+      local pattern=":${p}->|:${p}/"
+      if [[ "$our_containers" =~ $pattern ]]; then
+        continue
+      fi
+      occupied_ports+=("$p")
+    fi
+  done
+
+  if [[ "${#occupied_ports[@]}" -gt 0 ]]; then
+    warn "检测到以下端口已被宿主机其他服务占用：${occupied_ports[*]}"
+    if [[ "$PROFILE" == "prod" ]]; then
+      info "  生产模式 Traefik 需要监听 80 和 443 端口。"
+      info "  常见原因：宿主机已运行 Nginx/Apache/Caddy。可先暂停它们：sudo systemctl stop nginx"
+    else
+      info "  本地开发模式需要绑定相应端口，请检查是否已有其他服务或数据库占用了上述端口。"
+    fi
+    if [[ "$DRY_RUN" != "1" ]] && [[ "$ASSUME_YES" != "1" ]] && [[ -t 0 ]]; then
+      if ! confirm "端口可能存在冲突，是否仍要继续？" "n"; then
+        err "安装已中止以避免端口冲突。"
+        exit 1
+      fi
+    fi
+  fi
 }
 
 # ---------- 模式选择 ----------
@@ -561,6 +678,7 @@ collect_config() {
     FRONTEND_HOST="https://${DOMAIN}"
     ENVIRONMENT="production"
     info "  前端地址将使用 ${FRONTEND_HOST}"
+    check_domain_dns "$DOMAIN"
     ask_var STACK_NAME "栈名称（同一服务器多个部署时需唯一）" "$(env_get STACK_NAME || true)"
     STACK_NAME="${STACK_NAME:-notellm}"
     # EMAIL 是常见环境变量，用内部变量 LE_EMAIL 提问，避免意外继承。
@@ -1054,6 +1172,7 @@ main() {
     collect_config
     write_env
   fi
+  check_port_conflicts
   prepare_network
   build_and_start
   print_summary
