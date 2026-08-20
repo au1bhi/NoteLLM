@@ -189,22 +189,22 @@ function Dashboard() {
           className="pointer-events-none absolute inset-x-0 bottom-0 hidden h-3/5 w-full opacity-70 dark:block"
         />
         <div className="relative z-10 max-w-2xl animate-rise">
-          <p className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary backdrop-blur-sm dark:bg-white/10 dark:text-white">
+          <p className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-sm font-medium text-primary backdrop-blur-sm">
             <Sparkles className="size-4" />
             欢迎回来
           </p>
           <h1 className="font-display mt-2 text-3xl font-semibold tracking-tight md:text-4xl">
             你好，{name}
           </h1>
-          <p className="mt-3 max-w-xl text-muted-foreground dark:text-white/85">
+          <p className="mt-3 max-w-xl text-muted-foreground">
             把课程讲义、研究资料和笔记放进笔记本。默认「仅依据资料」提问；无证据时固定弃权，而不是补造结论。
           </p>
           <div className="mt-7 flex flex-wrap items-center gap-3">
-            <AddNotebook triggerClassName="bg-primary text-primary-foreground shadow-lifted transition-transform duration-200 hover:-translate-y-0.5 dark:bg-white dark:text-primary" />
+            <AddNotebook triggerClassName="bg-primary text-primary-foreground shadow-lifted transition-transform duration-200 hover:-translate-y-0.5" />
             <Button
               variant="ghost"
               asChild
-              className="text-foreground hover:bg-accent hover:text-accent-foreground dark:text-white dark:hover:bg-white/15 dark:hover:text-white"
+              className="text-foreground hover:bg-accent hover:text-accent-foreground"
             >
               <Link to="/notebooks">
                 浏览笔记本

@@ -59,7 +59,7 @@ export function InkMountains({ className, tone = "ink" }: InkMountainsProps) {
           d="M0 280 L0 265 C120 250 200 280 330 258 L480 280 Z"
           fill={ridges[3]}
         />
-        {/* Vermilion painter's seal (落款) in the bottom-right corner. */}
+        {/* Painter's seal (落款) in the bottom-right corner. */}
         <g transform="translate(544 248)">
           <rect
             x="0"
@@ -67,11 +67,11 @@ export function InkMountains({ className, tone = "ink" }: InkMountainsProps) {
             width="36"
             height="36"
             rx="7"
-            fill="oklch(0.6 0.17 30)"
+            className="fill-primary"
           />
           <path
             d="M18 9l2.3 6.6L27 18l-6.7 2.4L18 27l-2.3-6.6L9 18l6.7-2.4z"
-            fill="oklch(0.99 0.01 85)"
+            className="fill-primary-foreground"
           />
         </g>
       </g>
