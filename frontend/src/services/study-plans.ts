@@ -3,6 +3,7 @@ import {
   type StudyPlansPublic,
   StudyPlansService,
   type StudyPlanUpdate,
+  type StudyTaskCreate,
   type StudyTaskUpdate,
 } from "@/client"
 
@@ -12,9 +13,13 @@ export type StudyPlansResponse = StudyPlansPublic
 export const studyPlansApi = {
   list: (notebookId?: string) =>
     StudyPlansService.readStudyPlans({ notebookId }),
-  updateTask: (planId: string, taskId: string, requestBody: StudyTaskUpdate) =>
-    StudyPlansService.updateStudyTask({ planId, taskId, requestBody }),
   updatePlan: (planId: string, requestBody: StudyPlanUpdate) =>
     StudyPlansService.updateStudyPlan({ planId, requestBody }),
   deletePlan: (planId: string) => StudyPlansService.deleteStudyPlan({ planId }),
+  createTask: (planId: string, requestBody: StudyTaskCreate) =>
+    StudyPlansService.createStudyTask({ planId, requestBody }),
+  updateTask: (planId: string, taskId: string, requestBody: StudyTaskUpdate) =>
+    StudyPlansService.updateStudyTask({ planId, taskId, requestBody }),
+  deleteTask: (planId: string, taskId: string) =>
+    StudyPlansService.deleteStudyTask({ planId, taskId }),
 }

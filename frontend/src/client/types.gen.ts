@@ -249,6 +249,8 @@ export type StudyPlansPublic = {
 };
 
 export type StudyPlanUpdate = {
+    title?: (string | null);
+    summary?: (string | null);
     reminder_enabled?: (boolean | null);
     timezone?: (string | null);
 };
@@ -256,6 +258,15 @@ export type StudyPlanUpdate = {
 export type StudySectionPublic = {
     title: string;
     content: string;
+};
+
+export type StudyTaskCreate = {
+    title: string;
+    description?: string;
+    start_date: string;
+    end_date: string;
+    estimated_minutes?: number;
+    sort_order?: number;
 };
 
 export type StudyTaskPublic = {
@@ -270,7 +281,13 @@ export type StudyTaskPublic = {
 };
 
 export type StudyTaskUpdate = {
-    is_completed: boolean;
+    title?: (string | null);
+    description?: (string | null);
+    start_date?: (string | null);
+    end_date?: (string | null);
+    estimated_minutes?: (number | null);
+    sort_order?: (number | null);
+    is_completed?: (boolean | null);
 };
 
 export type Token = {
@@ -606,6 +623,13 @@ export type StudyPlansDeleteStudyPlanResponse = ({
     [key: string]: (string);
 });
 
+export type StudyPlansCreateStudyTaskData = {
+    planId: string;
+    requestBody: StudyTaskCreate;
+};
+
+export type StudyPlansCreateStudyTaskResponse = (StudyTaskPublic);
+
 export type StudyPlansUpdateStudyTaskData = {
     planId: string;
     requestBody: StudyTaskUpdate;
@@ -613,6 +637,15 @@ export type StudyPlansUpdateStudyTaskData = {
 };
 
 export type StudyPlansUpdateStudyTaskResponse = (StudyTaskPublic);
+
+export type StudyPlansDeleteStudyTaskData = {
+    planId: string;
+    taskId: string;
+};
+
+export type StudyPlansDeleteStudyTaskResponse = ({
+    [key: string]: (string);
+});
 
 export type UsersReadUsersData = {
     limit?: number;

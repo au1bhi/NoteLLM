@@ -3,7 +3,7 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ConversationsReadConversationData, ConversationsReadConversationResponse, ConversationsUpdateConversationData, ConversationsUpdateConversationResponse, ConversationsDeleteConversationData, ConversationsDeleteConversationResponse, ConversationsStreamMessageData, ConversationsStreamMessageResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, MetaGetWatermarkResponse, MetaGetTurnstileResponse, NotebooksReadNotebooksData, NotebooksReadNotebooksResponse, NotebooksCreateNotebookData, NotebooksCreateNotebookResponse, NotebooksReadNotebookData, NotebooksReadNotebookResponse, NotebooksUpdateNotebookData, NotebooksUpdateNotebookResponse, NotebooksDeleteNotebookData, NotebooksDeleteNotebookResponse, NotebooksReadSourcesData, NotebooksReadSourcesResponse, NotebooksUploadSourceData, NotebooksUploadSourceResponse, NotebooksReadConversationsData, NotebooksReadConversationsResponse, NotebooksCreateConversationData, NotebooksCreateConversationResponse, NotebooksSearchNotebookData, NotebooksSearchNotebookResponse, NotebooksReadNotebookOverviewData, NotebooksReadNotebookOverviewResponse, NotebooksRegenerateNotebookOverviewData, NotebooksRegenerateNotebookOverviewResponse, NotebooksGenerateNotebookStudyGuideData, NotebooksGenerateNotebookStudyGuideResponse, NotebooksRemoveSourceData, NotebooksRemoveSourceResponse, NotebooksRetrySourceData, NotebooksRetrySourceResponse, StudyPlansReadStudyPlansData, StudyPlansReadStudyPlansResponse, StudyPlansReadConversationStudyPlanData, StudyPlansReadConversationStudyPlanResponse, StudyPlansCreateOrRegenerateStudyPlanData, StudyPlansCreateOrRegenerateStudyPlanResponse, StudyPlansUpdateStudyPlanData, StudyPlansUpdateStudyPlanResponse, StudyPlansDeleteStudyPlanData, StudyPlansDeleteStudyPlanResponse, StudyPlansUpdateStudyTaskData, StudyPlansUpdateStudyTaskResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersReadUserUsageResponse, UsersReadUserProviderSettingsResponse, UsersUpsertUserProviderSettingsData, UsersUpsertUserProviderSettingsResponse, UsersDeleteUserProviderSettingsResponse, UsersFetchAvailableModelsData, UsersFetchAvailableModelsResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersVerifyEmailData, UsersVerifyEmailResponse, UsersResendVerificationData, UsersResendVerificationResponse, UsersResendVerificationMeResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsHealthCheckResponse, UtilsReadinessCheckResponse } from './types.gen';
+import type { ConversationsReadConversationData, ConversationsReadConversationResponse, ConversationsUpdateConversationData, ConversationsUpdateConversationResponse, ConversationsDeleteConversationData, ConversationsDeleteConversationResponse, ConversationsStreamMessageData, ConversationsStreamMessageResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, MetaGetWatermarkResponse, MetaGetTurnstileResponse, NotebooksReadNotebooksData, NotebooksReadNotebooksResponse, NotebooksCreateNotebookData, NotebooksCreateNotebookResponse, NotebooksReadNotebookData, NotebooksReadNotebookResponse, NotebooksUpdateNotebookData, NotebooksUpdateNotebookResponse, NotebooksDeleteNotebookData, NotebooksDeleteNotebookResponse, NotebooksReadSourcesData, NotebooksReadSourcesResponse, NotebooksUploadSourceData, NotebooksUploadSourceResponse, NotebooksReadConversationsData, NotebooksReadConversationsResponse, NotebooksCreateConversationData, NotebooksCreateConversationResponse, NotebooksSearchNotebookData, NotebooksSearchNotebookResponse, NotebooksReadNotebookOverviewData, NotebooksReadNotebookOverviewResponse, NotebooksRegenerateNotebookOverviewData, NotebooksRegenerateNotebookOverviewResponse, NotebooksGenerateNotebookStudyGuideData, NotebooksGenerateNotebookStudyGuideResponse, NotebooksRemoveSourceData, NotebooksRemoveSourceResponse, NotebooksRetrySourceData, NotebooksRetrySourceResponse, StudyPlansReadStudyPlansData, StudyPlansReadStudyPlansResponse, StudyPlansReadConversationStudyPlanData, StudyPlansReadConversationStudyPlanResponse, StudyPlansCreateOrRegenerateStudyPlanData, StudyPlansCreateOrRegenerateStudyPlanResponse, StudyPlansUpdateStudyPlanData, StudyPlansUpdateStudyPlanResponse, StudyPlansDeleteStudyPlanData, StudyPlansDeleteStudyPlanResponse, StudyPlansCreateStudyTaskData, StudyPlansCreateStudyTaskResponse, StudyPlansUpdateStudyTaskData, StudyPlansUpdateStudyTaskResponse, StudyPlansDeleteStudyTaskData, StudyPlansDeleteStudyTaskResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersReadUserUsageResponse, UsersReadUserProviderSettingsResponse, UsersUpsertUserProviderSettingsData, UsersUpsertUserProviderSettingsResponse, UsersDeleteUserProviderSettingsResponse, UsersFetchAvailableModelsData, UsersFetchAvailableModelsResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersVerifyEmailData, UsersVerifyEmailResponse, UsersResendVerificationData, UsersResendVerificationResponse, UsersResendVerificationMeResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsHealthCheckResponse, UtilsReadinessCheckResponse } from './types.gen';
 
 export class ConversationsService {
     /**
@@ -678,6 +678,29 @@ export class StudyPlansService {
     }
 
     /**
+     * Create Study Task
+     * @param data The data for the request.
+     * @param data.planId
+     * @param data.requestBody
+     * @returns StudyTaskPublic Successful Response
+     * @throws ApiError
+     */
+    public static createStudyTask(data: StudyPlansCreateStudyTaskData): CancelablePromise<StudyPlansCreateStudyTaskResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/study-plans/{plan_id}/tasks',
+            path: {
+                plan_id: data.planId
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+
+    /**
      * Update Study Task
      * @param data The data for the request.
      * @param data.planId
@@ -696,6 +719,28 @@ export class StudyPlansService {
             },
             body: data.requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+
+    /**
+     * Delete Study Task
+     * @param data The data for the request.
+     * @param data.planId
+     * @param data.taskId
+     * @returns string Successful Response
+     * @throws ApiError
+     */
+    public static deleteStudyTask(data: StudyPlansDeleteStudyTaskData): CancelablePromise<StudyPlansDeleteStudyTaskResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/study-plans/{plan_id}/tasks/{task_id}',
+            path: {
+                plan_id: data.planId,
+                task_id: data.taskId
+            },
             errors: {
                 422: 'Validation Error'
             }

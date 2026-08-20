@@ -1030,6 +1030,30 @@ export const StudyPlanPublicSchema = {
 
 export const StudyPlanUpdateSchema = {
     properties: {
+        title: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 255,
+                    minLength: 1
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Title'
+        },
+        summary: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Summary'
+        },
         reminder_enabled: {
             anyOf: [
                 {
@@ -1094,6 +1118,49 @@ export const StudySectionPublicSchema = {
     title: 'StudySectionPublic'
 } as const;
 
+export const StudyTaskCreateSchema = {
+    properties: {
+        title: {
+            type: 'string',
+            maxLength: 255,
+            minLength: 1,
+            title: 'Title'
+        },
+        description: {
+            type: 'string',
+            maxLength: 2000,
+            title: 'Description',
+            default: ''
+        },
+        start_date: {
+            type: 'string',
+            format: 'date',
+            title: 'Start Date'
+        },
+        end_date: {
+            type: 'string',
+            format: 'date',
+            title: 'End Date'
+        },
+        estimated_minutes: {
+            type: 'integer',
+            maximum: 480,
+            minimum: 15,
+            title: 'Estimated Minutes',
+            default: 45
+        },
+        sort_order: {
+            type: 'integer',
+            minimum: 0,
+            title: 'Sort Order',
+            default: 0
+        }
+    },
+    type: 'object',
+    required: ['title', 'start_date', 'end_date'],
+    title: 'StudyTaskCreate'
+} as const;
+
 export const StudyTaskPublicSchema = {
     properties: {
         id: {
@@ -1139,13 +1206,92 @@ export const StudyTaskPublicSchema = {
 
 export const StudyTaskUpdateSchema = {
     properties: {
+        title: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 255,
+                    minLength: 1
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Title'
+        },
+        description: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Description'
+        },
+        start_date: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Start Date'
+        },
+        end_date: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'End Date'
+        },
+        estimated_minutes: {
+            anyOf: [
+                {
+                    type: 'integer',
+                    maximum: 480,
+                    minimum: 15
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Estimated Minutes'
+        },
+        sort_order: {
+            anyOf: [
+                {
+                    type: 'integer',
+                    minimum: 0
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Sort Order'
+        },
         is_completed: {
-            type: 'boolean',
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    type: 'null'
+                }
+            ],
             title: 'Is Completed'
         }
     },
     type: 'object',
-    required: ['is_completed'],
     title: 'StudyTaskUpdate'
 } as const;
 

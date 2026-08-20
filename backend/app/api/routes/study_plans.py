@@ -17,6 +17,7 @@ from app.models import (
     StudyPlansPublic,
     StudyPlanUpdate,
     StudyTask,
+    StudyTaskCreate,
     StudyTaskPublic,
     StudyTaskUpdate,
     get_datetime_utc,
@@ -178,6 +179,13 @@ def update_study_plan(
         session=session, current_user=current_user, plan_id=plan_id
     )
     update = request.model_dump(exclude_unset=True)
+    if "title" in update and update["title"] is not None:
+        title = update["title"].strip()
+        if not title:
+            raise HTTPException(status_code=422, detail="计划标题不能为空")
+        plan.title = title
+    if "summary" in update and update["summary"] is not None:
+        plan.summary = update["summary"]
     if "timezone" in update:
         try:
             plan.timezone = validate_timezone(update["timezone"])
@@ -198,6 +206,43 @@ def update_study_plan(
     return plan_public(session=session, plan=plan, user=current_user)
 
 
+@router.post(
+    "/study-plans/{plan_id}/tasks",
+    response_model=StudyTaskPublic,
+)
+def create_study_task(
+    plan_id: uuid.UUID,
+    request: StudyTaskCreate,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> StudyTaskPublic:
+    plan = get_owned_plan_or_404(
+        session=session, current_user=current_user, plan_id=plan_id
+    )
+    if request.start_date > request.end_date:
+        raise HTTPException(status_code=422, detail="任务结束日期不能早于开始日期")
+    task = StudyTask(
+        plan_id=plan.id,
+        title=request.title.strip(),
+        description=request.description or "",
+        start_date=request.start_date,
+        end_date=request.end_date,
+        estimated_minutes=request.estimated_minutes,
+        sort_order=request.sort_order,
+        is_completed=False,
+    )
+    session.add(task)
+    if task.start_date < plan.start_date:
+        plan.start_date = task.start_date
+    if task.end_date > plan.end_date:
+        plan.end_date = task.end_date
+    plan.updated_at = get_datetime_utc()
+    session.add(plan)
+    session.commit()
+    session.refresh(task)
+    return StudyTaskPublic.model_validate(task)
+
+
 @router.patch("/study-plans/{plan_id}/tasks/{task_id}", response_model=StudyTaskPublic)
 def update_study_task(
     plan_id: uuid.UUID,
@@ -206,7 +251,9 @@ def update_study_task(
     session: SessionDep,
     current_user: CurrentUser,
 ) -> StudyTaskPublic:
-    get_owned_plan_or_404(session=session, current_user=current_user, plan_id=plan_id)
+    plan = get_owned_plan_or_404(
+        session=session, current_user=current_user, plan_id=plan_id
+    )
     task = session.exec(
         select(StudyTask)
         .where(StudyTask.id == task_id)
@@ -214,11 +261,73 @@ def update_study_task(
     ).first()
     if task is None:
         raise HTTPException(status_code=404, detail="学习任务不存在")
-    task.is_completed = request.is_completed
+    update = request.model_dump(exclude_unset=True)
+    if "title" in update and update["title"] is not None:
+        title = update["title"].strip()
+        if not title:
+            raise HTTPException(status_code=422, detail="任务标题不能为空")
+        task.title = title
+    if "description" in update and update["description"] is not None:
+        task.description = update["description"]
+    if "start_date" in update and update["start_date"] is not None:
+        task.start_date = update["start_date"]
+    if "end_date" in update and update["end_date"] is not None:
+        task.end_date = update["end_date"]
+    if task.start_date > task.end_date:
+        raise HTTPException(status_code=422, detail="任务结束日期不能早于开始日期")
+    if "estimated_minutes" in update and update["estimated_minutes"] is not None:
+        task.estimated_minutes = update["estimated_minutes"]
+    if "sort_order" in update and update["sort_order"] is not None:
+        task.sort_order = update["sort_order"]
+    if "is_completed" in update and update["is_completed"] is not None:
+        task.is_completed = update["is_completed"]
+
     session.add(task)
+    # Recalculate plan date bounds
+    all_tasks = session.exec(
+        select(StudyTask).where(StudyTask.plan_id == plan_id)
+    ).all()
+    if all_tasks:
+        plan.start_date = min(t.start_date for t in all_tasks)
+        plan.end_date = max(t.end_date for t in all_tasks)
+        plan.updated_at = get_datetime_utc()
+        session.add(plan)
+
     session.commit()
     session.refresh(task)
     return StudyTaskPublic.model_validate(task)
+
+
+@router.delete("/study-plans/{plan_id}/tasks/{task_id}")
+def delete_study_task(
+    plan_id: uuid.UUID,
+    task_id: uuid.UUID,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> dict[str, str]:
+    plan = get_owned_plan_or_404(
+        session=session, current_user=current_user, plan_id=plan_id
+    )
+    task = session.exec(
+        select(StudyTask)
+        .where(StudyTask.id == task_id)
+        .where(StudyTask.plan_id == plan_id)
+    ).first()
+    if task is None:
+        raise HTTPException(status_code=404, detail="学习任务不存在")
+    session.delete(task)
+    session.flush()
+
+    remaining_tasks = session.exec(
+        select(StudyTask).where(StudyTask.plan_id == plan_id)
+    ).all()
+    if remaining_tasks:
+        plan.start_date = min(t.start_date for t in remaining_tasks)
+        plan.end_date = max(t.end_date for t in remaining_tasks)
+        plan.updated_at = get_datetime_utc()
+        session.add(plan)
+    session.commit()
+    return {"message": "学习任务已删除"}
 
 
 @router.delete("/study-plans/{plan_id}")

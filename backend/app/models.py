@@ -515,12 +515,29 @@ class StudyPlanGenerateRequest(SQLModel):
 
 
 class StudyPlanUpdate(SQLModel):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    summary: str | None = None
     reminder_enabled: bool | None = None
     timezone: str | None = Field(default=None, min_length=1, max_length=64)
 
 
+class StudyTaskCreate(SQLModel):
+    title: str = Field(min_length=1, max_length=255)
+    description: str = Field(default="", max_length=2000)
+    start_date: date
+    end_date: date
+    estimated_minutes: int = Field(default=45, ge=15, le=480)
+    sort_order: int = Field(default=0, ge=0)
+
+
 class StudyTaskUpdate(SQLModel):
-    is_completed: bool
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    estimated_minutes: int | None = Field(default=None, ge=15, le=480)
+    sort_order: int | None = Field(default=None, ge=0)
+    is_completed: bool | None = None
 
 
 class StudyPlan(SQLModel, table=True):
