@@ -24,3 +24,15 @@ frontend/.env.local
 
 # Local uploads (test artifacts)
 backend/data/uploads/
+
+# Python bytecode, virtual environments, and test/linter caches
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+

@@ -96,6 +96,12 @@ Never commit secrets or uploaded documents. Validate uploads, isolate each user'
 
 Production requires a non-default `SECRET_KEY` of at least 32 characters and an HTTPS, non-localhost `FRONTEND_HOST`; API docs are disabled in production. Keep application and management service ports on loopback or internal Docker networks, expose public traffic only through nginx/Traefik, retain CSP/HSTS and related security headers, and keep Adminer/Traefik dashboards behind Basic Auth.
 
+## Agent Skills & Directory Conventions
+
+- Agent instructions and project conventions are defined in this single file (`AGENTS.md`).
+- Project agent skills are centralized under `.agents/skills/` (e.g. `fastapi`, `sqlmodel`, `library-skills`). Tools across ecosystems (Claude Code, Cursor, Codex, Google Antigravity, OpenCode) share this single skill location (`.claude/skills` is a symlink to `../.agents/skills`).
+- Ephemeral agent workspaces (like `.claude/worktrees/`) and caches are untracked and must not be committed.
+
 ## Recent Iterations (2026-08)
 
 Feature work landed after the original scaffold. Keep these invariants intact when changing code:
