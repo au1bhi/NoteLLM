@@ -15,7 +15,7 @@ export function GanttChart({ plan }: { plan: StudyPlanPublic }) {
   const days = Array.from({ length: duration }, (_, index) => index)
 
   return (
-    <div className="overflow-x-auto rounded-xl border bg-muted/20">
+    <div className="isolate overflow-x-auto rounded-xl border bg-muted/20">
       <div
         className="grid min-w-max"
         style={{ gridTemplateColumns: `10rem ${timelineWidth}px` }}

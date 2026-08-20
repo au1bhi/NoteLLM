@@ -28,7 +28,7 @@ function GanttPage() {
   const totalTasks = plans.reduce((total, plan) => total + plan.tasks.length, 0)
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="isolate flex flex-col gap-6">
       <div>
         <h1 className="font-display text-2xl font-bold tracking-tight">
           甘特图

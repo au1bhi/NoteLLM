@@ -44,7 +44,7 @@ def test_production_services_drop_privileges() -> None:
     dockerfile = (REPOSITORY_ROOT / "backend" / "Dockerfile").read_text()
 
     assert compose.count("read_only: true") >= 5
-    assert compose.count("security_opt: [\"no-new-privileges:true\"]") >= 5
+    assert compose.count('security_opt: ["no-new-privileges:true"]') >= 5
     assert compose.count("cap_drop: [ALL]") >= 5
     assert "USER appuser" in dockerfile
     assert "network_mode: none" in compose
