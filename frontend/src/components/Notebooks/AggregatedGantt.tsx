@@ -1,13 +1,18 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import {
+  AlertCircle,
+  ArrowUpDown,
+  Bot,
   Calendar,
   CheckCircle2,
   Clock,
   Filter,
+  ListOrdered,
   MoreHorizontal,
   Pencil,
   Plus,
+  Sparkles,
   Trash2,
 } from "lucide-react"
 import { useMemo, useState } from "react"
@@ -41,6 +46,14 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
@@ -67,6 +80,35 @@ const PLAN_COLORS = [
   "var(--chart-4)",
   "var(--chart-5)",
 ] as const
+
+const DIFFICULTY_WEIGHT: Record<string, number> = {
+  beginner: 1,
+  intermediate: 2,
+  advanced: 3,
+}
+
+const AI_PROMPT_PRESETS = [
+  {
+    label: "🚀 压缩周期提速",
+    prompt: "将整个学习周期压缩紧凑，加大每日核心知识密度，缩短总天数。",
+  },
+  {
+    label: "⏳ 排期顺延 7 天",
+    prompt: "因近期有其他安排，将所有待完成任务整体顺延 7 天开始。",
+  },
+  {
+    label: "🎯 增加实战演练",
+    prompt: "增加更多实战操作与可交付成果验收阶段，提升实践难度。",
+  },
+  {
+    label: "💡 降低每日负担",
+    prompt: "将每日学习时长控制在 30 分钟以内，任务拆解更细致更平缓。",
+  },
+  {
+    label: "🔄 增加巩固复习",
+    prompt: "在关键节点增加阶段性知识点主动回忆与模拟自测任务。",
+  },
+]
 
 interface AggregatedGanttProps {
   plans: StudyPlanListItem[]
@@ -102,6 +144,50 @@ function timelineBounds(plans: StudyPlanListItem[]): {
     start,
     end,
     duration: Math.max(dayOffset(end, start) + 1, 1),
+  }
+}
+
+interface EnrichedTask extends StudyTaskPublic {
+  planId: string
+  planTitle: string
+  planDifficulty: string
+  notebookId: string
+  notebookTitle: string
+  conversationId: string
+  color: string
+}
+
+function getTaskRelativeStatus(task: StudyTaskPublic, today: string) {
+  if (task.is_completed) {
+    return { text: "已完成", variant: "secondary" as const, overdue: false }
+  }
+  if (task.end_date < today) {
+    const days = dayOffset(today, task.end_date)
+    return {
+      text: `已逾期 ${days} 天`,
+      variant: "destructive" as const,
+      overdue: true,
+    }
+  }
+  if (task.start_date <= today && task.end_date >= today) {
+    const left = dayOffset(task.end_date, today) + 1
+    return {
+      text: `进行中 · 剩 ${left} 天`,
+      variant: "default" as const,
+      overdue: false,
+    }
+  }
+  const diff = dayOffset(task.start_date, today)
+  if (diff === 1) {
+    return { text: "明天开始", variant: "outline" as const, overdue: false }
+  }
+  if (diff === 2) {
+    return { text: "后天开始", variant: "outline" as const, overdue: false }
+  }
+  return {
+    text: `${diff} 天后开始`,
+    variant: "outline" as const,
+    overdue: false,
   }
 }
 
@@ -167,10 +253,15 @@ export function AggregatedGantt({ plans }: AggregatedGanttProps) {
   const queryClient = useQueryClient()
   const { showErrorToast, showSuccessToast } = useCustomToast()
 
-  // Filter state
+  const [activeTab, setActiveTab] = useState<"timeline" | "pipeline" | "table">(
+    "timeline",
+  )
   const [filterMode, setFilterMode] = useState<"all" | "active" | "completed">(
     "all",
   )
+  const [pipelineSort, setPipelineSort] = useState<
+    "time_asc" | "time_desc" | "diff_desc" | "diff_asc" | "duration"
+  >("time_asc")
 
   // Rename Conversation Dialog
   const [renameTarget, setRenameTarget] = useState<{
@@ -179,7 +270,7 @@ export function AggregatedGantt({ plans }: AggregatedGanttProps) {
   } | null>(null)
   const [newTitle, setNewTitle] = useState("")
 
-  // Edit Plan Dialog
+  // Edit Plan Name / Details Dialog
   const [editingPlan, setEditingPlan] = useState<{
     id: string
     title: string
@@ -187,11 +278,25 @@ export function AggregatedGantt({ plans }: AggregatedGanttProps) {
     reminder_enabled: boolean
   } | null>(null)
 
+  // Quick Rename Plan Dialog
+  const [quickRenamePlan, setQuickRenamePlan] = useState<{
+    id: string
+    title: string
+  } | null>(null)
+  const [planNewName, setPlanNewName] = useState("")
+
   // Delete Plan Confirmation
   const [deletingPlan, setDeletingPlan] = useState<{
     id: string
     title: string
   } | null>(null)
+
+  // AI Adjust Dialog
+  const [aiAdjustOpen, setAiAdjustOpen] = useState(false)
+  const [aiTargetPlanId, setAiTargetPlanId] = useState<string>(
+    plans[0]?.id || "",
+  )
+  const [aiInstruction, setAiInstruction] = useState("")
 
   // Edit Task Dialog
   const [editingTask, setEditingTask] = useState<{
@@ -261,6 +366,7 @@ export function AggregatedGantt({ plans }: AggregatedGanttProps) {
       void queryClient.invalidateQueries({ queryKey: ["study-plan"] })
       showSuccessToast("学习计划已更新")
       setEditingPlan(null)
+      setQuickRenamePlan(null)
     },
     onError: (error) => showErrorToast(extractErrorMessage(error)),
   })
@@ -289,7 +395,7 @@ export function AggregatedGantt({ plans }: AggregatedGanttProps) {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["study-plans"] })
       void queryClient.invalidateQueries({ queryKey: ["study-plan"] })
-      showSuccessToast("任务已更新")
+      showSuccessToast("任务状态已更新")
       setEditingTask(null)
     },
     onError: (error) => showErrorToast(extractErrorMessage(error)),
@@ -324,19 +430,99 @@ export function AggregatedGantt({ plans }: AggregatedGanttProps) {
     onError: (error) => showErrorToast(extractErrorMessage(error)),
   })
 
-  // Calculations
-  const allTasks = useMemo(() => plans.flatMap((p) => p.tasks), [plans])
+  const aiAdjustMutation = useMutation({
+    mutationFn: ({
+      planId,
+      instruction,
+    }: {
+      planId: string
+      instruction: string
+    }) =>
+      studyPlansApi.aiAdjust(planId, {
+        instruction,
+        timezone:
+          Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai",
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["study-plans"] })
+      void queryClient.invalidateQueries({ queryKey: ["study-plan"] })
+      showSuccessToast("AI 已成功重新优化排期与甘特图！")
+      setAiAdjustOpen(false)
+      setAiInstruction("")
+    },
+    onError: (error) => showErrorToast(extractErrorMessage(error)),
+  })
+
+  // Enriched flat task pipeline
+  const enrichedTasks = useMemo(() => {
+    const list: EnrichedTask[] = []
+    for (const plan of plans) {
+      const color = colorForNotebook(plan.notebook_id)
+      for (const task of plan.tasks) {
+        list.push({
+          ...task,
+          planId: plan.id,
+          planTitle: plan.title,
+          planDifficulty: plan.difficulty,
+          notebookId: plan.notebook_id,
+          notebookTitle: plan.notebook_title,
+          conversationId: plan.conversation_id,
+          color,
+        })
+      }
+    }
+    return list
+  }, [plans])
+
   const completedTasksCount = useMemo(
-    () => allTasks.filter((t) => t.is_completed).length,
-    [allTasks],
+    () => enrichedTasks.filter((t) => t.is_completed).length,
+    [enrichedTasks],
   )
   const progressPercent = useMemo(
     () =>
-      allTasks.length > 0
-        ? Math.round((completedTasksCount / allTasks.length) * 100)
+      enrichedTasks.length > 0
+        ? Math.round((completedTasksCount / enrichedTasks.length) * 100)
         : 0,
-    [allTasks.length, completedTasksCount],
+    [enrichedTasks.length, completedTasksCount],
   )
+
+  // Sorted and filtered pipeline
+  const sequencedTasks = useMemo(() => {
+    let filtered = enrichedTasks
+    if (filterMode === "active") {
+      filtered = filtered.filter((t) => !t.is_completed)
+    } else if (filterMode === "completed") {
+      filtered = filtered.filter((t) => t.is_completed)
+    }
+
+    return [...filtered].sort((a, b) => {
+      if (pipelineSort === "time_asc") {
+        if (a.is_completed !== b.is_completed) return a.is_completed ? 1 : -1
+        return (
+          a.start_date.localeCompare(b.start_date) ||
+          a.end_date.localeCompare(b.end_date)
+        )
+      }
+      if (pipelineSort === "time_desc") {
+        if (a.is_completed !== b.is_completed) return a.is_completed ? 1 : -1
+        return b.start_date.localeCompare(a.start_date)
+      }
+      if (pipelineSort === "diff_desc") {
+        const diffA = DIFFICULTY_WEIGHT[a.planDifficulty] || 2
+        const diffB = DIFFICULTY_WEIGHT[b.planDifficulty] || 2
+        return diffB - diffA || a.start_date.localeCompare(b.start_date)
+      }
+      if (pipelineSort === "diff_asc") {
+        const diffA = DIFFICULTY_WEIGHT[a.planDifficulty] || 2
+        const diffB = DIFFICULTY_WEIGHT[b.planDifficulty] || 2
+        return diffA - diffB || a.start_date.localeCompare(b.start_date)
+      }
+      if (pipelineSort === "duration") {
+        return b.estimated_minutes - a.estimated_minutes
+      }
+      return 0
+    })
+  }, [enrichedTasks, filterMode, pipelineSort])
 
   const filteredPlans = useMemo(() => {
     if (filterMode === "all") return plans
@@ -390,6 +576,11 @@ export function AggregatedGantt({ plans }: AggregatedGanttProps) {
     })
   }
 
+  const openQuickRename = (plan: StudyPlanListItem) => {
+    setQuickRenamePlan({ id: plan.id, title: plan.title })
+    setPlanNewName(plan.title)
+  }
+
   const openAddTask = (planId: string) => {
     const plan = plans.find((p) => p.id === planId)
     const startDate = plan?.start_date || localDateString()
@@ -404,20 +595,26 @@ export function AggregatedGantt({ plans }: AggregatedGanttProps) {
     })
   }
 
+  const openAiAdjust = (planId?: string) => {
+    setAiTargetPlanId(planId || plans[0]?.id || "")
+    setAiInstruction("")
+    setAiAdjustOpen(true)
+  }
+
   return (
     <div className="space-y-4">
-      {/* Overview stats & controls toolbar */}
-      <div className="flex flex-col gap-3 rounded-2xl border bg-card p-4 shadow-card sm:flex-row sm:items-center sm:justify-between">
+      {/* Top Header Toolbar & AI Action & Stats */}
+      <div className="flex flex-col gap-3 rounded-2xl border bg-card p-4 shadow-card lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-4">
           <div className="flex items-center gap-2">
             <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <CheckCircle2 className="size-4" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">计划总览</p>
+              <p className="text-xs text-muted-foreground">总计划进度</p>
               <p className="text-sm font-semibold">
-                {plans.length} 计划 · {completedTasksCount}/{allTasks.length}{" "}
-                任务完成
+                {plans.length} 计划 · {completedTasksCount}/
+                {enrichedTasks.length} 任务完成
               </p>
             </div>
           </div>
@@ -435,37 +632,70 @@ export function AggregatedGantt({ plans }: AggregatedGanttProps) {
           </div>
         </div>
 
-        {/* Filter buttons */}
-        <div className="flex items-center gap-1.5 self-start sm:self-center">
-          <Filter className="size-3.5 text-muted-foreground mr-1" />
+        <div className="flex flex-wrap items-center gap-2">
+          {/* AI Copilot Button */}
           <Button
-            variant={filterMode === "all" ? "secondary" : "ghost"}
+            variant="default"
             size="sm"
-            className="h-7 text-xs px-2.5"
-            onClick={() => setFilterMode("all")}
+            onClick={() => openAiAdjust()}
+            className="h-8 gap-1.5 shadow-xs bg-primary text-primary-foreground hover:bg-primary/90"
           >
-            全部
+            <Sparkles className="size-3.5 animate-pulse" />
+            <span className="text-xs font-medium">AI 智能调整计划</span>
           </Button>
-          <Button
-            variant={filterMode === "active" ? "secondary" : "ghost"}
-            size="sm"
-            className="h-7 text-xs px-2.5"
-            onClick={() => setFilterMode("active")}
+
+          {/* View Tab Switcher */}
+          <Tabs
+            value={activeTab}
+            onValueChange={(val) => setActiveTab(val as typeof activeTab)}
           >
-            进行中
-          </Button>
-          <Button
-            variant={filterMode === "completed" ? "secondary" : "ghost"}
-            size="sm"
-            className="h-7 text-xs px-2.5"
-            onClick={() => setFilterMode("completed")}
-          >
-            已完成
-          </Button>
+            <TabsList className="h-8 p-0.5">
+              <TabsTrigger value="timeline" className="text-xs px-2.5 h-7">
+                <Calendar className="size-3 mr-1" />
+                时间轴视图
+              </TabsTrigger>
+              <TabsTrigger value="pipeline" className="text-xs px-2.5 h-7">
+                <ListOrdered className="size-3 mr-1" />
+                执行流水线
+              </TabsTrigger>
+              <TabsTrigger value="table" className="text-xs px-2.5 h-7">
+                明细列表
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+
+          {/* Status Filter */}
+          <div className="flex items-center gap-1 border-l pl-2">
+            <Filter className="size-3.5 text-muted-foreground mr-1 hidden sm:block" />
+            <Button
+              variant={filterMode === "all" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 text-xs px-2"
+              onClick={() => setFilterMode("all")}
+            >
+              全部
+            </Button>
+            <Button
+              variant={filterMode === "active" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 text-xs px-2"
+              onClick={() => setFilterMode("active")}
+            >
+              待办
+            </Button>
+            <Button
+              variant={filterMode === "completed" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 text-xs px-2"
+              onClick={() => setFilterMode("completed")}
+            >
+              已完
+            </Button>
+          </div>
         </div>
       </div>
 
-      {legendNotebooks.length > 1 ? (
+      {legendNotebooks.length > 1 && activeTab === "timeline" ? (
         <ul className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
           {legendNotebooks.map((notebook) => (
             <li key={notebook.id} className="flex items-center gap-2">
@@ -480,286 +710,626 @@ export function AggregatedGantt({ plans }: AggregatedGanttProps) {
         </ul>
       ) : null}
 
-      {/* Gantt Timeline View */}
-      <div className="isolate max-w-full overflow-x-auto rounded-2xl border bg-card shadow-card">
-        <div
-          className="grid min-w-max"
-          style={{ gridTemplateColumns: `16rem ${timelineWidth}px` }}
-        >
-          <div className="sticky left-0 z-10 border-b border-r bg-card/95 backdrop-blur-xs px-4 py-3 text-xs font-medium text-muted-foreground">
-            学习计划 / 任务进度
-          </div>
-          <div className="relative flex border-b bg-card">
-            {days.map((index) => {
-              const current = new Date(
-                parseDate(start).getTime() + index * 86_400_000,
-              )
-              return (
+      {/* 1. TIMELINE GANTT VIEW */}
+      {activeTab === "timeline" && (
+        <div className="isolate max-w-full overflow-x-auto rounded-2xl border bg-card shadow-card">
+          <div
+            className="grid min-w-max"
+            style={{ gridTemplateColumns: `16rem ${timelineWidth}px` }}
+          >
+            <div className="sticky left-0 z-10 border-b border-r bg-card/95 backdrop-blur-xs px-4 py-3 text-xs font-medium text-muted-foreground">
+              学习计划 / 任务进度
+            </div>
+            <div className="relative flex border-b bg-card">
+              {days.map((index) => {
+                const current = new Date(
+                  parseDate(start).getTime() + index * 86_400_000,
+                )
+                return (
+                  <div
+                    key={current.toISOString()}
+                    className="shrink-0 border-r px-0.5 py-2.5 text-center text-[10px] tabular-nums text-muted-foreground"
+                    style={{ width: AGGREGATED_DAY_WIDTH }}
+                  >
+                    {current.getUTCMonth() + 1}/{current.getUTCDate()}
+                  </div>
+                )
+              })}
+              {showToday ? (
                 <div
-                  key={current.toISOString()}
-                  className="shrink-0 border-r px-0.5 py-2.5 text-center text-[10px] tabular-nums text-muted-foreground"
-                  style={{ width: AGGREGATED_DAY_WIDTH }}
-                >
-                  {current.getUTCMonth() + 1}/{current.getUTCDate()}
-                </div>
-              )
-            })}
-            {showToday ? (
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-y-0 z-[1] w-px bg-primary"
-                style={{
-                  left:
-                    todayOffset * AGGREGATED_DAY_WIDTH +
-                    AGGREGATED_DAY_WIDTH / 2,
-                }}
-              />
-            ) : null}
-          </div>
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-y-0 z-[1] w-px bg-primary"
+                  style={{
+                    left:
+                      todayOffset * AGGREGATED_DAY_WIDTH +
+                      AGGREGATED_DAY_WIDTH / 2,
+                  }}
+                />
+              ) : null}
+            </div>
 
-          {filteredPlans.map((plan) => {
-            const color = colorForNotebook(plan.notebook_id)
-            return (
-              <div key={plan.id} className="contents">
-                <div className="sticky left-0 z-10 flex flex-col justify-center gap-1.5 border-r border-b bg-card px-4 py-3">
-                  <div className="flex items-center justify-between gap-1">
-                    <button
-                      type="button"
-                      onClick={() => openPlanEdit(plan)}
-                      className="line-clamp-1 text-left text-xs font-semibold hover:text-primary transition-colors cursor-pointer"
-                      title={`点击编辑计划：${plan.title}`}
-                    >
-                      {plan.title}
-                    </button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
+            {filteredPlans.map((plan) => {
+              const color = colorForNotebook(plan.notebook_id)
+              return (
+                <div key={plan.id} className="contents">
+                  <div className="sticky left-0 z-10 flex flex-col justify-center gap-1.5 border-r border-b bg-card px-4 py-3">
+                    <div className="flex items-center justify-between gap-1">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => openPlanEdit(plan)}
+                          className="truncate text-left text-xs font-semibold hover:text-primary transition-colors cursor-pointer"
+                          title={`编辑计划：${plan.title}`}
+                        >
+                          {plan.title}
+                        </button>
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="size-5 shrink-0 rounded text-muted-foreground hover:text-foreground"
+                          className="size-4 shrink-0 text-muted-foreground hover:text-foreground"
+                          title="修改计划名称"
+                          onClick={() => openQuickRename(plan)}
                         >
-                          <MoreHorizontal className="size-3" />
+                          <Pencil className="size-2.5" />
                         </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => openPlanEdit(plan)}>
-                          <Pencil className="size-3.5 mr-2" />
-                          编辑计划
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => openAddTask(plan.id)}>
-                          <Plus className="size-3.5 mr-2" />
-                          添加任务
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          onClick={() =>
-                            setDeletingPlan({ id: plan.id, title: plan.title })
-                          }
-                        >
-                          <Trash2 className="size-3.5 mr-2" />
-                          删除计划
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                    <Link
-                      to="/notebooks/$notebookId"
-                      params={{ notebookId: plan.notebook_id }}
-                      className="truncate hover:text-foreground transition-colors"
-                      title={`笔记本：${plan.notebook_title}`}
-                    >
-                      {plan.notebook_title}
-                    </Link>
-                    <span>·</span>
-                    <Link
-                      to="/notebooks/$notebookId"
-                      params={{ notebookId: plan.notebook_id }}
-                      search={{ conversation: plan.conversation_id }}
-                      className="truncate hover:text-primary transition-colors"
-                      title={`问答：${plan.conversation_title}`}
-                    >
-                      {plan.conversation_title}
-                    </Link>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-4 shrink-0 rounded p-0 text-muted-foreground/70 hover:text-foreground"
-                      title="重命名对话"
-                      onClick={() =>
-                        setRenameTarget({
-                          conversationId: plan.conversation_id,
-                          currentTitle: plan.conversation_title,
-                        })
-                      }
-                    >
-                      <Pencil className="size-2.5" />
-                    </Button>
-                  </div>
-                </div>
-                <div
-                  className="relative h-14 border-b"
-                  style={{
-                    backgroundImage:
-                      "linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px)",
-                    backgroundSize: `${AGGREGATED_DAY_WIDTH}px 100%`,
-                  }}
-                >
-                  {showToday ? (
-                    <div
-                      aria-hidden="true"
-                      className="pointer-events-none absolute inset-y-0 z-[1] w-px bg-primary/40"
-                      style={{
-                        left:
-                          todayOffset * AGGREGATED_DAY_WIDTH +
-                          AGGREGATED_DAY_WIDTH / 2,
-                      }}
-                    />
-                  ) : null}
-                  {plan.tasks.map((task) => (
-                    <TaskBar
-                      key={task.id}
-                      task={task}
-                      origin={start}
-                      color={color}
-                      onOpenEdit={() => openTaskEdit(plan.id, task)}
-                    />
-                  ))}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* Task Details & Action Table */}
-      <div className="isolate max-w-full overflow-x-auto rounded-2xl border bg-card shadow-card">
-        <table className="w-full min-w-[50rem] text-left text-sm">
-          <caption className="sr-only">学习计划任务明细表</caption>
-          <thead className="bg-muted/40 text-xs text-muted-foreground">
-            <tr>
-              <th className="px-4 py-3 font-medium">所属计划</th>
-              <th className="px-4 py-3 font-medium">任务阶段</th>
-              <th className="px-4 py-3 font-medium">时间安排</th>
-              <th className="px-4 py-3 font-medium">耗时</th>
-              <th className="px-4 py-3 font-medium">状态</th>
-              <th className="px-4 py-3 font-medium text-right">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredPlans.flatMap((plan) =>
-              plan.tasks.map((task) => (
-                <tr
-                  key={task.id}
-                  className="border-t transition-colors hover:bg-muted/20"
-                >
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-5 shrink-0 rounded text-muted-foreground hover:text-foreground"
+                          >
+                            <MoreHorizontal className="size-3" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => openAiAdjust(plan.id)}
+                          >
+                            <Sparkles className="size-3.5 mr-2 text-primary" />
+                            AI 智能重排此计划
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => openQuickRename(plan)}
+                          >
+                            <Pencil className="size-3.5 mr-2" />
+                            修改计划名称
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openPlanEdit(plan)}>
+                            <Calendar className="size-3.5 mr-2" />
+                            编辑计划详情
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => openAddTask(plan.id)}
+                          >
+                            <Plus className="size-3.5 mr-2" />
+                            添加任务
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() =>
+                              setDeletingPlan({
+                                id: plan.id,
+                                title: plan.title,
+                              })
+                            }
+                          >
+                            <Trash2 className="size-3.5 mr-2" />
+                            删除计划
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <Link
+                        to="/notebooks/$notebookId"
+                        params={{ notebookId: plan.notebook_id }}
+                        className="truncate hover:text-foreground transition-colors"
+                        title={`笔记本：${plan.notebook_title}`}
+                      >
+                        {plan.notebook_title}
+                      </Link>
+                      <span>·</span>
                       <Link
                         to="/notebooks/$notebookId"
                         params={{ notebookId: plan.notebook_id }}
                         search={{ conversation: plan.conversation_id }}
-                        className="font-medium hover:text-primary transition-colors line-clamp-1"
-                        title={plan.title}
+                        className="truncate hover:text-primary transition-colors"
+                        title={`问答：${plan.conversation_title}`}
                       >
-                        {plan.title}
+                        {plan.conversation_title}
                       </Link>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="size-4 shrink-0 rounded p-0 text-muted-foreground/70 hover:text-foreground"
+                        title="重命名对话"
+                        onClick={() =>
+                          setRenameTarget({
+                            conversationId: plan.conversation_id,
+                            currentTitle: plan.conversation_title,
+                          })
+                        }
+                      >
+                        <Pencil className="size-2.5" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div
+                    className="relative h-14 border-b"
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px)",
+                      backgroundSize: `${AGGREGATED_DAY_WIDTH}px 100%`,
+                    }}
+                  >
+                    {showToday ? (
+                      <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-y-0 z-[1] w-px bg-primary/40"
+                        style={{
+                          left:
+                            todayOffset * AGGREGATED_DAY_WIDTH +
+                            AGGREGATED_DAY_WIDTH / 2,
+                        }}
+                      />
+                    ) : null}
+                    {plan.tasks.map((task) => (
+                      <TaskBar
+                        key={task.id}
+                        task={task}
+                        origin={start}
+                        color={color}
+                        onOpenEdit={() => openTaskEdit(plan.id, task)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 2. UPCOMING / SEQUENCED EXECUTION PIPELINE */}
+      {activeTab === "pipeline" && (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+            <div className="flex items-center gap-2">
+              <ListOrdered className="size-4 text-primary" />
+              <h3 className="text-sm font-semibold">
+                逐个完成清单 · 待办执行流水线（{sequencedTasks.length} 项）
+              </h3>
+            </div>
+            <div className="flex items-center gap-2">
+              <ArrowUpDown className="size-3.5 text-muted-foreground" />
+              <Select
+                value={pipelineSort}
+                onValueChange={(val) =>
+                  setPipelineSort(val as typeof pipelineSort)
+                }
+              >
+                <SelectTrigger className="h-8 text-xs w-40">
+                  <SelectValue placeholder="排序方式" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="time_asc">时间优先（近期优先）</SelectItem>
+                  <SelectItem value="time_desc">
+                    时间倒序（远期优先）
+                  </SelectItem>
+                  <SelectItem value="diff_desc">
+                    难度优先（高难度挑战）
+                  </SelectItem>
+                  <SelectItem value="diff_asc">
+                    循序渐进（基础入门优先）
+                  </SelectItem>
+                  <SelectItem value="duration">
+                    时长降序（长任务优先）
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {sequencedTasks.map((task, idx) => {
+              const statusInfo = getTaskRelativeStatus(task, today)
+              return (
+                <div
+                  key={task.id}
+                  className={cn(
+                    "relative flex flex-col justify-between gap-2.5 rounded-xl border bg-card p-4 shadow-card transition-all hover:border-primary/40",
+                    task.is_completed && "opacity-60 bg-muted/20",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-start gap-2.5 min-w-0">
+                      <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground mt-0.5">
+                        {idx + 1}
+                      </div>
+                      <div className="min-w-0">
+                        <button
+                          type="button"
+                          onClick={() => openTaskEdit(task.planId, task)}
+                          className={cn(
+                            "text-left font-medium text-sm transition-colors hover:text-primary cursor-pointer line-clamp-1",
+                            task.is_completed &&
+                              "line-through text-muted-foreground",
+                          )}
+                        >
+                          {task.title}
+                        </button>
+                        <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                          {task.planTitle} · {task.notebookTitle}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge
+                      variant={statusInfo.variant}
+                      className="text-[10px] shrink-0"
+                    >
+                      {statusInfo.overdue ? (
+                        <AlertCircle className="size-3 mr-1" />
+                      ) : null}
+                      {statusInfo.text}
+                    </Badge>
+                  </div>
+
+                  {task.description ? (
+                    <p className="text-xs text-muted-foreground/90 bg-muted/30 p-2 rounded-lg line-clamp-2">
+                      {task.description}
+                    </p>
+                  ) : null}
+
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t text-xs text-muted-foreground">
+                    <div className="flex items-center gap-3">
+                      <span className="flex items-center gap-1 tabular-nums">
+                        <Calendar className="size-3" />
+                        {dateLabel(task.start_date)} —{" "}
+                        {dateLabel(task.end_date)}
+                      </span>
+                      <span className="flex items-center gap-1 tabular-nums">
+                        <Clock className="size-3" />
+                        {task.estimated_minutes} 分/天
+                      </span>
                       <Badge
                         variant="secondary"
-                        className="font-normal shrink-0"
+                        className="text-[10px] font-normal"
                       >
-                        {difficultyLabels[plan.difficulty]}
+                        {difficultyLabels[
+                          task.planDifficulty as keyof typeof difficultyLabels
+                        ] || "进阶"}
                       </Badge>
                     </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => openTaskEdit(plan.id, task)}
-                      className={cn(
-                        "text-left font-medium transition-colors hover:text-primary cursor-pointer line-clamp-1",
-                        task.is_completed &&
-                          "text-muted-foreground line-through opacity-75",
-                      )}
-                    >
-                      {task.title}
-                    </button>
-                    {task.description ? (
-                      <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
-                        {task.description}
-                      </p>
-                    ) : null}
-                  </td>
-                  <td className="px-4 py-3 tabular-nums text-xs text-muted-foreground whitespace-nowrap">
-                    {dateLabel(task.start_date)} — {dateLabel(task.end_date)}
-                  </td>
-                  <td className="px-4 py-3 tabular-nums text-xs text-muted-foreground whitespace-nowrap">
-                    {task.estimated_minutes} 分钟/天
-                  </td>
-                  <td className="px-4 py-3">
-                    <label
-                      htmlFor={`task-check-row-${task.id}`}
-                      className="inline-flex cursor-pointer items-center gap-2"
-                    >
-                      <Checkbox
-                        id={`task-check-row-${task.id}`}
-                        checked={task.is_completed}
-                        onCheckedChange={(checked) =>
-                          updateTaskMutation.mutate({
-                            planId: plan.id,
-                            taskId: task.id,
-                            request: { is_completed: checked === true },
-                          })
-                        }
-                      />
-                      <span
+
+                    <div className="flex items-center gap-2">
+                      <label
+                        htmlFor={`pipeline-check-${task.id}`}
+                        className="inline-flex items-center gap-1.5 cursor-pointer select-none"
+                      >
+                        <Checkbox
+                          id={`pipeline-check-${task.id}`}
+                          checked={task.is_completed}
+                          onCheckedChange={(checked) =>
+                            updateTaskMutation.mutate({
+                              planId: task.planId,
+                              taskId: task.id,
+                              request: { is_completed: checked === true },
+                            })
+                          }
+                        />
+                        <span className="text-xs">
+                          {task.is_completed ? "已完成" : "完成"}
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* 3. TASK DETAILS TABLE */}
+      {activeTab === "table" && (
+        <div className="isolate max-w-full overflow-x-auto rounded-2xl border bg-card shadow-card">
+          <table className="w-full min-w-[50rem] text-left text-sm">
+            <caption className="sr-only">学习计划任务明细表</caption>
+            <thead className="bg-muted/40 text-xs text-muted-foreground">
+              <tr>
+                <th className="px-4 py-3 font-medium">所属计划</th>
+                <th className="px-4 py-3 font-medium">任务阶段</th>
+                <th className="px-4 py-3 font-medium">时间安排</th>
+                <th className="px-4 py-3 font-medium">耗时</th>
+                <th className="px-4 py-3 font-medium">状态</th>
+                <th className="px-4 py-3 font-medium text-right">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredPlans.flatMap((plan) =>
+                plan.tasks.map((task) => (
+                  <tr
+                    key={task.id}
+                    className="border-t transition-colors hover:bg-muted/20"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <Link
+                          to="/notebooks/$notebookId"
+                          params={{ notebookId: plan.notebook_id }}
+                          search={{ conversation: plan.conversation_id }}
+                          className="font-medium hover:text-primary transition-colors line-clamp-1"
+                          title={plan.title}
+                        >
+                          {plan.title}
+                        </Link>
+                        <Badge
+                          variant="secondary"
+                          className="font-normal shrink-0"
+                        >
+                          {difficultyLabels[plan.difficulty]}
+                        </Badge>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => openTaskEdit(plan.id, task)}
                         className={cn(
-                          "text-xs select-none",
-                          task.is_completed
-                            ? "text-muted-foreground line-through"
-                            : "font-medium text-foreground",
+                          "text-left font-medium transition-colors hover:text-primary cursor-pointer line-clamp-1",
+                          task.is_completed &&
+                            "text-muted-foreground line-through opacity-75",
                         )}
                       >
-                        {task.is_completed ? "已完成" : "进行中"}
-                      </span>
-                    </label>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-7 rounded text-muted-foreground hover:text-foreground"
-                        title="编辑任务"
-                        onClick={() => openTaskEdit(plan.id, task)}
+                        {task.title}
+                      </button>
+                      {task.description ? (
+                        <p className="text-xs text-muted-foreground line-clamp-1 mt-0.5">
+                          {task.description}
+                        </p>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums text-xs text-muted-foreground whitespace-nowrap">
+                      {dateLabel(task.start_date)} — {dateLabel(task.end_date)}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums text-xs text-muted-foreground whitespace-nowrap">
+                      {task.estimated_minutes} 分钟/天
+                    </td>
+                    <td className="px-4 py-3">
+                      <label
+                        htmlFor={`task-check-row-${task.id}`}
+                        className="inline-flex cursor-pointer items-center gap-2"
                       >
-                        <Pencil className="size-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="size-7 rounded text-muted-foreground hover:text-destructive"
-                        title="删除任务"
-                        onClick={() =>
-                          deleteTaskMutation.mutate({
-                            planId: plan.id,
-                            taskId: task.id,
-                          })
-                        }
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              )),
-            )}
-          </tbody>
-        </table>
-      </div>
+                        <Checkbox
+                          id={`task-check-row-${task.id}`}
+                          checked={task.is_completed}
+                          onCheckedChange={(checked) =>
+                            updateTaskMutation.mutate({
+                              planId: plan.id,
+                              taskId: task.id,
+                              request: { is_completed: checked === true },
+                            })
+                          }
+                        />
+                        <span
+                          className={cn(
+                            "text-xs select-none",
+                            task.is_completed
+                              ? "text-muted-foreground line-through"
+                              : "font-medium text-foreground",
+                          )}
+                        >
+                          {task.is_completed ? "已完成" : "进行中"}
+                        </span>
+                      </label>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 rounded text-muted-foreground hover:text-foreground"
+                          title="编辑任务"
+                          onClick={() => openTaskEdit(plan.id, task)}
+                        >
+                          <Pencil className="size-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 rounded text-muted-foreground hover:text-destructive"
+                          title="删除任务"
+                          onClick={() =>
+                            deleteTaskMutation.mutate({
+                              planId: plan.id,
+                              taskId: task.id,
+                            })
+                          }
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                )),
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
-      {/* Edit Plan Dialog */}
+      {/* AI Copilot Adjust Modal */}
+      <Dialog open={aiAdjustOpen} onOpenChange={setAiAdjustOpen}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Bot className="size-5 text-primary" />
+              AI 智能学习计划与甘特图调整
+            </DialogTitle>
+            <DialogDescription>
+              向 AI
+              提出调整意图（如排期顺延、周期缩短、更改计划名称、难度升降或添加重点实战），AI
+              将自动重新编排并更新甘特图。
+            </DialogDescription>
+          </DialogHeader>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (
+                !aiInstruction.trim() ||
+                !aiTargetPlanId ||
+                aiAdjustMutation.isPending
+              )
+                return
+              aiAdjustMutation.mutate({
+                planId: aiTargetPlanId,
+                instruction: aiInstruction.trim(),
+              })
+            }}
+            className="space-y-4"
+          >
+            {plans.length > 1 && (
+              <div className="space-y-1.5">
+                <Label htmlFor="ai-target-plan-select">目标学习计划</Label>
+                <Select
+                  value={aiTargetPlanId}
+                  onValueChange={(val) => setAiTargetPlanId(val)}
+                >
+                  <SelectTrigger id="ai-target-plan-select" className="w-full">
+                    <SelectValue placeholder="选择需要调整的计划" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {plans.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.title} ({p.notebook_title})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground">
+                快捷调整模板：
+              </Label>
+              <div className="flex flex-wrap gap-1.5">
+                {AI_PROMPT_PRESETS.map((preset) => (
+                  <Button
+                    key={preset.label}
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs px-2.5 rounded-full hover:border-primary"
+                    onClick={() => setAiInstruction(preset.prompt)}
+                  >
+                    {preset.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="ai-instruction-input">您的调整要求与意图</Label>
+              <textarea
+                id="ai-instruction-input"
+                className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 min-h-[90px]"
+                value={aiInstruction}
+                onChange={(e) => setAiInstruction(e.target.value)}
+                placeholder="例如：将计划名称改为《精通强化学习实战》，总周期延长至 3 周，增加强化学习算法复现任务，并把难度设为 advanced…"
+                maxLength={2000}
+                required
+                autoFocus
+              />
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0 justify-between items-center">
+              <DialogClose asChild>
+                <Button type="button" variant="outline">
+                  取消
+                </Button>
+              </DialogClose>
+              <Button
+                type="submit"
+                disabled={
+                  !aiInstruction.trim() ||
+                  !aiTargetPlanId ||
+                  aiAdjustMutation.isPending
+                }
+                className="gap-2"
+              >
+                <Sparkles className="size-4" />
+                {aiAdjustMutation.isPending
+                  ? "AI 智能调整中…"
+                  : "让 AI 重新规划"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick Rename Plan Dialog */}
+      <Dialog
+        open={Boolean(quickRenamePlan)}
+        onOpenChange={(open) => {
+          if (!open) setQuickRenamePlan(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>修改学习计划名称</DialogTitle>
+            <DialogDescription>
+              设置此学习计划在甘特图与仪表板中的显示标题。
+            </DialogDescription>
+          </DialogHeader>
+          {quickRenamePlan ? (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                const trimmed = planNewName.trim()
+                if (!trimmed || updatePlanMutation.isPending) return
+                updatePlanMutation.mutate({
+                  planId: quickRenamePlan.id,
+                  request: { title: trimmed },
+                })
+              }}
+              className="space-y-4"
+            >
+              <Input
+                value={planNewName}
+                onChange={(e) => setPlanNewName(e.target.value)}
+                placeholder="输入计划名称"
+                maxLength={100}
+                autoFocus
+                required
+              />
+              <DialogFooter className="gap-2 sm:gap-0">
+                <DialogClose asChild>
+                  <Button type="button" variant="outline">
+                    取消
+                  </Button>
+                </DialogClose>
+                <Button
+                  type="submit"
+                  disabled={
+                    !planNewName.trim() ||
+                    planNewName.trim() === quickRenamePlan.title ||
+                    updatePlanMutation.isPending
+                  }
+                >
+                  {updatePlanMutation.isPending ? "保存中…" : "保存"}
+                </Button>
+              </DialogFooter>
+            </form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      {/* Full Edit Plan Dialog */}
       <Dialog
         open={Boolean(editingPlan)}
         onOpenChange={(open) => {
@@ -768,7 +1338,7 @@ export function AggregatedGantt({ plans }: AggregatedGanttProps) {
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>编辑学习计划</DialogTitle>
+            <DialogTitle>编辑学习计划详情</DialogTitle>
             <DialogDescription>
               修改计划的展示标题与总结目标。
             </DialogDescription>
@@ -791,9 +1361,9 @@ export function AggregatedGantt({ plans }: AggregatedGanttProps) {
               className="space-y-4"
             >
               <div className="space-y-1.5">
-                <Label htmlFor="plan-title-input">计划标题</Label>
+                <Label htmlFor="plan-full-title-input">计划标题</Label>
                 <Input
-                  id="plan-title-input"
+                  id="plan-full-title-input"
                   value={editingPlan.title}
                   onChange={(e) =>
                     setEditingPlan({ ...editingPlan, title: e.target.value })

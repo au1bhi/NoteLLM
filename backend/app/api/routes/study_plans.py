@@ -12,6 +12,7 @@ from app.models import (
     Conversation,
     Notebook,
     StudyPlan,
+    StudyPlanAiAdjustRequest,
     StudyPlanGenerateRequest,
     StudyPlanPublic,
     StudyPlansPublic,
@@ -29,6 +30,7 @@ from app.services.provider_settings import (
 )
 from app.services.study_plans import (
     MISSING_STUDY_PLAN_SCHEMA,
+    adjust_study_plan,
     conversation_text,
     generate_study_plan,
     is_missing_study_plan_schema,
@@ -204,6 +206,72 @@ def update_study_plan(
     session.commit()
     session.refresh(plan)
     return plan_public(session=session, plan=plan, user=current_user)
+
+
+@router.post(
+    "/study-plans/{plan_id}/ai-adjust",
+    response_model=StudyPlanPublic,
+    dependencies=[Depends(rate_limit(limit=30, window=60))],
+)
+def ai_adjust_plan(
+    plan_id: uuid.UUID,
+    request: StudyPlanAiAdjustRequest,
+    session: SessionDep,
+    current_user: CurrentUser,
+) -> StudyPlanPublic:
+    plan = get_owned_plan_or_404(
+        session=session, current_user=current_user, plan_id=plan_id
+    )
+    try:
+        timezone = validate_timezone(request.timezone)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+    instruction = request.instruction.strip()
+    if not instruction:
+        raise HTTPException(status_code=400, detail="请输入具体的调整要求")
+
+    user_settings = load_user_provider_settings(session, current_user.id)
+    provider = get_chat_provider(effective_chat_config(user_settings))
+    try:
+        with usage_reservation(
+            session=session,
+            user_id=current_user.id,
+            user_settings=user_settings,
+            chat_tokens=estimate_chat_reserve(instruction + plan.summary),
+        ) as reservation:
+            generated = adjust_study_plan(
+                session=session,
+                plan=plan,
+                instruction=instruction,
+                chat_provider=provider,
+            )
+            reservation.set_actual(
+                chat_tokens=getattr(provider, "total_tokens_used", 0)
+            )
+    except QuotaError as error:
+        raise HTTPException(status_code=429, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except (ChatError, RuntimeError) as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+
+    conversation = session.exec(
+        select(Conversation).where(Conversation.id == plan.conversation_id)
+    ).first()
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="关联会话不存在")
+
+    try:
+        updated_plan = store_generated_plan(
+            session=session,
+            conversation=conversation,
+            generated=generated,
+            timezone=timezone,
+        )
+    except RuntimeError as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    return plan_public(session=session, plan=updated_plan, user=current_user)
 
 
 @router.post(

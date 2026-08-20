@@ -1,6 +1,11 @@
+import "katex/dist/katex.min.css"
+
+import { useMemo } from "react"
 import type { Components } from "react-markdown"
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown"
+import rehypeKatex from "rehype-katex"
 import remarkGfm from "remark-gfm"
+import remarkMath from "remark-math"
 
 interface MarkdownProps {
   content: string
@@ -18,6 +23,21 @@ function safeUrlTransform(url: string): string {
   return ""
 }
 
+/**
+ * Normalizes alternative LaTeX delimiters often emitted by LLMs
+ * \( ... \) -> $ ... $
+ * \[ ... \] -> $$ ... $$
+ */
+function normalizeMathDelimiters(markdown: string): string {
+  if (!markdown) return ""
+  return markdown
+    .replace(
+      /\\\[([\s\S]*?)\\\]/g,
+      (_, formula) => `\n$$\n${formula.trim()}\n$$\n`,
+    )
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_, formula) => `$${formula.trim()}$`)
+}
+
 const markdownComponents: Components = {
   a: ({ href, children, ...props }) => (
     <a {...props} href={href} target="_blank" rel="noopener noreferrer">
@@ -27,14 +47,20 @@ const markdownComponents: Components = {
 }
 
 export function Markdown({ content }: MarkdownProps) {
+  const processedContent = useMemo(
+    () => normalizeMathDelimiters(content),
+    [content],
+  )
+
   return (
-    <div className="markdown prose prose-sm max-w-none prose-neutral dark:prose-invert prose-headings:tracking-tight prose-p:leading-relaxed">
+    <div className="markdown prose prose-sm max-w-none prose-neutral dark:prose-invert prose-headings:tracking-tight prose-p:leading-relaxed prose-math:overflow-x-auto">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
         urlTransform={safeUrlTransform}
         components={markdownComponents}
       >
-        {content}
+        {processedContent}
       </ReactMarkdown>
     </div>
   )

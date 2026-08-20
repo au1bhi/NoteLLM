@@ -1,4 +1,5 @@
 import {
+  type StudyPlanAiAdjustRequest,
   type StudyPlanListItem,
   type StudyPlansPublic,
   StudyPlansService,
@@ -22,4 +23,6 @@ export const studyPlansApi = {
     StudyPlansService.updateStudyTask({ planId, taskId, requestBody }),
   deleteTask: (planId: string, taskId: string) =>
     StudyPlansService.deleteStudyTask({ planId, taskId }),
+  aiAdjust: (planId: string, requestBody: StudyPlanAiAdjustRequest) =>
+    StudyPlansService.aiAdjustPlan({ planId, requestBody }),
 }

@@ -514,6 +514,11 @@ class StudyPlanGenerateRequest(SQLModel):
     timezone: str = Field(default="Asia/Shanghai", min_length=1, max_length=64)
 
 
+class StudyPlanAiAdjustRequest(SQLModel):
+    instruction: str = Field(min_length=1, max_length=2000)
+    timezone: str = Field(default="Asia/Shanghai", min_length=1, max_length=64)
+
+
 class StudyPlanUpdate(SQLModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     summary: str | None = None

@@ -20,12 +20,6 @@ function GanttPage() {
   })
 
   const plans = data?.data ?? []
-  const completedTasks = plans.reduce(
-    (total, plan) =>
-      total + plan.tasks.filter((task) => task.is_completed).length,
-    0,
-  )
-  const totalTasks = plans.reduce((total, plan) => total + plan.tasks.length, 0)
 
   return (
     <div className="isolate flex min-w-0 max-w-full flex-col gap-6 overflow-hidden">
@@ -51,29 +45,7 @@ function GanttPage() {
       ) : null}
 
       {!isLoading && !error && plans.length ? (
-        <>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border bg-card p-4">
-              <p className="text-xs text-muted-foreground">学习计划</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums">
-                {plans.length}
-              </p>
-            </div>
-            <div className="rounded-xl border bg-card p-4">
-              <p className="text-xs text-muted-foreground">阶段任务</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums">
-                {totalTasks}
-              </p>
-            </div>
-            <div className="rounded-xl border bg-card p-4">
-              <p className="text-xs text-muted-foreground">已完成</p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums">
-                {completedTasks}/{totalTasks}
-              </p>
-            </div>
-          </div>
-          <AggregatedGantt plans={plans} />
-        </>
+        <AggregatedGantt plans={plans} />
       ) : null}
 
       {!isLoading && !error && plans.length === 0 ? (

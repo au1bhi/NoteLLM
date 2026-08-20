@@ -200,6 +200,11 @@ export type StudyGuidePublic = {
     faqs: Array<StudyFaqPublic>;
 };
 
+export type StudyPlanAiAdjustRequest = {
+    instruction: string;
+    timezone?: string;
+};
+
 export type StudyPlanGenerateRequest = {
     timezone?: string;
 };
@@ -622,6 +627,13 @@ export type StudyPlansDeleteStudyPlanData = {
 export type StudyPlansDeleteStudyPlanResponse = ({
     [key: string]: (string);
 });
+
+export type StudyPlansAiAdjustPlanData = {
+    planId: string;
+    requestBody: StudyPlanAiAdjustRequest;
+};
+
+export type StudyPlansAiAdjustPlanResponse = (StudyPlanPublic);
 
 export type StudyPlansCreateStudyTaskData = {
     planId: string;

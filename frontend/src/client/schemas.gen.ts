@@ -851,6 +851,27 @@ export const StudyGuidePublicSchema = {
     title: 'StudyGuidePublic'
 } as const;
 
+export const StudyPlanAiAdjustRequestSchema = {
+    properties: {
+        instruction: {
+            type: 'string',
+            maxLength: 2000,
+            minLength: 1,
+            title: 'Instruction'
+        },
+        timezone: {
+            type: 'string',
+            maxLength: 64,
+            minLength: 1,
+            title: 'Timezone',
+            default: 'Asia/Shanghai'
+        }
+    },
+    type: 'object',
+    required: ['instruction'],
+    title: 'StudyPlanAiAdjustRequest'
+} as const;
+
 export const StudyPlanGenerateRequestSchema = {
     properties: {
         timezone: {
