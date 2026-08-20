@@ -32,7 +32,9 @@ jobs:
           bash scripts/build-frontend-dist.sh
           asset="frontend-dist-${RELEASE_TAG}.tar.gz"
           mv frontend-dist.tar.gz "$asset"
-          sha256sum "$asset" > "$asset.sha256"
+          # install.sh parses a bare 64-hex hash; rewrite the checksum file in
+          # that format (the build script's copy embeds the old file name).
+          sha256sum "$asset" | cut -d ' ' -f 1 > "$asset.sha256"
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}

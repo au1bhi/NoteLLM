@@ -15,29 +15,15 @@ services:
       - traefik.enable=true
       # Use the traefik-public network (declared below)
       - traefik.docker.network=traefik-public
-      # Define the port inside of the Docker service to use
-      - traefik.http.services.traefik-dashboard.loadbalancer.server.port=8080
-      # Make Traefik use this domain (from an environment variable) in HTTP
-      - traefik.http.routers.traefik-dashboard-http.entrypoints=http
-      - traefik.http.routers.traefik-dashboard-http.rule=Host(`traefik.${DOMAIN?Variable not set}`)
-      # traefik-https the actual router using HTTPS
-      - traefik.http.routers.traefik-dashboard-https.entrypoints=https
-      - traefik.http.routers.traefik-dashboard-https.rule=Host(`traefik.${DOMAIN?Variable not set}`)
-      - traefik.http.routers.traefik-dashboard-https.tls=true
-      # Use the "le" (Let's Encrypt) resolver created below
-      - traefik.http.routers.traefik-dashboard-https.tls.certresolver=le
-      # Use the special Traefik service api@internal with the web UI/Dashboard
-      - traefik.http.routers.traefik-dashboard-https.service=api@internal
       # https-redirect middleware to redirect HTTP to HTTPS
       - traefik.http.middlewares.https-redirect.redirectscheme.scheme=https
       - traefik.http.middlewares.https-redirect.redirectscheme.permanent=true
-      # traefik-http set up only to use the middleware to redirect to https
-      - traefik.http.routers.traefik-dashboard-http.middlewares=https-redirect
-      # admin-auth middleware with HTTP Basic auth
-      # Using the environment variables USERNAME and HASHED_PASSWORD
-      - traefik.http.middlewares.admin-auth.basicauth.users=${USERNAME?Variable not set}:${HASHED_PASSWORD?Variable not set}
-      # Enable HTTP Basic auth, using the middleware created above
-      - traefik.http.routers.traefik-dashboard-https.middlewares=admin-auth
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /tmp
     volumes:
       # Add Docker as a mounted volume, so that Traefik can read the labels of other services
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -62,8 +48,6 @@ services:
       - --accesslog
       # Enable the Traefik log, for configurations and errors
       - --log
-      # Enable the Dashboard and API
-      - --api
     networks:
       # Use the public network created to be shared between Traefik and
       # any other service that needs to be publicly available with HTTPS

@@ -16,6 +16,7 @@ node_modules/
 # Frontend build artifact produced by scripts/build-frontend-dist.sh (injected
 # into the frontend-dist volume on low-memory servers; ~6MB, never commit).
 /frontend-dist.tar.gz
+/frontend-dist.tar.gz.sha256
 
 # Local frontend overrides (e.g. VITE_API_URL=http://localhost:8000 for the
 # vite dev server). Keep release artifacts built same-origin (empty VITE_API_URL).

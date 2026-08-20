@@ -38,6 +38,98 @@ step() { printf '\n%b\n' "${C_BOLD}==> ${1}${C_RESET}"; }
 
 trap 'printf "\n${C_ERR}安装已取消。${C_RESET}\n" >&2; exit 130' INT
 
+# Refuse archive entries that could escape the destination or create special
+# files. GNU tar's escaped listing makes control characters/backslashes visible
+# so they can be rejected before extraction.
+validate_tar_archive() {
+  local archive="$1" max_bytes="$2" require_index="${3:-0}"
+  local check_dir names verbose member_count
+  check_dir="$(mktemp -d "${TMPDIR:-/tmp}/notellm-archive-check.XXXXXX")"
+  names="$check_dir/names"
+  verbose="$check_dir/verbose"
+
+  if ! LC_ALL=C tar -tzf "$archive" --quoting-style=escape > "$names" \
+    || ! LC_ALL=C tar -tvzf "$archive" --quoting-style=escape --numeric-owner > "$verbose"; then
+    rm -rf -- "$check_dir"
+    err "归档格式无效或已损坏：$archive"
+    return 1
+  fi
+
+  member_count="$(wc -l < "$names")"
+  if (( member_count == 0 || member_count > 20000 )); then
+    rm -rf -- "$check_dir"
+    err "归档成员数量异常：${member_count}（允许 1–20000）。"
+    return 1
+  fi
+
+  local name normalized found_index=0
+  while IFS= read -r name; do
+    normalized="$name"
+    while [[ "$normalized" == ./* ]]; do normalized="${normalized#./}"; done
+    [[ -n "$normalized" ]] || continue
+    case "$normalized" in
+      /*|*\\*|..|../*|*/../*|*/..)
+        rm -rf -- "$check_dir"
+        err "归档包含不安全路径：$name"
+        return 1
+        ;;
+    esac
+    [[ "$normalized" == "index.html" ]] && found_index=1
+  done < "$names"
+
+  local line entry_type
+  while IFS= read -r line; do
+    entry_type="${line:0:1}"
+    if [[ "$entry_type" != "-" && "$entry_type" != "d" ]]; then
+      rm -rf -- "$check_dir"
+      err "归档包含链接、设备或其他特殊文件，已拒绝。"
+      return 1
+    fi
+  done < "$verbose"
+
+  if ! awk -v limit="$max_bytes" '
+      $1 ~ /^-/ {
+        if ($3 !~ /^[0-9]+$/) exit 2
+        total += $3
+        if (total > limit) exit 1
+      }
+      END { if (total <= 0) exit 3 }
+    ' "$verbose"; then
+    rm -rf -- "$check_dir"
+    err "归档解压后大小无效或超过安全上限。"
+    return 1
+  fi
+
+  if [[ "$require_index" == "1" && "$found_index" != "1" ]]; then
+    rm -rf -- "$check_dir"
+    err "前端归档缺少根目录 index.html。"
+    return 1
+  fi
+
+  rm -rf -- "$check_dir"
+}
+
+verify_sha256() {
+  local archive="$1" expected="${2,,}" actual
+  if [[ ! "$expected" =~ ^[0-9a-f]{64}$ ]]; then
+    err "SHA-256 格式无效（应为 64 位十六进制）。"
+    return 1
+  fi
+  actual="$(sha256sum "$archive" | awk '{print $1}')"
+  if [[ "$actual" != "$expected" ]]; then
+    err "SHA-256 校验失败：期望 $expected，实际 $actual"
+    return 1
+  fi
+}
+
+extract_source_archive() {
+  local archive="$1" destination="$2"
+  validate_tar_archive "$archive" 209715200
+  tar -xzf "$archive" --strip-components=1 --unlink-first \
+    --no-same-owner --no-same-permissions --delay-directory-restore \
+    -C "$destination"
+}
+
 banner() {
   cat <<'EOF'
 ==============================================================================
@@ -55,13 +147,31 @@ EOF
 # ~/NoteLLM），已存在则先 git pull 更新，然后重新执行磁盘上的 install.sh
 # （此时 $PWD/compose.yml 存在，会跳过本引导段直接进入主流程）。
 # 因此同一命令即可“安装”，重复运行即为“更新 + 重装”。
-if [[ ! -f "$PWD/compose.yml" ]]; then
+if [[ "${BASH_SOURCE[0]}" == "$0" && ! -f "$PWD/compose.yml" ]]; then
   INSTALL_DIR="${NOTELLM_DIR:-$HOME/NoteLLM}"
   REPO_URL="${NOTELLM_REPO:-https://github.com/au1bhi/NoteLLM.git}"
   BRANCH="${NOTELLM_BRANCH:-master}"
   # 大陆服务器常无法直连 github.com / raw.githubusercontent.com，但
   # codeload.github.com 的源码包通常可达——git 克隆失败时用源码包兜底。
-  TARBALL_URL="${NOTELLM_TARBALL:-https://codeload.github.com/au1bhi/NoteLLM/tar.gz/refs/heads/$BRANCH}"
+  TARBALL_URL="${NOTELLM_TARBALL:-}"
+  TARBALL_SHA256="${NOTELLM_TARBALL_SHA256:-}"
+  if [[ -z "$TARBALL_URL" ]]; then
+    SOURCE_COMMIT="${NOTELLM_COMMIT:-}"
+    if [[ -z "$SOURCE_COMMIT" ]]; then
+      SOURCE_COMMIT="$(curl -fsSL --max-time 30 \
+        "https://api.github.com/repos/au1bhi/NoteLLM/commits/$BRANCH" 2>/dev/null \
+        | sed -nE 's/.*"sha"[[:space:]]*:[[:space:]]*"([0-9a-f]{40})".*/\1/p' \
+        | head -n 1 || true)"
+    fi
+    if [[ ! "$SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+      err "无法把源码包绑定到不可变 Git 提交；请恢复 Git 网络后重试。"
+      exit 1
+    fi
+    TARBALL_URL="https://codeload.github.com/au1bhi/NoteLLM/tar.gz/$SOURCE_COMMIT"
+  elif [[ ! "$TARBALL_SHA256" =~ ^[0-9A-Fa-f]{64}$ ]]; then
+    err "自定义 NOTELLM_TARBALL 必须同时提供 NOTELLM_TARBALL_SHA256。"
+    exit 1
+  fi
   # 禁止 git 弹交互式凭据提示（网络受限时挂起/等待输入）。
   export GIT_TERMINAL_PROMPT=0
 
@@ -77,9 +187,12 @@ if [[ ! -f "$PWD/compose.yml" ]]; then
     else
       # 源码包安装（无 .git）：重新下载源码包即是最新代码，直接覆盖更新。
       echo "==> 更新 $INSTALL_DIR（源码包安装，重新下载最新代码）..."
-      curl -fLsS --max-time 300 "$TARBALL_URL" -o /tmp/notellm-src.tar.gz
-      tar -xzf /tmp/notellm-src.tar.gz --strip-components=1 -C "$INSTALL_DIR"
-      rm -f /tmp/notellm-src.tar.gz
+      source_tmp="$(mktemp -d "${TMPDIR:-/tmp}/notellm-source.XXXXXX")"
+      curl -fLsS --max-time 300 --max-filesize 104857600 \
+        "$TARBALL_URL" -o "$source_tmp/source.tar.gz"
+      [[ -z "$TARBALL_SHA256" ]] || verify_sha256 "$source_tmp/source.tar.gz" "$TARBALL_SHA256"
+      extract_source_archive "$source_tmp/source.tar.gz" "$INSTALL_DIR"
+      rm -rf -- "$source_tmp"
     fi
     cd "$INSTALL_DIR"
   else
@@ -98,9 +211,12 @@ if [[ ! -f "$PWD/compose.yml" ]]; then
       # git 克隆失败（github.com 被墙/不可达）→ 改用 codeload 源码包。
       warn "git clone 失败（可能无法访问 github.com），改用源码包下载 ..."
       mkdir -p "$INSTALL_DIR"
-      curl -fLsS --max-time 300 "$TARBALL_URL" -o /tmp/notellm-src.tar.gz
-      tar -xzf /tmp/notellm-src.tar.gz --strip-components=1 -C "$INSTALL_DIR"
-      rm -f /tmp/notellm-src.tar.gz
+      source_tmp="$(mktemp -d "${TMPDIR:-/tmp}/notellm-source.XXXXXX")"
+      curl -fLsS --max-time 300 --max-filesize 104857600 \
+        "$TARBALL_URL" -o "$source_tmp/source.tar.gz"
+      [[ -z "$TARBALL_SHA256" ]] || verify_sha256 "$source_tmp/source.tar.gz" "$TARBALL_SHA256"
+      extract_source_archive "$source_tmp/source.tar.gz" "$INSTALL_DIR"
+      rm -rf -- "$source_tmp"
     fi
     cd "$INSTALL_DIR"
   fi
@@ -125,20 +241,22 @@ usage() {
   exit 0
 }
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --local) PROFILE="local" ;;
-    --prod) PROFILE="prod" ;;
-    --yes) ASSUME_YES=1 ;;
-    --force) FORCE=1 ;;
-    --dry-run) DRY_RUN=1 ;;
-    --low-mem) LOW_MEM_FORCED=1 ;;
-    --no-low-mem) LOW_MEM_FORCED=0 ;;
-    --help|-h) usage ;;
-    *) echo "✘ 未知参数: $1"; usage ;;
-  esac
-  shift
-done
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --local) PROFILE="local" ;;
+      --prod) PROFILE="prod" ;;
+      --yes) ASSUME_YES=1 ;;
+      --force) FORCE=1 ;;
+      --dry-run) DRY_RUN=1 ;;
+      --low-mem) LOW_MEM_FORCED=1 ;;
+      --no-low-mem) LOW_MEM_FORCED=0 ;;
+      --help|-h) usage ;;
+      *) echo "✘ 未知参数: $1"; usage ;;
+    esac
+    shift
+  done
+}
 
 # ---------- 交互工具 ----------
 # 提问并读入答案；回车取默认值。非交互环境 / --yes 时直接取默认值。
@@ -460,21 +578,12 @@ collect_config() {
       LE_AUTO=1
     fi
     EMAIL="$LE_EMAIL"
-    # USERNAME 也是常见登录环境变量，用 TRAEFIK_USER 提问避免意外继承。
-    ask_var TRAEFIK_USER "Traefik 面板登录用户名" "$(env_get USERNAME || true)"
-    USERNAME="${TRAEFIK_USER:-admin}"
-    TRAEFIK_PASSWORD="$(gen_secret 16)"
-    ask_secret_var TRAEFIK_PASSWORD "Traefik 面板登录密码" "$TRAEFIK_PASSWORD"
-    # Traefik basicauth 接受 {SHA}（base64(SHA-1)，不含 `$`）。apr1/bcrypt 哈希
-    # 里的 `$` 会被 Docker Compose 当作变量插值（WARN "X variable is not set"
-    # 且哈希被置空），{SHA} 无此问题，与本地 compose.override.yml 保持一致。
-    HASHED_PASSWORD="{SHA}$(printf '%s' "$TRAEFIK_PASSWORD" | openssl dgst -sha1 -binary | openssl base64 | tr -d '\n')"
   else
     DOMAIN="localhost"
     FRONTEND_HOST="http://localhost:5173"
     ENVIRONMENT="local"
     STACK_NAME="$(env_get STACK_NAME || true)"; STACK_NAME="${STACK_NAME:-notellm}"
-    EMAIL=""; USERNAME=""; HASHED_PASSWORD=""; TRAEFIK_PASSWORD=""
+    EMAIL=""
   fi
 
   PROJECT_NAME="NoteLLM"
@@ -611,15 +720,15 @@ write_env() {
   env_put REGISTRY_MIRROR "$REGISTRY_MIRROR"
   env_put PYPI_INDEX_URL "$PYPI_INDEX_URL"
   env_put NPM_REGISTRY "$NPM_REGISTRY"
-  # 低内存模式前端产物来源（留空则依次尝试仓库内 frontend-dist.tar.gz →
-  # GitHub Release；也可仅在运行时用环境变量提供，不落盘）。
+  # 显式 URL 必须配套 SHA-256 值或校验文件 URL。本地产物读取同名
+  # .sha256；Release 仅下载与当前精确 Git tag 匹配的版本。
   env_put FRONTEND_DIST_URL "${FRONTEND_DIST_URL:-}"
+  env_put FRONTEND_DIST_SHA256 "${FRONTEND_DIST_SHA256:-}"
+  env_put FRONTEND_DIST_SHA256_URL "${FRONTEND_DIST_SHA256_URL:-}"
+  env_put NOTELLM_RELEASE_TAG "${NOTELLM_RELEASE_TAG:-}"
   if [[ "$PROFILE" == "prod" ]]; then
     env_header "Let's Encrypt / Traefik（生产）"
     env_put EMAIL "$EMAIL"
-    env_put USERNAME "$USERNAME"
-    env_put HASHED_PASSWORD "$HASHED_PASSWORD"
-    env_put TRAEFIK_PASSWORD "$TRAEFIK_PASSWORD"
   fi
 
   env_header "安全密钥（自动生成）"
@@ -689,36 +798,80 @@ sync_frontend_dist() {
     return 0
   fi
 
-  local tar=""
-  # 1) 显式指定 URL
-  if [[ -n "${FRONTEND_DIST_URL:-}" ]]; then
-    info "下载前端 dist：$FRONTEND_DIST_URL"
-    if curl -fLsS --max-time 300 "$FRONTEND_DIST_URL" -o /tmp/notellm-dist.tar.gz; then
-      tar=/tmp/notellm-dist.tar.gz
+  local archive="" expected_hash="" checksum_file=""
+  local dist_url dist_sha dist_sha_url release_tag asset_name release_base
+  local dist_tmp
+  dist_tmp="$(mktemp -d "${TMPDIR:-/tmp}/notellm-dist.XXXXXX")"
+  dist_url="${FRONTEND_DIST_URL:-$(env_get FRONTEND_DIST_URL || true)}"
+  dist_sha="${FRONTEND_DIST_SHA256:-$(env_get FRONTEND_DIST_SHA256 || true)}"
+  dist_sha_url="${FRONTEND_DIST_SHA256_URL:-$(env_get FRONTEND_DIST_SHA256_URL || true)}"
+
+  # 1) Explicit URL: fail closed instead of silently switching artifacts.
+  if [[ -n "$dist_url" ]]; then
+    info "下载前端 dist：$dist_url"
+    archive="$dist_tmp/frontend-dist.tar.gz"
+    if ! curl -fLsS --max-time 300 --max-filesize 52428800 "$dist_url" -o "$archive"; then
+      rm -rf -- "$dist_tmp"
+      err "FRONTEND_DIST_URL 下载失败。"
+      return 1
+    fi
+    if [[ -n "$dist_sha_url" ]]; then
+      checksum_file="$dist_tmp/frontend-dist.sha256"
+      if ! curl -fLsS --max-time 60 --max-filesize 4096 "$dist_sha_url" -o "$checksum_file"; then
+        rm -rf -- "$dist_tmp"
+        err "FRONTEND_DIST_SHA256_URL 下载失败。"
+        return 1
+      fi
+      expected_hash="$(sed -nE 's/^([0-9A-Fa-f]{64})([[:space:]].*)?$/\1/p' "$checksum_file" | head -n 1)"
     else
-      warn "FRONTEND_DIST_URL 下载失败，尝试其他来源。"
+      expected_hash="$dist_sha"
     fi
-  fi
-  # 2) 仓库内的本地产物（开发者上传）
-  if [[ -z "$tar" ]] && [[ -f "$SCRIPT_DIR/frontend-dist.tar.gz" ]]; then
-    tar="$SCRIPT_DIR/frontend-dist.tar.gz"
-    info "使用本地产物：$tar"
-  fi
-  # 3) GitHub Release 最新版本的 frontend-dist-* 资产（3x-ui 风格）
-  if [[ -z "$tar" ]]; then
-    local release_url=""
-    release_url="$(curl -fsSL --max-time 20 \
-      "https://api.github.com/repos/au1bhi/NoteLLM/releases/latest" 2>/dev/null \
-      | grep -oE '"browser_download_url"[[:space:]]*:[[:space:]]*"[^"]*frontend-dist[^"]*\.tar\.gz"' \
-      | head -n 1 | sed -E 's/.*"([^"]*)"/\1/' || true)"
-    if [[ -n "$release_url" ]]; then
-      info "从 GitHub Release 下载前端产物：$release_url"
-      curl -fLsS --max-time 300 "$release_url" -o /tmp/notellm-dist.tar.gz \
-        && tar=/tmp/notellm-dist.tar.gz
+    if [[ -z "$expected_hash" ]]; then
+      rm -rf -- "$dist_tmp"
+      err "FRONTEND_DIST_URL 必须同时提供 FRONTEND_DIST_SHA256 或 FRONTEND_DIST_SHA256_URL。"
+      return 1
     fi
+  # 2) Local artifact: require the build script's sibling checksum file.
+  elif [[ -f "$SCRIPT_DIR/frontend-dist.tar.gz" ]]; then
+    archive="$SCRIPT_DIR/frontend-dist.tar.gz"
+    checksum_file="$SCRIPT_DIR/frontend-dist.tar.gz.sha256"
+    info "使用本地产物：$archive"
+    if [[ ! -f "$checksum_file" ]]; then
+      rm -rf -- "$dist_tmp"
+      err "本地产物缺少校验文件：$checksum_file"
+      return 1
+    fi
+    expected_hash="$(sed -nE 's/^([0-9A-Fa-f]{64})([[:space:]].*)?$/\1/p' "$checksum_file" | head -n 1)"
+  # 3) Release artifact: bind it to the exact checked-out source tag.
+  else
+    release_tag="${NOTELLM_RELEASE_TAG:-$(env_get NOTELLM_RELEASE_TAG || true)}"
+    if [[ -z "$release_tag" ]] && [[ -d "$SCRIPT_DIR/.git" ]]; then
+      release_tag="$(git -C "$SCRIPT_DIR" describe --tags --exact-match --match 'v*' HEAD 2>/dev/null || true)"
+    fi
+    if [[ ! "$release_tag" =~ ^v[0-9A-Za-z._-]+$ ]]; then
+      rm -rf -- "$dist_tmp"
+      err "当前源码不在精确发布 tag；为避免前后端版本错配，不下载 latest 产物。"
+      info "  请 checkout 发布 tag，或提供 FRONTEND_DIST_URL + SHA-256。"
+      return 1
+    fi
+    asset_name="frontend-dist-${release_tag}.tar.gz"
+    release_base="https://github.com/au1bhi/NoteLLM/releases/download/${release_tag}"
+    archive="$dist_tmp/$asset_name"
+    checksum_file="$dist_tmp/$asset_name.sha256"
+    info "下载匹配源码版本的前端产物：$release_tag"
+    if ! curl -fLsS --max-time 300 --max-filesize 52428800 \
+      "$release_base/$asset_name" -o "$archive" \
+      || ! curl -fLsS --max-time 60 --max-filesize 4096 \
+      "$release_base/$asset_name.sha256" -o "$checksum_file"; then
+      rm -rf -- "$dist_tmp"
+      err "发布产物或校验文件下载失败：$release_tag"
+      return 1
+    fi
+    expected_hash="$(sed -nE 's/^([0-9A-Fa-f]{64})([[:space:]].*)?$/\1/p' "$checksum_file" | head -n 1)"
   fi
 
-  if [[ -z "$tar" ]]; then
+  if [[ -z "$archive" ]]; then
+    rm -rf -- "$dist_tmp"
     err "低内存模式需要预构建的前端产物，但未找到任何来源。"
     info "  在内存充足的机器上运行：bash scripts/build-frontend-dist.sh"
     info "  然后上传产物（frontend-dist.tar.gz 放到仓库根目录，或设置 FRONTEND_DIST_URL），"
@@ -726,10 +879,19 @@ sync_frontend_dist() {
     return 1
   fi
 
+  if ! verify_sha256 "$archive" "$expected_hash" \
+    || ! validate_tar_archive "$archive" 104857600 1; then
+    rm -rf -- "$dist_tmp"
+    return 1
+  fi
+  ok "前端产物 SHA-256 与归档结构校验通过。"
+
   step "注入前端静态资源到 frontend-dist 卷"
-  "${compose_cmd[@]}" cp "$tar" "frontend:/tmp/notellm-dist.tar.gz"
+  "${compose_cmd[@]}" cp "$archive" "frontend:/tmp/notellm-dist.tar.gz"
+  [[ "$archive" == "$SCRIPT_DIR/frontend-dist.tar.gz" ]] || rm -rf -- "$dist_tmp"
   "${compose_cmd[@]}" exec frontend sh -c \
-    'tar -xzf /tmp/notellm-dist.tar.gz -C /usr/share/nginx/html && rm /tmp/notellm-dist.tar.gz'
+    'find /usr/share/nginx/html -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + && tar -xzf /tmp/notellm-dist.tar.gz --no-same-owner --no-same-permissions -C /usr/share/nginx/html && rm -f /tmp/notellm-dist.tar.gz'
+  [[ "$archive" != "$SCRIPT_DIR/frontend-dist.tar.gz" ]] || rm -rf -- "$dist_tmp"
   ok "前端静态资源已注入（低内存模式，未在服务器上构建）。"
 }
 
@@ -805,7 +967,7 @@ print_summary() {
   # 无条件赋值（包括空值），避免 set -u 下出现未定义变量。
   local k
   for k in DOMAIN FRONTEND_HOST FIRST_SUPERUSER FIRST_SUPERUSER_PASSWORD \
-           SMTP_HOST SMTP_PASSWORD LLM_API_KEY USERNAME TRAEFIK_PASSWORD EMAIL; do
+           SMTP_HOST SMTP_PASSWORD LLM_API_KEY EMAIL; do
     printf -v "$k" '%s' "$(env_get "$k" || true)"
   done
   echo
@@ -817,20 +979,13 @@ print_summary() {
   if [[ "$PROFILE" == "prod" ]]; then
     info "  前端:       https://${DOMAIN}"
     info "  API 健康检查: https://api.${DOMAIN}/api/v1/utils/health-check/"
-    info "  Adminer:    https://adminer.${DOMAIN}"
-    info "  Traefik:    https://traefik.${DOMAIN}"
-    info "  Adminer / Traefik 面板登录（HTTP Basic Auth）:"
-    info "              （用户: ${USERNAME} / 密码: ${TRAEFIK_PASSWORD}）"
-    echo
     info "  管理员:     ${FIRST_SUPERUSER}"
-    info "  密码:       ${FIRST_SUPERUSER_PASSWORD}"
+    info "  管理员密码已写入权限为 600 的 .env，本摘要不回显。"
     info "  Let's Encrypt 邮箱: ${EMAIL}（仅用于证书到期提醒）"
     echo
     warn "部署前请确认 DNS 已全部指向本服务器公网 IP："
     info "    A  ${DOMAIN}          → <本机公网 IP>"
     info "    A  api.${DOMAIN}      → <本机公网 IP>"
-    info "    A  adminer.${DOMAIN}  → <本机公网 IP>"
-    info "    A  traefik.${DOMAIN}  → <本机公网 IP>"
     if [[ "${LE_AUTO:-0}" == "1" ]]; then
       info "  Let's Encrypt 邮箱自动使用了 ${EMAIL}（未配置时兜底）。"
       info "  如需接收证书到期提醒，编辑 .env 的 EMAIL 后重启即可。"
@@ -840,7 +995,7 @@ print_summary() {
     info "  API 文档:   http://localhost:8000/docs"
     echo
     info "  管理员:     ${FIRST_SUPERUSER}"
-    info "  密码:       ${FIRST_SUPERUSER_PASSWORD}"
+    info "  管理员密码已写入权限为 600 的 .env，本摘要不回显。"
   fi
   if [[ -n "$SMTP_HOST" ]]; then
     echo
@@ -904,4 +1059,7 @@ main() {
   print_summary
 }
 
-main "$@"
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+  parse_args "$@"
+  main
+fi

@@ -35,11 +35,6 @@ services:
       # Dummy https-redirect middleware that doesn't really redirect, only to
       # allow running it locally
       - traefik.http.middlewares.https-redirect.contenttype.autodetect=false
-      # Dummy admin-auth so production's adminer label resolves locally too
-      # (user "local" / password "local"; local adminer is reachable directly
-      # at http://localhost:8080, bypassing Traefik). {SHA} avoids `$` in the
-      # value, which Docker Compose would otherwise treat as interpolation.
-      - traefik.http.middlewares.admin-auth.basicauth.users=local:{SHA}k5u0agTDZAyMQn6SsbVX6ILi0qA=
     networks:
       - traefik-public
       - default
@@ -52,13 +47,23 @@ services:
       # port when another local stack already occupies 5433.
       - "127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432"
 
+  # Adminer is a local-only database console — defined here (not in the
+  # base compose.yml) so production never ships it. Reachable only at
+  # http://localhost:8080, never exposed to Traefik or the internet.
   adminer:
+    image: ${REGISTRY_MIRROR:-}library/adminer
     restart: "no"
+    depends_on:
+      - db
+    environment:
+      - ADMINER_DESIGN=pepa-linha-dark
     ports:
       - "127.0.0.1:8080:8080"
 
   backend:
     restart: "no"
+    # Compose watch needs to replace source files during local development.
+    read_only: false
     ports:
       # Loopback-only — the dev backend must never be internet-reachable.
       - "127.0.0.1:8000:8000"
@@ -86,7 +91,7 @@ services:
   frontend:
     restart: "no"
     ports:
-      - "127.0.0.1:5173:80"
+      - "127.0.0.1:5173:8080"
     build:
       context: .
       dockerfile: frontend/Dockerfile

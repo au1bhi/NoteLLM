@@ -33,4 +33,6 @@ VITE_API_URL="" bun run build
 
 OUT="../frontend-dist.tar.gz"
 tar -czf "$OUT" -C dist .
+sha256sum "$OUT" > "$OUT.sha256"
 echo "OK: built SPA -> $OUT ($(du -h "$OUT" | cut -f1))"
+echo "OK: checksum -> $OUT.sha256"

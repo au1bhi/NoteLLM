@@ -27,6 +27,8 @@ RUN bun run build
 
 FROM ${NGINX_IMAGE}
 
+# The nginx official image already runs worker processes as the unprivileged
+# `nginx` user. We listen on port 8080 (non-privileged) and rely on
+# compose-level security_opt/cap_drop for additional hardening.
 COPY --from=build-stage /app/frontend/dist/ /usr/share/nginx/html
-
 COPY ./frontend/nginx.conf /etc/nginx/conf.d/default.conf

@@ -60,6 +60,15 @@ COPY ./backend/app /app/backend/app
 # Ref: https://docs.astral.sh/uv/guides/integration/docker/#intermediate-layers
 RUN sh -c 'uv sync --frozen --package app ${PIP_INDEX_URL:+--default-index "$PIP_INDEX_URL"}'
 
+# Create a non-root user for runtime. The app writes to
+# /app/backend/data/uploads (volume) and /tmp (tmpfs), both writable by
+# this user.
+RUN groupadd --gid 10001 appuser \
+    && useradd --uid 10001 --gid 10001 --no-create-home --home-dir /app --shell /usr/sbin/nologin appuser \
+    && chown -R appuser:appuser /app
+
+USER appuser
+
 WORKDIR /app/backend/
 
 # Preserve the raw TCP peer. The app validates trusted proxy networks and

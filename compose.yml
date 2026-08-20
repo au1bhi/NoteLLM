@@ -22,31 +22,26 @@ services:
       - POSTGRES_USER=${POSTGRES_USER?Variable not set}
       - POSTGRES_DB=${POSTGRES_DB?Variable not set}
 
-  adminer:
-    image: ${REGISTRY_MIRROR:-}library/adminer
-    restart: always
-    networks:
-      - traefik-public
-      - default
-    depends_on:
-      - db
-    environment:
-      - ADMINER_DESIGN=pepa-linha-dark
-    labels:
-      - traefik.enable=true
-      - traefik.docker.network=traefik-public
-      - traefik.constraint-label=traefik-public
-      - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-http.rule=Host(`adminer.${DOMAIN?Variable not set}`)
-      - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-http.entrypoints=http
-      - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-http.middlewares=https-redirect,admin-auth
-      - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-https.rule=Host(`adminer.${DOMAIN?Variable not set}`)
-      - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-https.entrypoints=https
-      - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-https.tls=true
-      - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-https.tls.certresolver=le
-      # Adminer is a full database console — keep it behind the same HTTP Basic
-      # auth as the Traefik dashboard, not publicly reachable.
-      - traefik.http.routers.${STACK_NAME?Variable not set}-adminer-https.middlewares=admin-auth
-      - traefik.http.services.${STACK_NAME?Variable not set}-adminer.loadbalancer.server.port=8080
+  # Existing upload volumes may have been created by an older root-running
+  # image. Repair ownership once before the non-root API starts; this service
+  # has no network access and retains only the capability required by chown.
+  upload-permissions:
+    image: '${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}'
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      args:
+        PY_BASE: ${REGISTRY_MIRROR:-}library/python:3.14-slim
+        PIP_INDEX_URL: ${PYPI_INDEX_URL}
+    user: "0:0"
+    command: ["chown", "-R", "10001:10001", "/app/backend/data/uploads"]
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - app-upload-data:/app/backend/data/uploads
 
   prestart:
     image: '${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}'
@@ -67,6 +62,11 @@ services:
         condition: service_healthy
         restart: true
     command: bash scripts/prestart.sh
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /tmp
     env_file:
       - .env
     environment:
@@ -100,10 +100,17 @@ services:
         restart: true
       prestart:
         condition: service_completed_successfully
+      upload-permissions:
+        condition: service_completed_successfully
     env_file:
       - .env
     volumes:
       - app-upload-data:/app/backend/data/uploads
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /tmp
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
@@ -178,6 +185,11 @@ services:
       - python
       - -m
       - app.services.study_plans
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /tmp
     env_file:
       - .env
     extra_hosts:
@@ -202,6 +214,16 @@ services:
   frontend:
     image: '${DOCKER_IMAGE_FRONTEND?Variable not set}:${TAG-latest}'
     restart: always
+    read_only: true
+    cap_drop: [ALL]
+    # The official nginx master drops workers to the nginx account and needs
+    # these capabilities to manage their writable temp directories/signals.
+    cap_add: [CHOWN, KILL, SETGID, SETUID]
+    security_opt: ["no-new-privileges:true"]
+    tmpfs:
+      - /tmp
+      - /var/cache/nginx
+      - /var/run
     networks:
       - traefik-public
       - default
@@ -233,7 +255,7 @@ services:
       - traefik.docker.network=traefik-public
       - traefik.constraint-label=traefik-public
 
-      - traefik.http.services.${STACK_NAME?Variable not set}-frontend.loadbalancer.server.port=80
+      - traefik.http.services.${STACK_NAME?Variable not set}-frontend.loadbalancer.server.port=8080
 
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.rule=Host(`${DOMAIN?Variable not set}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.entrypoints=http
