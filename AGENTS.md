@@ -2,7 +2,7 @@
 
 ## Persistent Project Plan
 
-Before starting NoteLLM work, read `docs/project/GOAL.md` and `docs/project/PLAN.md`. Follow the current milestone, keep the scope at graduation-project level, and update the plan with completion evidence after meaningful work.
+Before starting NoteLLM work, read `docs/project/GOAL.md` and `docs/project/PLAN.md`. Follow the current milestone, keep the scope at graduation-project level, and update the plan with completion evidence after meaningful work. **每次完成修改后，必须完成严格的自测与可用性验证（包括前端构建/类型检查与后端测试），确认无误后方可提交与同步。**
 
 ## Product Goal
 
@@ -88,7 +88,8 @@ Name tests `test_*.py`. Cover authorization, ingestion failures, retrieval order
 
 ## Commits, PRs, and Thesis Evidence
 
-Use short imperative commits, optionally matching existing emoji prefixes. Commit after each major update. PRs should explain schema or prompt changes, link issues, include tests, and attach UI screenshots. Record architecture decisions and evaluation methods in Markdown so thesis results are reproducible.
+- **严禁未经检验直接提交**：做完任何修改或功能后，**必须先完成端到端检测确认完全可用后方可提交**（包括但不限于类型检查 `tsc`、代码审查 `lint`、单元测试 `pytest`，以及在真实构建/容器环境中验证可用性）。严禁在未确认实际运行正常的情况下草率提交或结束任务。
+- Use short imperative commits, optionally matching existing emoji prefixes. Commit after each major update. PRs should explain schema or prompt changes, link issues, include tests, and attach UI screenshots. Record architecture decisions and evaluation methods in Markdown so thesis results are reproducible.
 
 ## Security & Data Handling
 
