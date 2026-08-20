@@ -215,7 +215,7 @@ export function AggregatedGantt({ plans }: AggregatedGanttProps) {
         </ul>
       ) : null}
 
-      <div className="isolate overflow-x-auto rounded-xl border bg-muted/20">
+      <div className="isolate max-w-full overflow-x-auto rounded-xl border bg-muted/20">
         <div
           className="grid min-w-max"
           style={{ gridTemplateColumns: `14rem ${timelineWidth}px` }}
@@ -337,7 +337,7 @@ export function AggregatedGantt({ plans }: AggregatedGanttProps) {
         </div>
       </div>
 
-      <div className="isolate overflow-x-auto rounded-xl border">
+      <div className="isolate max-w-full overflow-x-auto rounded-xl border">
         <table className="w-full min-w-[44rem] text-left text-sm">
           <caption className="sr-only">全部学习计划任务</caption>
           <thead className="bg-muted/40 text-xs text-muted-foreground">

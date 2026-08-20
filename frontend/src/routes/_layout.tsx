@@ -41,7 +41,7 @@ function Layout() {
   return (
     <SidebarProvider>
       <AppSidebar />
-      <SidebarInset className="relative">
+      <SidebarInset className="relative min-w-0 max-w-full overflow-x-hidden">
         <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-2 border-b bg-background/95 px-4 backdrop-blur-xl">
           <SidebarTrigger className="-ml-1 text-muted-foreground" />
           <Button
@@ -93,8 +93,8 @@ function Layout() {
             </div>
           </div>
         )}
-        <main className="isolate flex-1 p-6 md:p-8">
-          <div className="mx-auto w-full max-w-7xl">
+        <main className="isolate min-w-0 max-w-full flex-1 overflow-x-hidden p-6 md:p-8">
+          <div className="mx-auto w-full max-w-7xl min-w-0">
             <Outlet />
           </div>
         </main>
