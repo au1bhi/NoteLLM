@@ -379,3 +379,85 @@ def test_generate_study_plan_reports_unconfigured_chat(
     )
     assert response.status_code == 503
     assert "对话模型尚未配置" in response.json()["detail"]
+
+
+def test_cross_user_study_plan_security_isolation(
+    client: TestClient, db: Session, monkeypatch: MonkeyPatch
+) -> None:
+    user1, conversation1 = _conversation_with_message(db)
+    headers1 = authentication_token_from_email(
+        client=client, email=user1.email, db=db
+    )
+    user2 = create_random_user(db)
+    headers2 = authentication_token_from_email(
+        client=client, email=user2.email, db=db
+    )
+
+    monkeypatch.setattr(
+        "app.api.routes.study_plans.get_chat_provider",
+        lambda _config: FakePlanProvider(),
+    )
+
+    # User 1 generates a study plan
+    resp = client.post(
+        f"{settings.API_V1_STR}/conversations/{conversation1.id}/study-plan",
+        headers=headers1,
+        json={"timezone": "Asia/Shanghai"},
+    )
+    assert resp.status_code == 200
+    plan_id = resp.json()["id"]
+    task_id = resp.json()["tasks"][0]["id"]
+
+    # User 2 attempts to read User 1's conversation plan -> 404 (conversation not found)
+    r = client.get(
+        f"{settings.API_V1_STR}/conversations/{conversation1.id}/study-plan",
+        headers=headers2,
+    )
+    assert r.status_code == 404
+
+    # User 2 attempts to generate a plan for User 1's conversation -> 404
+    r = client.post(
+        f"{settings.API_V1_STR}/conversations/{conversation1.id}/study-plan",
+        headers=headers2,
+        json={"timezone": "Asia/Shanghai"},
+    )
+    assert r.status_code == 404
+
+    # User 2 attempts to patch User 1's plan -> 404
+    r = client.patch(
+        f"{settings.API_V1_STR}/study-plans/{plan_id}",
+        headers=headers2,
+        json={"title": "Hacked Title"},
+    )
+    assert r.status_code == 404
+
+    # User 2 attempts to patch User 1's task -> 404
+    r = client.patch(
+        f"{settings.API_V1_STR}/study-plans/{plan_id}/tasks/{task_id}",
+        headers=headers2,
+        json={"title": "Hacked Task"},
+    )
+    assert r.status_code == 404
+
+    # User 2 attempts to delete User 1's task -> 404
+    r = client.delete(
+        f"{settings.API_V1_STR}/study-plans/{plan_id}/tasks/{task_id}",
+        headers=headers2,
+    )
+    assert r.status_code == 404
+
+    # User 2 attempts to delete User 1's plan -> 404
+    r = client.delete(
+        f"{settings.API_V1_STR}/study-plans/{plan_id}",
+        headers=headers2,
+    )
+    assert r.status_code == 404
+
+    # User 2 lists plans -> does not see User 1's plan
+    r = client.get(
+        f"{settings.API_V1_STR}/study-plans",
+        headers=headers2,
+    )
+    assert r.status_code == 200
+    assert len(r.json()["data"]) == 0
+

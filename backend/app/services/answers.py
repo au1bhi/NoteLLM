@@ -305,7 +305,7 @@ def answer_question(
             retrieved = []
 
     if not retrieved:
-        if mode == "hybrid" or is_meta_or_conv or bool(history.strip()):
+        if mode in ("knowledge", "hybrid") or is_meta_or_conv or bool(history.strip()):
             model_answer = chat_provider.answer(
                 prompt=build_user_block(
                     question=query, evidence=build_evidence(retrieved), history=history
