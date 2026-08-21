@@ -129,27 +129,39 @@ function NotebookWorkspace() {
     queryFn: () => conversationsApi.list(notebookId),
     queryKey: ["notebooks", notebookId, "conversations"],
   })
-  const conversationBelongsToNotebook =
-    conversations.data?.data.some((item) => item.id === conversationId) ?? false
+
   useEffect(() => {
     if (
-      !conversationId ||
       conversations.isLoading ||
       conversations.isError ||
-      conversationBelongsToNotebook
+      !conversations.data
     ) {
       return
     }
-    selectConversation(null)
+    const list = conversations.data.data
+    if (!list.length) {
+      if (conversationId) {
+        selectConversation(null)
+      }
+      return
+    }
+    const found = list.some((item) => item.id === conversationId)
+    if (!conversationId) {
+      selectConversation(list[0].id)
+    } else if (!found && !conversations.isFetching) {
+      selectConversation(list[0].id)
+    }
   }, [
-    conversationBelongsToNotebook,
-    conversationId,
+    conversations.data,
     conversations.isError,
     conversations.isLoading,
+    conversations.isFetching,
+    conversationId,
     selectConversation,
   ])
+
   const conversation = useQuery({
-    enabled: Boolean(conversationId) && conversationBelongsToNotebook,
+    enabled: Boolean(conversationId),
     queryFn: () => conversationsApi.get(conversationId as string),
     queryKey: ["conversations", conversationId],
   })
@@ -370,7 +382,7 @@ function NotebookWorkspace() {
 
   const retryConversation = () => {
     void conversations.refetch()
-    if (conversationBelongsToNotebook) void conversation.refetch()
+    if (conversationId) void conversation.refetch()
   }
 
   const handleToggleSources = () => {
