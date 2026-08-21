@@ -27,5 +27,13 @@ services:
     volumes:
       - frontend-dist:/usr/share/nginx/html
 
+  backend:
+    volumes:
+      - ./backend/app:/app/backend/app:ro
+
+  scheduler:
+    volumes:
+      - ./backend/app:/app/backend/app:ro
+
 volumes:
   frontend-dist:
