@@ -147,6 +147,7 @@ def persist_answer(
                 ),
                 mode=mode,
                 source_ids=source_ids,
+                conversation_id=conversation.id,
             )
             reservation.set_actual(
                 chat_tokens=answer.tokens_used,

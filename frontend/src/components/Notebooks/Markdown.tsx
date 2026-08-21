@@ -24,18 +24,48 @@ function safeUrlTransform(url: string): string {
 }
 
 /**
- * Normalizes alternative LaTeX delimiters often emitted by LLMs
- * \( ... \) -> $ ... $
- * \[ ... \] -> $$ ... $$
+ * Robust normalizer for LaTeX delimiters across all LLM output styles:
+ * 1. \[ ... \] -> $$ ... $$
+ * 2. \( ... \) -> $ ... $
+ * 3. \begin{equation|align|aligned|gather|matrix|pmatrix|bmatrix|cases}...\end{...} -> $$ \begin{...}...\end{...} $$
+ * 4. Fixes `$ math $` with unwanted whitespace adjacent to dollar signs so remark-math parses inline math correctly
  */
 function normalizeMathDelimiters(markdown: string): string {
   if (!markdown) return ""
-  return markdown
-    .replace(
-      /\\\[([\s\S]*?)\\\]/g,
-      (_, formula) => `\n$$\n${formula.trim()}\n$$\n`,
-    )
-    .replace(/\\\(([\s\S]*?)\\\)/g, (_, formula) => `$${formula.trim()}$`)
+  return (
+    markdown
+      // Convert \[ ... \] to display math block
+      .replace(
+        /\\\[([\s\S]*?)\\\]/g,
+        (_, formula) => `\n$$\n${formula.trim()}\n$$\n`,
+      )
+      // Convert \( ... \) to inline math
+      .replace(/\\\(([\s\S]*?)\\\)/g, (_, formula) => `$${formula.trim()}$`)
+      // Wrap bare LaTeX environments in display math
+      .replace(
+        /(?<!\$)\s*(\\begin\{(?:equation|align|aligned|gather|matrix|pmatrix|bmatrix|vmatrix|cases)\*?\}[\s\S]*?\\end\{(?:equation|align|aligned|gather|matrix|pmatrix|bmatrix|vmatrix|cases)\*?\})\s*(?!\$)/g,
+        (_, env) => `\n$$\n${env.trim()}\n$$\n`,
+      )
+      // Trim spaces directly inside $...$ so remark-math parses them as math
+      .replace(
+        /(?<=^|[^\\$])\$\s+([^$\n]+?)\s+\$(?=[^$]|$)/g,
+        (_, formula) => `$${formula.trim()}$`,
+      )
+      .replace(
+        /(?<=^|[^\\$])\$\s+([^$\n]+?)\$(?=[^$]|$)/g,
+        (_, formula) => `$${formula.trim()}$`,
+      )
+      .replace(
+        /(?<=^|[^\\$])\$([^$\n]+?)\s+\$(?=[^$]|$)/g,
+        (_, formula) => `$${formula.trim()}$`,
+      )
+  )
+}
+
+const rehypeKatexOptions = {
+  throwOnError: false,
+  errorColor: "#ef4444",
+  strict: false,
 }
 
 const markdownComponents: Components = {
@@ -56,7 +86,7 @@ export function Markdown({ content }: MarkdownProps) {
     <div className="markdown prose prose-sm max-w-none prose-neutral dark:prose-invert prose-headings:tracking-tight prose-p:leading-relaxed prose-math:overflow-x-auto">
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeKatex]}
+        rehypePlugins={[[rehypeKatex, rehypeKatexOptions]]}
         urlTransform={safeUrlTransform}
         components={markdownComponents}
       >

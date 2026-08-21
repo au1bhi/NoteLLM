@@ -365,3 +365,17 @@
   font-size: 0.8125rem;
   line-height: 1.55;
 }
+
+/* KaTeX Math Styling */
+.markdown .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.5rem 0;
+  margin: 0.75rem 0;
+  max-width: 100%;
+}
+
+.markdown .katex {
+  font-size: 1.05em;
+  text-rendering: auto;
+}
