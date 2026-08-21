@@ -6,8 +6,8 @@
 
 *让个人资料中的每一个回答可溯源、可验证，并一键转化为可落地的学习甘特图与每日行动计划。*
 
-[![Test Backend](https://github.com/au1bhi/NoteLLM/actions/workflows/test-backend.yml/badge.svg)](https://github.com/au1bhi/NoteLLM/actions/workflows/test-backend.yml)
-[![Test Docker Compose](https://github.com/au1bhi/NoteLLM/actions/workflows/test-docker-compose.yml/badge.svg)](https://github.com/au1bhi/NoteLLM/actions/workflows/test-docker-compose.yml)
+[![Test Backend](https://github.com/au1bhi/NoteLLM/actions/workflows/test-backend.yml/badge.svg?branch=master)](https://github.com/au1bhi/NoteLLM/actions/workflows/test-backend.yml)
+[![Test Docker Compose](https://github.com/au1bhi/NoteLLM/actions/workflows/test-docker-compose.yml/badge.svg?branch=master)](https://github.com/au1bhi/NoteLLM/actions/workflows/test-docker-compose.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-amber.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12%20%7C%203.14-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com/)
@@ -29,7 +29,7 @@
 2. **多模式问答**：支持 `资料可信模式 (Grounded)`、`混合补充模式 (Hybrid)`、`自由问答模式 (Knowledge)` 自由切换；
 3. **学习闭环**：通过对话一键生成 3~60 天学习计划与**交互式甘特图**，自动规划难度、阶段任务、每日耗时与验收标准；
 4. **自备算力 (BYOK)**：支持自带 OpenAI 兼容的第三方大模型与 Embedding API（如 DeepSeek、通义千问、Kimi 等），密钥强加密存储，保护隐私与额度自由；
-5. **轻量极速**：专为单机与轻量云服务器（1GB/2GB 内存 VPS）深度优化，提供免构建热更与预编译注入方案。
+5. **轻量极速**：专为单机与轻量云服务器（1GB/2GB 内存 VPS）深度优化，提供免构建热更与预编译静态资源注入方案。
 
 ---
 
@@ -52,38 +52,43 @@
 ```mermaid
 flowchart TB
     subgraph Client["用户端 (Web SPA)"]
-        UI["React 19 + Vite + Tailwind CSS"]
-        Theme["Kraft/Ink 纸墨护眼主题 (支持 KaTeX / 甘特图)"]
+        UI["React 19 页面 (KaTeX / Markdown / 甘特图)"]
     end
 
     subgraph Gateway["接入与安全网关"]
-        Traefik["Traefik / Nginx (HTTPS + CSP + 静态缓存)"]
-        SecFilter["安全防护 (SSRF 校验 / Turnstile / 分布式限流)"]
+        Traefik["Traefik / Nginx (HTTPS 反向代理)"]
+        SecFilter["安全防护 (SSRF 校验 / Turnstile / 限流)"]
     end
 
-    subgraph Backend["后端核心服务 (FastAPI)"]
-        Auth["认证授权 & HKDF 密钥派生"]
-        RAG["RAG 引擎 (解析 / 分块 / 向量检索 / 引用白名单校验)"]
-        PlanEngine["学习规划引擎 (难度判断 / 周期规划 / AI 调整)"]
-        Usage["配额与预留系统 (Atomic Reservation)"]
+    subgraph Backend["FastAPI 后端服务"]
+        Auth["用户认证与 HKDF 密钥管理"]
+        RAG["RAG 检索与受控引用校验"]
+        PlanEngine["学习规划与甘特图引擎"]
+        Usage["原子配额与用量结算"]
     end
 
-    subgraph Storage["数据与向量层"]
-        PG[(PostgreSQL + pgvector)]
-        DataVolume[(资料与嵌入索引卷)]
+    subgraph Storage["数据与向量存储"]
+        PG[("PostgreSQL + pgvector")]
+        DataVolume[("本地文件卷 (文档原件)")]
     end
 
-    subgraph ModelLayer["模型服务接入层 (BYOK / Server)"]
-        LLM["Chat Provider (OpenAI / DeepSeek / Qwen 等)"]
-        Embed["Embedding Provider (Text-Embedding-3 / BAAI 等)"]
+    subgraph ModelLayer["模型服务接入 (BYOK / 服务端)"]
+        LLM["Chat Provider (OpenAI / DeepSeek 等)"]
+        Embed["Embedding Provider (向量嵌入)"]
     end
 
-    UI --> Traefik --> SecFilter --> Backend
+    UI --> Traefik
+    Traefik --> SecFilter
+    SecFilter --> Auth
+    SecFilter --> RAG
+    SecFilter --> PlanEngine
     RAG --> PG
     PlanEngine --> PG
     Auth --> PG
-    RAG --> ModelLayer
-    PlanEngine --> ModelLayer
+    RAG --> DataVolume
+    RAG --> LLM
+    RAG --> Embed
+    PlanEngine --> LLM
 ```
 
 ---
@@ -126,40 +131,35 @@ docker compose watch
 
 ---
 
-## 💡 轻量服务器（VPS）低内存部署机制与 Release 指南
+## 💡 轻量服务器（VPS）低内存部署优化
 
-线上轻量服务器（如 1核 1GB / 2GB 内存 VPS）在直接执行前端 Vite/Webpack 编译或 Docker 构建时极易触发 **OOM（Out of Memory）导致卡死崩溃**。NoteLLM 针对该场景提供了业界最优的**免构建极速部署体系**：
+在 1核 1GB / 2GB 内存的低配 VPS 上，直接运行 Node/Bun 进行前端构建往往会因内存不足而触发 OOM 崩溃。NoteLLM 支持**低内存免构建部署模式**：
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ 本地 / CI 环境 (充足内存)                                     │
-│   1. bun run build -> 生成 dist 产物                         │
-│   2. tar -czf frontend-dist.tar.gz -C dist .                │
+│ 本地 / CI 环境                                               │
+│   1. bun run build -> 生成静态 dist 产物                      │
+│   2. 导出 frontend-dist.tar.gz 压缩包                        │
 └──────────────────────────────┬──────────────────────────────┘
                                │
             ┌──────────────────┴──────────────────┐
-            ▼ (开发者日常更新)                      ▼ (开源公开发布)
+            ▼ (私有部署 / 持续集成)                  ▼ (开源发布)
 ┌───────────────────────────────┐     ┌───────────────────────────────┐
-│ SFTP / 数据卷直接注入           │     │ 发布 GitHub Release Tag       │
-│ 直接解包到 Nginx volume 挂载点 │     │ 上传 frontend-dist-vX.Y.Z 资产 │
+│ 数据卷直接注入 / SFTP 部署      │     │ 随 GitHub Release 自动分发    │
+│ 直接解包至 Nginx 静态数据卷   │     │ install.sh 自动下载预编译包   │
 └───────────────┬───────────────┘     └───────────────┬───────────────┘
                 │                                     │
                 ▼                                     ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ 线上轻量 VPS 服务器 (1GB/2GB 内存)                            │
-│   ✔ 零构建消耗：直接使用纯 Nginx 提供静态资源                   │
-│   ✔ 后端代码卷挂载：git pull 后 restart backend 秒级热更     │
+│   ✔ 零内存编译压力：直接使用轻量 Nginx 提供静态服务          │
+│   ✔ 代码卷热挂载：后端秒级热更，无需重新构建镜像            │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-### ❓ 我是否需要上传 GitHub Release？
-
-* **场景 A：开发者日常自建部署 / 私有更新（无需上传 Release）**
-  * 在本地运行 `bash scripts/build-frontend-dist.sh` 生成 `frontend-dist.tar.gz`；
-  * 通过 SFTP 上传至服务器数据卷解压，后端代码 `git pull` 后直接 `docker compose restart backend`，**5 秒内完成免编译更新**。
-* **场景 B：开源版本分发 / 给第三方用户使用（推荐上传 Release）**
-  * 在 GitHub 发布正式版本 Release（如 `v0.1.0`）时，附带上传预构建包 `frontend-dist-v0.1.0.tar.gz` 及其 `.sha256`；
-  * 其他用户在 1GB 内存 VPS 上运行 `install.sh` 时，脚本会自动从 GitHub Release 下载预编译包，**无需配置 Node/Bun 环境，零内存压力一键拉起**。
+* **低内存模式启动**：`bash install.sh --low-mem`（或由脚本根据系统内存自动选择）；
+* **本地打包产物生成**：运行 `bash scripts/build-frontend-dist.sh` 即可快速生成 `frontend-dist.tar.gz` 与校验文件；
+* **后端免构建热更**：后端 Python 代码挂载在容器卷中，`git pull` 后运行 `docker compose restart backend` 即可秒级生效。
 
 ---
 
