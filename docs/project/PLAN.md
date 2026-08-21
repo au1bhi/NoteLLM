@@ -94,4 +94,12 @@
 
 在隔离库上按 `docs/evaluation/ablation-protocol.md` 与 `answer-mode-protocol.md` 实跑，把数字抄进空表；新报告写入 `docs/evaluation/runs/`，不要覆盖 2026-07-23 基线。然后完成新轮人工忠实度复核、按 `SCREENSHOTS.md` 本机截图，并将第 1—8 章草稿改写进学校模板且补齐文内引用。项目功能已足够，默认不再添加产品模块、依赖或服务；完整范围判断见 `THESIS_READINESS_AUDIT.md`。
 
+2026-08-21 交互体验、安全加固与 CI 完备性验收：
+- **多会话与计划下拉选择**：前端会话列表重构为紧凑响应式 `<Select>` 下拉框，整合重命名、置顶、删除与新建会话；聚合甘特图工具栏新增按计划/会话筛选器。
+- **代码块与排版增强**：Markdown 新增自定义 CodeBlock 组件，支持语法高亮语言徽章与一键复制代码；保持 KaTeX 行内/块级数学公式排版。
+- **模型容错与上下文记忆**：`clean_json_text` 剥离 `<think>` 思考标签，增强 JSON 抽取与纯文本降级保护；修复 `answers.py` 中 `knowledge` 模式检索分支判断与多轮对话记忆召回。
+- **安全加固与越权测试**：在 `test_study_plans.py` 中补充跨用户 IDOR 越权访问/修改/删除 404 隔离测试；学习计划调整增加 `<instruction>` 和 `<conversation>` 独立沙箱与提示词防注入规则。
+- **轻量服务器部署规范与文档升级**：在 `AGENTS.md` 明确“严禁在轻量服务器上构建”铁律；全面重构 GitHub `README.md`，增加架构图、在线演示、评测指标与低内存部署/Release 机制说明。
+- **验收证据**：后端 275 项 pytest 测试全量通过（100% 通过率），代码覆盖率 84%（超过 80% 门禁线）；前端 TypeScript 类型检查与 Biome lint 0 错误；线上 VPS（`https://notellm.au1bhi.com`）全链路自动化测试与健康检查全部通过。
+
 阶段 4 当前验收证据：2026-07-23 使用 7 份合成 Markdown 资料、34 个固定问题、智谱 Embedding-3（1024 维）与 DeepSeek V4 Flash 运行评测；Recall@5 为 100.0%，自动引用来源匹配率为 97.1%，关键词忠实度筛查为 88.2%，检索平均/P95 为 339/894 ms，回答平均/P95 为 2904/5595 ms。人工对照摘录后 **34 通过 / 0 未通过**（见 `docs/evaluation/human-faithfulness.md`）；Q32 是来源级标注碰撞，Q04 / Q09 / Q34 是关键词假阴性，均非幻觉。`--top-k` / `--chunk-size` / `--mode` / `--questions` 已接通，消融与模式对照表待本机实跑。
