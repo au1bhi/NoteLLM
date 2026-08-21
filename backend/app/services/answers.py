@@ -272,41 +272,40 @@ def suggest_questions(
 
 def answer_question(
     *,
-    chat_provider: ChatProvider,
-    embedding_provider: EmbeddingProvider,
+    session: Session,
     notebook_id: uuid.UUID,
     query: str,
-    session: Session,
+    chat_provider: ChatProvider,
+    embedding_provider: EmbeddingProvider,
     mode: AnswerMode = "grounded",
     source_ids: list[uuid.UUID] | None = None,
     limit: int = DEFAULT_RETRIEVAL_LIMIT,
     conversation_id: uuid.UUID | None = None,
 ) -> GroundedAnswer:
+    """Answer a question using the requested mode and recent conversation history."""
     history = build_conversation_history(
         session=session, conversation_id=conversation_id
     )
-    if mode == "knowledge":
-        model_answer = chat_provider.answer(
-            prompt=build_user_block(question=query, evidence="", history=history),
-            system=build_system_rules(mode=mode),
-        )
-        return GroundedAnswer(
-            citations=[],
-            content=model_answer.content,
-            tokens_used=getattr(chat_provider, "total_tokens_used", 0),
-        )
+    is_meta_or_conv = is_conversational_or_meta_query(query, history=history)
 
-    retrieval_query = contextualize_retrieval_query(query=query, history=history)
-    retrieved = retrieve_chunks(
-        session=session,
-        embedding_provider=embedding_provider,
-        notebook_id=notebook_id,
-        query=retrieval_query,
-        source_ids=source_ids,
-        limit=limit,
-    )
+    if mode == "knowledge" or (is_meta_or_conv and bool(history.strip())):
+        retrieved: list[RetrievedChunk] = []
+    else:
+        retrieval_query = contextualize_retrieval_query(query=query, history=history)
+        try:
+            retrieved = retrieve_chunks(
+                session=session,
+                embedding_provider=embedding_provider,
+                notebook_id=notebook_id,
+                query=retrieval_query,
+                source_ids=source_ids,
+                limit=limit,
+            )
+        except Exception:
+            retrieved = []
+
     if not retrieved:
-        if mode == "hybrid" or is_conversational_or_meta_query(query, history=history):
+        if mode == "hybrid" or is_meta_or_conv or bool(history.strip()):
             model_answer = chat_provider.answer(
                 prompt=build_user_block(
                     question=query, evidence=build_evidence(retrieved), history=history
@@ -361,7 +360,7 @@ def answer_question(
         if (result := retrieved_by_id.get(chunk_id)) is not None
     ]
     if not citations:
-        if mode == "hybrid" or is_conversational_or_meta_query(query, history=history):
+        if mode == "hybrid" or is_meta_or_conv or bool(history.strip()):
             return GroundedAnswer(
                 citations=[],
                 content=model_answer.content,
