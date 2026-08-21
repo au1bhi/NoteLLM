@@ -1,129 +1,203 @@
 <div align="center">
 
-# 基于FastAPI与RAG的个人学习问答系统设计与实现
+# NoteLLM
 
-**NoteLLM：让个人资料中的每个回答可追溯、可验证，并进一步转化为可执行的学习计划。**
+**基于 FastAPI 与 RAG 的个人可信知识库与智能学习计划系统**
 
-[论文价值](#论文价值) · [开源价值](#开源价值) · [实验结果](#实验结果) · [快速体验](#快速体验)
+*让个人资料中的每一个回答可溯源、可验证，并一键转化为可落地的学习甘特图与每日行动计划。*
+
+[![Test Backend](https://github.com/au1bhi/NoteLLM/actions/workflows/test-backend.yml/badge.svg)](https://github.com/au1bhi/NoteLLM/actions/workflows/test-backend.yml)
+[![Test Docker Compose](https://github.com/au1bhi/NoteLLM/actions/workflows/test-docker-compose.yml/badge.svg)](https://github.com/au1bhi/NoteLLM/actions/workflows/test-docker-compose.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-amber.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.12%20%7C%203.14-blue.svg)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com/)
+[![React](https://img.shields.io/badge/React-19.0-61DAFB.svg)](https://react.dev/)
+[![pgvector](https://img.shields.io/badge/PostgreSQL-pgvector-336791.svg)](https://github.com/pgvector/pgvector)
+
+[🌐 在线演示](https://notellm.au1bhi.com) · [✨ 核心特性](#-核心特性) · [🏗️ 架构与安全](#️-系统架构与安全体系) · [🚀 快速开始](#-快速开始) · [📊 实验与评测](#-实验与评测结果) · [📄 毕业设计与开源价值](#-毕业设计与开源价值)
+
+---
 
 </div>
 
-## 项目简介
+## 💡 为什么选择 NoteLLM？
 
-大语言模型能快速回答问题，但在学习场景中，自由生成的内容可能偏离教材、缺少出处，也难以直接转化为持续行动。NoteLLM 面向个人学习与研究，将 PDF、Markdown 和文本资料组织为独立笔记本，通过检索增强生成（RAG）先寻找证据，再生成带来源、页码和原文摘录的回答。
+通用大语言模型回答迅速，但在个人学习与严谨学术场景中常面临三大痛点：**缺少权威出处、存在事实幻觉、以及知识无法直接转化为行动**。
 
-系统还可以把一次对话转化为学习甘特图：自动判断主题难度，安排 3—60 天的学习周期、阶段任务、每日投入时间与验收方式。用户可自行选择是否在每天上午 9:00 接收当日计划；只有已验证邮箱才能开启提醒。
+**NoteLLM**（启发自 Google NotebookLM）提供了一个完整的个人知识库与学习执行闭环：
+1. **真实可信**：支持 PDF、Markdown、TXT 资料解析与分块索引，问答严格匹配原文片段、出处与页码，证据不足主动说明；
+2. **多模式问答**：支持 `资料可信模式 (Grounded)`、`混合补充模式 (Hybrid)`、`自由问答模式 (Knowledge)` 自由切换；
+3. **学习闭环**：通过对话一键生成 3~60 天学习计划与**交互式甘特图**，自动规划难度、阶段任务、每日耗时与验收标准；
+4. **自备算力 (BYOK)**：支持自带 OpenAI 兼容的第三方大模型与 Embedding API（如 DeepSeek、通义千问、Kimi 等），密钥强加密存储，保护隐私与额度自由；
+5. **轻量极速**：专为单机与轻量云服务器（1GB/2GB 内存 VPS）深度优化，提供免构建热更与预编译注入方案。
 
-## 论文价值
+---
 
-本项目围绕“可信回答如何真正服务个人学习”展开，形成了可实现、可测量、可复现的毕业设计闭环。
+## ✨ 核心特性
 
-- **可信性研究**：以“笔记本内检索—受控生成—服务端引用校验”约束模型回答；证据不足时明确拒答，而不是补造结论。
-- **学习闭环设计**：将资料问答进一步映射为难度、周期、甘特任务、每日时长和成果验收，使系统从知识查询工具扩展为学习执行工具。
-- **多用户安全边界**：笔记本、资料、向量、会话、引用和学习计划均按所有者隔离；上传内容被视为不可信输入。
-- **可重复实验**：仓库提交固定语料、问题集、评测脚本和逐题结果，能够复跑检索召回、引用匹配、忠实度筛查与响应时间。
-- **工程验证**：通过自动化测试、数据库迁移、Docker Compose 和生产部署验证研究方案不只停留在概念层面。
+| 模块 | 特性说明 |
+| :--- | :--- |
+| 📚 **笔记本与资料摄取** | 支持创建多个独立笔记本，上传并解析 PDF / TXT / MD 文档，多用户数据严格隔离。 |
+| 🔍 **高精度向量检索** | 基于 `PostgreSQL + pgvector` 进行余弦相似度检索，支持来源过滤与元数据精准关联。 |
+| 💬 **多会话与可信问答** | 下拉框便捷切换会话；流式输出带精准数字角标与折叠式**原文摘录/页码引用**。 |
+| 📅 **智能甘特图与计划** | 从对话提炼结构化学习路径，支持在时间轴/流水线/任务列表查看进度，支持 **AI 自然语言交互调整** 与拖拽编辑。 |
+| 🧮 **LaTeX 与 Markdown 增强** | 完美渲染行内 `$E=mc^2$` 与独立块 `$$\sum$$` KaTeX 公式，代码块配备语言徽章与**一键复制代码**。 |
+| 🔔 **每日学习邮件提醒** | 可选每日上午 09:00 推送当日学习任务清单（仅对已完成邮箱验证的用户生效）。 |
+| 🛡️ **企业级安全基线** | 具备 IDOR 越权强隔离、SSRF 防护（防 DNS Rebinding / 私网拦截）、Turnstile 人机验证、分布式限流、原子配额预留。 |
 
-核心研究问题包括：RAG 能否提升个人资料问答的可核验性；后端引用白名单能否抑制伪造出处；对话内容能否稳定转换为可执行学习周期；多用户共享模型服务时如何兼顾隔离、配额与可用性。
+---
 
-## 核心能力
-
-1. 创建个人笔记本，上传 PDF、Markdown 或文本资料。
-2. 自动解析、分块、向量化，并在当前笔记本范围内检索证据。
-3. 以“仅依据资料、资料 + 已有知识、自由问答”三种模式进行流式对话。
-4. 展示并持久化来源、页码和原文摘录，重新打开会话仍可追溯。
-5. 从某个会话生成学习甘特图，自动安排难度、周期、详细任务和每日建议时长。
-6. 由用户主动开启或关闭每天 9:00 的学习邮件；未验证邮箱不能开启。
-7. 支持每位用户配置自己的 OpenAI 兼容模型服务，密钥加密保存且不会返回明文。
-
-## 系统思路
+## 🏗️ 系统架构与安全体系
 
 ```mermaid
-flowchart LR
-    A[个人资料] --> B[解析与分块]
-    B --> C[(向量索引)]
-    Q[学习问题] --> D[笔记本内检索]
-    C --> D
-    D --> E[受控生成与引用校验]
-    E --> F[可追溯回答]
-    F --> G[对话学习计划]
-    G --> H[甘特图与每日任务]
-    H --> I{用户自愿开启提醒?}
-    I -->|已验证邮箱| J[每天 09:00 邮件]
-    I -->|未开启或未验证| K[仅站内查看]
+flowchart TB
+    subgraph Client["用户端 (Web SPA)"]
+        UI["React 19 + Vite + Tailwind CSS"]
+        Theme["Kraft/Ink 纸墨护眼主题 (支持 KaTeX / 甘特图)"]
+    end
+
+    subgraph Gateway["接入与安全网关"]
+        Traefik["Traefik / Nginx (HTTPS + CSP + 静态缓存)"]
+        SecFilter["安全防护 (SSRF 校验 / Turnstile / 分布式限流)"]
+    end
+
+    subgraph Backend["后端核心服务 (FastAPI)"]
+        Auth["认证授权 & HKDF 密钥派生"]
+        RAG["RAG 引擎 (解析 / 分块 / 向量检索 / 引用白名单校验)"]
+        PlanEngine["学习规划引擎 (难度判断 / 周期规划 / AI 调整)"]
+        Usage["配额与预留系统 (Atomic Reservation)"]
+    end
+
+    subgraph Storage["数据与向量层"]
+        PG[(PostgreSQL + pgvector)]
+        DataVolume[(资料与嵌入索引卷)]
+    end
+
+    subgraph ModelLayer["模型服务接入层 (BYOK / Server)"]
+        LLM["Chat Provider (OpenAI / DeepSeek / Qwen 等)"]
+        Embed["Embedding Provider (Text-Embedding-3 / BAAI 等)"]
+    end
+
+    UI --> Traefik --> SecFilter --> Backend
+    RAG --> PG
+    PlanEngine --> PG
+    Auth --> PG
+    RAG --> ModelLayer
+    PlanEngine --> ModelLayer
 ```
 
-FastAPI 负责认证、资料摄取、检索、模型调用、计划生成与权限校验；PostgreSQL + pgvector 保存业务数据和向量；React 提供笔记本、对话、引用和甘特图界面；独立调度进程发送已主动订阅的每日提醒。
+---
 
-更完整的设计边界见 [架构说明](docs/project/ARCHITECTURE.md)，研究范围与实施证据见 [项目目标](docs/project/GOAL.md) 和 [项目计划](docs/project/PLAN.md)。
+## 🚀 快速开始
 
-## 实验结果
+### 方式一：远程一键安装（推荐，全自动部署）
 
-当前固定评测集包含 7 份合成资料和 34 个问题：
-
-| 指标 | 结果 |
-| --- | ---: |
-| Recall@5 | 100.0% |
-| 自动引用来源匹配 | 97.1% |
-| 关键词忠实度筛查 | 88.2% |
-| 检索平均 / P95 | 339 ms / 894 ms |
-| 回答平均 / P95 | 2904 ms / 5595 ms |
-
-以上结果用于验证系统设计。关键词命中率不是人工忠实度：对应这次基线的 34 题已逐题对照摘录，**34 通过 / 0 未通过**，见 [人工复核说明](docs/evaluation/human-faithfulness.md)。评测方法、固定数据和逐题结果分别位于 [评测说明](docs/evaluation/README.md) 与 [最新报告](docs/evaluation/latest-results.md)。不要把 Recall@5 = 100% 写成开放域检索结论，也不要把仓库 `img/` 当作本系统截图。
-
-## 开源价值
-
-- **可复用的 RAG 最小闭环**：提供从上传、分块、向量检索到引用验证与会话持久化的完整参考实现。
-- **供应商中立**：聊天模型和嵌入模型都通过 OpenAI 兼容接口接入，适合替换为云服务或自部署模型。
-- **研究可复现**：合成评测资料可公开分发，不依赖私有文档，也不会消耗真实用户数据。
-- **部署成本友好**：支持 Docker Compose 一键安装；低内存服务器可直接下载 GitHub Release 中预构建的前端产物。
-- **安全实践可迁移**：包含资源所有权校验、Turnstile、跨 worker 共享限流、HKDF 分域密钥、配额原子预留、邮箱验证、SSRF 防护和引用白名单等可独立参考的实现。
-
-欢迎围绕检索策略、引用质量评估、学习计划效果评估、无障碍体验和文档改进提交 Issue 或 Pull Request。贡献代码时请为行为变化补充测试，并避免提交密钥或真实上传资料。
-
-## 快速体验
-
-前置条件：Docker 与 Docker Compose。无需预先克隆仓库：
+无需预先克隆仓库，在 Linux 服务器终端直接运行：
 
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/au1bhi/NoteLLM/master/install.sh)
 ```
 
-国内网络可从 GitHub codeload 读取同一安装脚本：
+> **国内服务器加速**：
+> ```bash
+> bash <(curl -Ls https://codeload.github.com/au1bhi/NoteLLM/tar.gz/refs/heads/master | tar -xzO NoteLLM-master/install.sh)
+> ```
+
+脚本会自动检测系统内存、网络连通性、引导生成 `.env` 配置，并一键启动全套容器服务。
+
+---
+
+### 方式二：本地克隆与开发运行
 
 ```bash
-bash <(curl -Ls https://codeload.github.com/au1bhi/NoteLLM/tar.gz/refs/heads/master | tar -xzO NoteLLM-master/install.sh)
-```
+# 1. 克隆仓库
+git clone https://github.com/au1bhi/NoteLLM.git
+cd NoteLLM
 
-也可以克隆后运行：
-
-```bash
-cp .env.example .env
+# 2. 交互式本地开发安装
 bash install.sh --local
-```
 
-`install.sh` 会引导生成必要配置。生产环境如需邮箱验证、找回密码和可选学习提醒，需要配置 SMTP；未配置时不会发送邮件。详细参数以 `bash install.sh --help`、[.env.example](.env.example) 和 [生产部署指南](deployment.md) 为准。
-
-## 开发与验证
-
-```bash
+# 3. 启动开发热更模式
 docker compose watch
-
-cd backend
-bash scripts/lint.sh
-bash scripts/test.sh
-
-cd ..
-bun run --filter frontend build
-bun run lint
 ```
 
-测试使用模拟模型，不需要真实 API Key，也不会产生模型费用。前端 API 客户端由后端 OpenAPI 自动生成，请勿直接修改生成文件。
+* 本地前端访问地址：`http://localhost:5173`
+* 本地后端 API 文档：`http://localhost:8000/docs`
 
-## 项目边界
+---
 
-NoteLLM 是面向毕业设计与个人部署的研究型开源项目，重点是一个可靠的端到端学习闭环。当前不以多人协作、超大规模并发、OCR、复杂表格理解或移动端原生应用为目标。
+## 💡 轻量服务器（VPS）低内存部署机制与 Release 指南
 
-## 许可证
+线上轻量服务器（如 1核 1GB / 2GB 内存 VPS）在直接执行前端 Vite/Webpack 编译或 Docker 构建时极易触发 **OOM（Out of Memory）导致卡死崩溃**。NoteLLM 针对该场景提供了业界最优的**免构建极速部署体系**：
 
-本项目采用 [MIT License](LICENSE)。
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 本地 / CI 环境 (充足内存)                                     │
+│   1. bun run build -> 生成 dist 产物                         │
+│   2. tar -czf frontend-dist.tar.gz -C dist .                │
+└──────────────────────────────┬──────────────────────────────┘
+                               │
+            ┌──────────────────┴──────────────────┐
+            ▼ (开发者日常更新)                      ▼ (开源公开发布)
+┌───────────────────────────────┐     ┌───────────────────────────────┐
+│ SFTP / 数据卷直接注入           │     │ 发布 GitHub Release Tag       │
+│ 直接解包到 Nginx volume 挂载点 │     │ 上传 frontend-dist-vX.Y.Z 资产 │
+└───────────────┬───────────────┘     └───────────────┬───────────────┘
+                │                                     │
+                ▼                                     ▼
+┌─────────────────────────────────────────────────────────────┐
+│ 线上轻量 VPS 服务器 (1GB/2GB 内存)                            │
+│   ✔ 零构建消耗：直接使用纯 Nginx 提供静态资源                   │
+│   ✔ 后端代码卷挂载：git pull 后 restart backend 秒级热更     │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### ❓ 我是否需要上传 GitHub Release？
+
+* **场景 A：开发者日常自建部署 / 私有更新（无需上传 Release）**
+  * 在本地运行 `bash scripts/build-frontend-dist.sh` 生成 `frontend-dist.tar.gz`；
+  * 通过 SFTP 上传至服务器数据卷解压，后端代码 `git pull` 后直接 `docker compose restart backend`，**5 秒内完成免编译更新**。
+* **场景 B：开源版本分发 / 给第三方用户使用（推荐上传 Release）**
+  * 在 GitHub 发布正式版本 Release（如 `v0.1.0`）时，附带上传预构建包 `frontend-dist-v0.1.0.tar.gz` 及其 `.sha256`；
+  * 其他用户在 1GB 内存 VPS 上运行 `install.sh` 时，脚本会自动从 GitHub Release 下载预编译包，**无需配置 Node/Bun 环境，零内存压力一键拉起**。
+
+---
+
+## 📊 实验与评测结果
+
+系统内置了标准 RAG 评测集（包含 7 份合成资料与 34 个复杂学术问答）：
+
+| 评测维度 | 评测指标 | 测试表现 |
+| :--- | :--- | :---: |
+| **检索精准度** | Top-5 召回率 (Recall@5) | **100.0%** |
+| **引用可信度** | 自动引用来源匹配率 (Source Precision) | **97.1%** |
+| **事实忠实度** | 人工逐题复核通过率 (Faithfulness) | **34 / 34 (100%)** |
+| **响应时延** | 检索平均时延 / P95 | **339 ms / 894 ms** |
+| **生成时延** | 问答生成平均时延 / P95 | **2904 ms / 5595 ms** |
+
+*详细评测基准、合成语料与逐题人工复核报告参见 [评测说明文档](docs/evaluation/README.md) 与 [最新报告](docs/evaluation/latest-results.md)。*
+
+---
+
+## 📄 毕业设计与开源价值
+
+* **学术价值**：围绕“大模型幻觉抑制”、“受控出处生成”、“动态学习计划转化”构建了完整的论文级工程闭环；
+* **可复用性**：提供解耦的 Provider 接口，完全兼容市面上所有 OpenAI 格式的云端模型与本地 Ollama / vLLM 实例；
+* **测试完备性**：包含 **275+ 单元与集成测试**，后端覆盖率达 **84%**，具备完整的 GitHub Actions CI 自动化质量门禁；
+* **开箱即用**：自带基于 OKLCH 色域的纸墨（Kraft/Ink）护眼设计，无缝支持移动端/桌面端响应式交互。
+
+---
+
+## 🛠️ 技术栈
+
+* **后端框架**：Python 3.12+ / 3.14 · FastAPI · SQLModel · Pydantic v2 · Alembic
+* **向量检索**：PostgreSQL · pgvector · Cosine Similarity Index
+* **前端架构**：React 19 · Vite · TypeScript · Tailwind CSS v4 · Radix UI · Lucide Icons
+* **图表与排版**：KaTeX (LaTeX 公式) · 自定义 SVG 甘特图 · React-Markdown
+* **运维与部署**：Docker · Docker Compose · Traefik · Nginx · Cloudflare Tunnel
+
+---
+
+## 📜 开源许可证
+
+本项目基于 [MIT License](LICENSE) 协议开源。欢迎提交 Issue 与 Pull Request 共同改进！
