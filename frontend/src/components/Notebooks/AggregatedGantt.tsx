@@ -256,6 +256,7 @@ export function AggregatedGantt({ plans }: AggregatedGanttProps) {
   const [activeTab, setActiveTab] = useState<"timeline" | "pipeline" | "table">(
     "timeline",
   )
+  const [planFilter, setPlanFilter] = useState<string>("all")
   const [filterMode, setFilterMode] = useState<"all" | "active" | "completed">(
     "all",
   )
@@ -457,6 +458,7 @@ export function AggregatedGantt({ plans }: AggregatedGanttProps) {
   const enrichedTasks = useMemo(() => {
     const list: EnrichedTask[] = []
     for (const plan of plans) {
+      if (planFilter !== "all" && plan.id !== planFilter) continue
       const color = colorForNotebook(plan.notebook_id)
       for (const task of plan.tasks) {
         list.push({
@@ -472,7 +474,7 @@ export function AggregatedGantt({ plans }: AggregatedGanttProps) {
       }
     }
     return list
-  }, [plans])
+  }, [plans, planFilter])
 
   const completedTasksCount = useMemo(
     () => enrichedTasks.filter((t) => t.is_completed).length,
@@ -525,16 +527,28 @@ export function AggregatedGantt({ plans }: AggregatedGanttProps) {
   }, [enrichedTasks, filterMode, pipelineSort])
 
   const filteredPlans = useMemo(() => {
-    if (filterMode === "all") return plans
-    return plans.map((p) => ({
+    let list = plans
+    if (planFilter !== "all") {
+      list = list.filter((p) => p.id === planFilter)
+    }
+    if (filterMode === "all") return list
+    return list.map((p) => ({
       ...p,
       tasks: p.tasks.filter((t) =>
         filterMode === "completed" ? t.is_completed : !t.is_completed,
       ),
     }))
-  }, [plans, filterMode])
+  }, [plans, planFilter, filterMode])
 
-  const { start, duration } = useMemo(() => timelineBounds(plans), [plans])
+  const activePlansForTimeline = useMemo(() => {
+    if (planFilter === "all") return plans
+    return plans.filter((p) => p.id === planFilter)
+  }, [plans, planFilter])
+
+  const { start, duration } = useMemo(
+    () => timelineBounds(activePlansForTimeline),
+    [activePlansForTimeline],
+  )
   const today = localDateString()
   const todayOffset = dayOffset(today, start)
   const showToday = todayOffset >= 0 && todayOffset < duration
@@ -633,6 +647,65 @@ export function AggregatedGantt({ plans }: AggregatedGanttProps) {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {/* Plan / Conversation Filter Select */}
+          {plans.length > 1 ? (
+            <Select value={planFilter} onValueChange={setPlanFilter}>
+              <SelectTrigger
+                className="h-8 max-w-[190px] sm:max-w-[240px] text-xs font-medium bg-background"
+                aria-label="筛选计划与会话"
+              >
+                <SelectValue placeholder="筛选计划与会话">
+                  <div className="flex items-center gap-1.5 truncate">
+                    {planFilter === "all" ? (
+                      <span>全部计划 ({plans.length})</span>
+                    ) : (
+                      <>
+                        <span
+                          className="size-2 rounded-full shrink-0"
+                          style={{
+                            backgroundColor: colorForNotebook(
+                              plans.find((p) => p.id === planFilter)
+                                ?.notebook_id || "",
+                            ),
+                          }}
+                        />
+                        <span className="truncate font-medium">
+                          {plans.find((p) => p.id === planFilter)?.title ||
+                            "指定计划"}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent className="max-h-72">
+                <SelectItem value="all" className="text-xs">
+                  全部计划与会话 ({plans.length})
+                </SelectItem>
+                {plans.map((p) => (
+                  <SelectItem
+                    key={p.id}
+                    value={p.id}
+                    className="text-xs cursor-pointer"
+                  >
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span
+                        className="size-2 rounded-full shrink-0"
+                        style={{
+                          backgroundColor: colorForNotebook(p.notebook_id),
+                        }}
+                      />
+                      <span className="truncate font-medium">{p.title}</span>
+                      <span className="text-[10px] text-muted-foreground truncate">
+                        ({p.conversation_title})
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          ) : null}
+
           {/* AI Copilot Button */}
           <Button
             variant="default"

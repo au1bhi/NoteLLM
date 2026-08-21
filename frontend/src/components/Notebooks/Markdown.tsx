@@ -1,11 +1,14 @@
 import "katex/dist/katex.min.css"
 
-import { useMemo } from "react"
+import { Check, Copy } from "lucide-react"
+import { useMemo, useState } from "react"
 import type { Components } from "react-markdown"
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown"
 import rehypeKatex from "rehype-katex"
 import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
+
+import { cn } from "@/lib/utils"
 
 interface MarkdownProps {
   content: string
@@ -68,12 +71,71 @@ const rehypeKatexOptions = {
   strict: false,
 }
 
+function CodeBlock({
+  className,
+  children,
+  ...props
+}: React.HTMLAttributes<HTMLElement> & { className?: string }) {
+  const match = /language-(\w+)/.exec(className || "")
+  const isInline = !match && !String(children).includes("\n")
+  const [copied, setCopied] = useState(false)
+
+  if (isInline) {
+    return (
+      <code
+        className={cn(
+          "rounded bg-muted px-1.5 py-0.5 text-[0.875em] font-mono font-medium text-foreground",
+          className,
+        )}
+        {...props}
+      >
+        {children}
+      </code>
+    )
+  }
+
+  const codeText = String(children).replace(/\n$/, "")
+  const handleCopy = () => {
+    void navigator.clipboard.writeText(codeText)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <div className="group relative my-3 overflow-hidden rounded-xl border bg-muted/40 text-foreground dark:bg-muted/20">
+      <div className="flex items-center justify-between border-b bg-muted/60 px-3.5 py-1 text-xs text-muted-foreground">
+        <span className="font-mono text-[11px] font-semibold uppercase tracking-wider">
+          {match ? match[1] : "code"}
+        </span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+        >
+          {copied ? (
+            <Check className="size-3 text-primary" />
+          ) : (
+            <Copy className="size-3" />
+          )}
+          <span>{copied ? "已复制" : "复制"}</span>
+        </button>
+      </div>
+      <pre className="overflow-x-auto p-3.5 text-xs leading-relaxed font-mono">
+        <code className={className} {...props}>
+          {children}
+        </code>
+      </pre>
+    </div>
+  )
+}
+
 const markdownComponents: Components = {
   a: ({ href, children, ...props }) => (
     <a {...props} href={href} target="_blank" rel="noopener noreferrer">
       {children}
     </a>
   ),
+  code: CodeBlock,
 }
 
 export function Markdown({ content }: MarkdownProps) {

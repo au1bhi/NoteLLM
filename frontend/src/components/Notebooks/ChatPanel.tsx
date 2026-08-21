@@ -22,6 +22,13 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
 import type { AnswerMode } from "@/services/conversations"
@@ -305,90 +312,133 @@ export function ChatPanel({
         className,
       )}
     >
-      <header className="border-b px-4 py-3.5">
-        <div className="flex items-center gap-2">
-          <h2 className="min-w-0 truncate font-semibold tracking-tight">
-            {activeConversation ? activeConversation.title : "问答"}
-          </h2>
-          {activeConversation ? (
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-7 shrink-0 rounded-md text-muted-foreground hover:text-foreground"
-              aria-label="重命名会话"
-              onClick={openRename}
-            >
-              <Pencil className="size-3.5" />
-            </Button>
-          ) : null}
-          {activeConversation ? (
-            <PinButton
-              pinned={Boolean(activeConversation.is_pinned)}
-              disabled={pinPending}
-              className="size-7 shrink-0 rounded-md text-muted-foreground hover:text-foreground"
-              onToggle={() =>
-                onPinConversation(
-                  activeConversation.id,
-                  !activeConversation.is_pinned,
-                )
-              }
-            />
-          ) : null}
-          {activeConversation ? (
-            <StudyPlanDialog
-              conversationId={activeConversation.id}
-              hasConversationContent={Boolean(messages?.length)}
-              disabled={isStreaming}
-            />
-          ) : null}
-          <Button
-            variant="outline"
-            size="sm"
-            className="ml-auto shrink-0"
-            disabled={onCreatePending || isStreaming || !hasReadySources}
-            title={
-              hasReadySources ? undefined : "至少上传一份资料并处理完成后再提问"
-            }
-            onClick={onNewConversation}
-          >
-            {onCreatePending ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <MessageSquarePlus className="size-4" />
-            )}
-            新建会话
-          </Button>
-        </div>
-        {conversations.length ? (
-          <div className="mt-3 flex gap-2 overflow-x-auto pb-0.5">
-            {sortPinnedFirst(conversations).map((conversation) => (
-              <div key={conversation.id} className="group relative shrink-0">
-                <Button
-                  size="sm"
-                  variant={
-                    activeConversationId === conversation.id
-                      ? "default"
-                      : "outline"
-                  }
-                  className="pr-8"
+      <header className="border-b px-4 py-3">
+        <div className="flex flex-wrap items-center justify-between gap-2.5">
+          {/* Left: Conversation Selector & Operations */}
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+            {conversations.length > 0 ? (
+              <>
+                <Select
+                  value={activeConversationId || ""}
+                  onValueChange={(val) => onSelectConversation(val)}
                   disabled={isStreaming}
-                  onClick={() => onSelectConversation(conversation.id)}
                 >
-                  {conversation.title || "会话"}
-                </Button>
-                <button
-                  type="button"
-                  aria-label={`删除会话：${conversation.title || "未命名"}`}
-                  disabled={isStreaming || isDeleting}
-                  onClick={() => setDeleteTarget(conversation)}
-                  className="absolute right-1 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground/70 transition-colors opacity-0 hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100 max-sm:opacity-100"
-                >
-                  <Trash2 className="size-3" />
-                </button>
-              </div>
-            ))}
+                  <SelectTrigger
+                    className="h-8 max-w-[200px] sm:max-w-[260px] md:max-w-[340px] text-xs sm:text-sm font-semibold truncate bg-background/80"
+                    aria-label="选择会话"
+                  >
+                    <SelectValue placeholder="选择会话...">
+                      <span className="flex items-center gap-1.5 truncate">
+                        {activeConversation?.is_pinned && (
+                          <span
+                            className="text-primary text-xs shrink-0"
+                            title="已置顶"
+                          >
+                            📌
+                          </span>
+                        )}
+                        <span className="truncate">
+                          {activeConversation?.title || "未命名会话"}
+                        </span>
+                      </span>
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {sortPinnedFirst(conversations).map((conv) => (
+                      <SelectItem
+                        key={conv.id}
+                        value={conv.id}
+                        className="text-xs sm:text-sm cursor-pointer"
+                      >
+                        <div className="flex items-center gap-1.5 truncate">
+                          {conv.is_pinned && (
+                            <span className="text-primary text-xs shrink-0">
+                              📌
+                            </span>
+                          )}
+                          <span className="truncate font-medium">
+                            {conv.title || "未命名会话"}
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {activeConversation && (
+                  <div className="flex items-center gap-0.5 shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 rounded-md text-muted-foreground hover:text-foreground"
+                      aria-label="重命名会话"
+                      title="重命名会话"
+                      onClick={openRename}
+                    >
+                      <Pencil className="size-3.5" />
+                    </Button>
+                    <PinButton
+                      pinned={Boolean(activeConversation.is_pinned)}
+                      disabled={pinPending}
+                      className="size-7 rounded-md text-muted-foreground hover:text-foreground"
+                      onToggle={() =>
+                        onPinConversation(
+                          activeConversation.id,
+                          !activeConversation.is_pinned,
+                        )
+                      }
+                    />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-7 rounded-md text-muted-foreground hover:text-destructive transition-colors"
+                      aria-label="删除此会话"
+                      title="删除此会话"
+                      disabled={isStreaming || isDeleting}
+                      onClick={() => setDeleteTarget(activeConversation)}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <h2 className="font-semibold text-sm tracking-tight text-foreground">
+                问答与会话
+              </h2>
+            )}
           </div>
-        ) : null}
+
+          {/* Right: Actions (Study Plan & New Conversation) */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {activeConversation ? (
+              <StudyPlanDialog
+                conversationId={activeConversation.id}
+                hasConversationContent={Boolean(messages?.length)}
+                disabled={isStreaming}
+              />
+            ) : null}
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-1.5 text-xs font-medium shrink-0"
+              disabled={onCreatePending || isStreaming || !hasReadySources}
+              title={
+                hasReadySources
+                  ? undefined
+                  : "至少上传一份资料并处理完成后再提问"
+              }
+              onClick={onNewConversation}
+            >
+              {onCreatePending ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <MessageSquarePlus className="size-3.5" />
+              )}
+              <span>新建会话</span>
+            </Button>
+          </div>
+        </div>
       </header>
 
       <div
