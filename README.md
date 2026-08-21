@@ -1,8 +1,8 @@
 <div align="center">
 
-# NoteLLM
+# 基于 FastAPI 与 RAG 的个人学习问答系统设计与实现
 
-**基于 FastAPI 与 RAG 的个人可信知识库与智能学习计划系统**
+**NoteLLM · Design and Implementation of Personal Learning Q&A System Based on FastAPI and RAG**
 
 *让个人资料中的每一个回答可溯源、可验证，并一键转化为可落地的学习甘特图与每日行动计划。*
 
