@@ -176,8 +176,11 @@ def persist_answer(
                 )
             )
         conversation.updated_at = get_datetime_utc()
-        if conversation.title == "New conversation":
-            conversation.title = question[:255]
+        if conversation.title in ("New conversation", "新建会话", "会话"):
+            clean_title = question.strip().replace("\n", " ")
+            conversation.title = (
+                clean_title[:32] + "…" if len(clean_title) > 32 else clean_title
+            )
         session.add(conversation)
         session.commit()
         return answer

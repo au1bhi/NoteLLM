@@ -258,8 +258,7 @@ export function ChatPanel({
     el.style.height = `${Math.min(el.scrollHeight, 192)}px`
   }, [question])
 
-  const canSend =
-    Boolean(activeConversationId) && !isStreaming && Boolean(question.trim())
+  const canSend = !isStreaming && Boolean(question.trim())
 
   const handleSend = () => {
     if (!canSend) return
@@ -269,7 +268,7 @@ export function ChatPanel({
   }
 
   const pickSuggestion = (question: string) => {
-    if (isStreaming || !activeConversationId) return
+    if (isStreaming) return
     onSend(question, mode)
   }
 
@@ -496,14 +495,14 @@ export function ChatPanel({
               key={item.value}
               type="button"
               aria-pressed={mode === item.value}
-              disabled={!activeConversationId || isStreaming}
+              disabled={isStreaming}
               onClick={() => setMode(item.value)}
               className={cn(
                 "rounded-full border px-2.5 py-1 text-xs font-medium transition-colors",
                 mode === item.value
                   ? "border-primary bg-primary/10 text-primary"
                   : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground",
-                (!activeConversationId || isStreaming) && "opacity-60",
+                isStreaming && "opacity-60",
               )}
             >
               {item.label}
@@ -520,18 +519,15 @@ export function ChatPanel({
             ref={textareaRef}
             rows={1}
             value={question}
-            disabled={!activeConversationId}
             aria-label="输入问题"
             onChange={(event) => setQuestion(event.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={
-              activeConversationId
-                ? isStreaming
-                  ? "可先输入下一条问题，回答完成后发送"
-                  : hasReadySources
-                    ? "基于当前笔记本的资料提问…"
-                    : "资料处理完成后即可提问…"
-                : "先选择或新建一个会话"
+              isStreaming
+                ? "可先输入下一条问题，回答完成后发送"
+                : hasReadySources || mode === "knowledge"
+                  ? "基于当前笔记本的资料提问…"
+                  : "资料处理完成后即可提问…"
             }
             className={cn(
               "max-h-48 min-h-10 flex-1 resize-none border-0 bg-transparent px-0 py-2.5 text-sm outline-none placeholder:text-muted-foreground",

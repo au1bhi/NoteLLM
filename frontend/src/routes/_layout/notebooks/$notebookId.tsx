@@ -285,7 +285,25 @@ function NotebookWorkspace() {
     content: string,
     mode: AnswerMode = "grounded",
   ) => {
-    if (!conversationId) return
+    let targetConversationId = conversationId
+    if (!targetConversationId) {
+      try {
+        const created = await conversationsApi.create(notebookId)
+        targetConversationId = created.id
+        selectConversation(created.id)
+        queryClient.setQueryData<ConversationsPublic>(
+          ["notebooks", notebookId, "conversations"],
+          (old) =>
+            old
+              ? { data: [created, ...old.data], count: old.count + 1 }
+              : { data: [created], count: 1 },
+        )
+      } catch (error) {
+        showErrorToast(extractErrorMessage(error))
+        return
+      }
+    }
+    const currentId = targetConversationId
     const optimisticMessage: ConversationMessagePublic = {
       id: `temp-${Date.now()}`,
       role: "user",
@@ -294,7 +312,7 @@ function NotebookWorkspace() {
       citations: [],
     }
     queryClient.setQueryData<ConversationDetail>(
-      ["conversations", conversationId],
+      ["conversations", currentId],
       (old) =>
         old ? { ...old, messages: [...old.messages, optimisticMessage] } : old,
     )
@@ -306,7 +324,7 @@ function NotebookWorkspace() {
     setIsStreaming(true)
     try {
       await conversationsApi.stream(
-        conversationId,
+        currentId,
         content,
         {
           mode,
@@ -321,7 +339,7 @@ function NotebookWorkspace() {
         controller.signal,
       )
       await queryClient.invalidateQueries({
-        queryKey: ["conversations", conversationId],
+        queryKey: ["conversations", currentId],
       })
       await queryClient.invalidateQueries({
         queryKey: ["notebooks", notebookId, "conversations"],
@@ -337,7 +355,7 @@ function NotebookWorkspace() {
         showErrorToast(message)
       }
       await queryClient.invalidateQueries({
-        queryKey: ["conversations", conversationId],
+        queryKey: ["conversations", currentId],
       })
     } finally {
       if (streamControllerRef.current === controller) {
