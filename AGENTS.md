@@ -89,6 +89,7 @@ Name tests `test_*.py`. Cover authorization, ingestion failures, retrieval order
 ## Commits, PRs, and Thesis Evidence
 
 - **严禁未经检验直接提交**：做完任何修改或功能后，**必须先完成端到端检测确认完全可用后方可提交**（包括但不限于类型检查 `tsc`、代码审查 `lint`、单元测试 `pytest`，以及在真实构建/容器环境中验证可用性）。严禁在未确认实际运行正常的情况下草率提交或结束任务。
+- **严禁在轻量服务器（VPS）上执行任何编译与构建**：由于线上轻量服务器内存极为受限，严禁在服务器端运行 `docker compose build`、`bun run build`、`npm run build`、`vite build` 等编译构建命令！所有前端生产产物必须在本地/CI 预先编译打包为 `frontend-dist.tar.gz`，通过 SFTP/数据卷直接注入；后端 Python 代码通过 `compose.lowmem.yml` 的代码卷热挂载（`./backend/app:/app/backend/app:ro`）实现秒级免构建更新。
 - Use short imperative commits, optionally matching existing emoji prefixes. Commit after each major update. PRs should explain schema or prompt changes, link issues, include tests, and attach UI screenshots. Record architecture decisions and evaluation methods in Markdown so thesis results are reproducible.
 
 ## Security & Data Handling
