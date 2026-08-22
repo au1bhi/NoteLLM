@@ -12,7 +12,7 @@
 #   bash install.sh --low-mem     低内存模式：前端 SPA 不在服务器上构建（注入预构建 dist）
 #   bash install.sh --no-low-mem  强制镜像内构建前端（覆盖低内存自动检测）
 #
-#   远程一键（3x-ui 风格，无需先克隆仓库）：
+#   远程一键（无需先克隆仓库）：
 #   bash <(curl -Ls https://raw.githubusercontent.com/au1bhi/NoteLLM/master/install.sh)
 #   自动克隆/更新到 $NOTELLM_DIR（默认 ~/NoteLLM）后继续；重复运行即升级。
 #
@@ -141,7 +141,7 @@ EOF
   echo
 }
 
-# ---------- 远程一键安装引导（3x-ui 风格） ----------
+# ---------- 远程一键安装引导 ----------
 # 支持 `bash <(curl -Ls https://raw.githubusercontent.com/au1bhi/NoteLLM/master/install.sh)`
 # 直接运行：当脚本不在 NoteLLM 仓库内时，把仓库克隆到 $NOTELLM_DIR（默认
 # ~/NoteLLM），已存在则先 git pull 更新，然后重新执行磁盘上的 install.sh
