@@ -28,6 +28,15 @@ class ChatError(Exception):
     """Raised when the configured chat provider cannot produce a safe answer."""
 
 
+def _is_cjk(char: str) -> bool:
+    """CJK punctuation, kana, extended-A/compat ideographs, and fullwidth forms
+    each cost roughly one token; the old U+4E00–U+9FFF range alone missed them."""
+    o = ord(char)
+    return (
+        0x3000 <= o <= 0x9FFF or 0xF900 <= o <= 0xFAFF or 0xFF00 <= o <= 0xFFEF
+    )
+
+
 def estimate_tokens(text: str) -> int:
     """Approximate token count when a provider omits usage stats.
 
@@ -37,7 +46,7 @@ def estimate_tokens(text: str) -> int:
     """
     if not text:
         return 0
-    cjk = sum(1 for char in text if "一" <= char <= "鿿")
+    cjk = sum(1 for char in text if _is_cjk(char))
     other = len(text) - cjk
     return max(1, cjk + math.ceil(other / 4))
 

@@ -17,7 +17,6 @@ from app.models import (
     Token,
     UserPublic,
     UserUpdate,
-    get_datetime_utc,
 )
 from app.utils import (
     generate_password_reset_token,
@@ -151,17 +150,14 @@ def reset_password(session: SessionDep, body: NewPassword) -> Message:
     ):
         raise HTTPException(status_code=400, detail="无效的令牌")
     user_in_update = UserUpdate(password=body.new_password)
+    # crud.update_user rotates password_changed_at (revoking outstanding
+    # access/reset tokens) and clears any staged email change the attacker may
+    # have queued — the intended close of a stolen-password incident.
     crud.update_user(
         session=session,
         db_user=user,
         user_in=user_in_update,
     )
-    user.password_changed_at = get_datetime_utc()
-    # Password recovery is the intended close of a stolen-password incident;
-    # drop any staged email change the attacker may have queued.
-    user.pending_email = None
-    session.add(user)
-    session.commit()
     return Message(message="密码更新成功")
 
 
@@ -189,5 +185,5 @@ def recover_password_html_content(email: str, session: SessionDep) -> Any:
     )
 
     return HTMLResponse(
-        content=email_data.html_content, headers={"subject:": email_data.subject}
+        content=email_data.html_content, headers={"subject": email_data.subject}
     )

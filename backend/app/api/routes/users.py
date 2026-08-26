@@ -21,7 +21,11 @@ from app.core.security import (
     get_password_hash,
     verify_password,
 )
-from app.core.ssrf import pinned_request, validate_outbound_url
+from app.core.ssrf import (
+    pinned_request,
+    trusted_provider_request,
+    validate_outbound_url,
+)
 from app.core.turnstile import require_turnstile
 from app.models import (
     Message,
@@ -477,13 +481,14 @@ def delete_user_provider_settings(
     return Message(message="已清除模型配置")
 
 
-def _fetch_models_payload(root: str, api_key: str) -> object:
-    response = pinned_request(
-        "GET",
-        f"{root}/models",
-        headers={"Authorization": f"Bearer {api_key}"},
-        timeout=30.0,
-    )
+def _fetch_models_payload(root: str, api_key: str, *, proxy_url: str | None) -> object:
+    headers = {"Authorization": f"Bearer {api_key}"}
+    if proxy_url:
+        response = trusted_provider_request(
+            "GET", f"{root}/models", proxy_url=proxy_url, headers=headers, timeout=30.0
+        )
+    else:
+        response = pinned_request("GET", f"{root}/models", headers=headers, timeout=30.0)
     response.raise_for_status()
     return response.json()
 
@@ -537,10 +542,18 @@ def fetch_available_models(
     fallback_root: str | None = resolve_api_base(base_url, "openai_v1")
     if body.api_format == "openai_v1" or fallback_root == root:
         fallback_root = None
+    # The server-configured endpoint is reached through the operator proxy when
+    # one is configured (mirrors chat/embedding); a user-supplied BYOK URL
+    # always stays on the strict DNS-pinned path.
+    proxy_url = (
+        str(settings.SERVER_PROVIDER_PROXY_URL)
+        if not user_base and settings.SERVER_PROVIDER_PROXY_URL
+        else None
+    )
 
     def fetch_models() -> list[str]:
         try:
-            payload = _fetch_models_payload(root, api_key)
+            payload = _fetch_models_payload(root, api_key, proxy_url=proxy_url)
         except (httpx.HTTPError, ValueError, TypeError) as error:
             if fallback_root is None:
                 raise HTTPException(
@@ -548,7 +561,9 @@ def fetch_available_models(
                     detail="无法获取模型，请检查 Base URL 与 API Key 是否正确",
                 ) from error
             try:
-                payload = _fetch_models_payload(fallback_root, api_key)
+                payload = _fetch_models_payload(
+                    fallback_root, api_key, proxy_url=proxy_url
+                )
             except (httpx.HTTPError, ValueError, TypeError) as fallback_error:
                 raise HTTPException(
                     status_code=503,

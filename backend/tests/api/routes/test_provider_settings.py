@@ -539,7 +539,9 @@ def test_models_probe_uses_server_billing_when_request_uses_server_key(
     db.commit()
     used_keys: list[str] = []
 
-    def fake_fetch(_root: str, api_key: str) -> dict[str, object]:
+    def fake_fetch(
+        _root: str, api_key: str, *, proxy_url: str | None = None
+    ) -> dict[str, object]:
         used_keys.append(api_key)
         return {"data": [{"id": "gpt-4o"}]}
 

@@ -5,6 +5,7 @@ from pathlib import Path
 
 import fitz  # type: ignore[import-untyped]
 from fastapi import HTTPException, UploadFile, status
+from sqlalchemy import text as sql_text
 from sqlmodel import Session, col, delete, func, select
 
 from app.core.config import settings
@@ -193,11 +194,21 @@ def process_source(
     chunk_overlap: int = CHUNK_OVERLAP,
 ) -> None:
     validate_chunk_params(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
-    session.exec(delete(Chunk).where(col(Chunk.source_id) == source.id))
+    # Atomically claim the source so a retry racing an in-flight upload
+    # processing run cannot double-embed (duplicate chunks, double billing).
+    claimed = session.execute(  # ty: ignore[deprecated] -- raw SQL Row
+        sql_text(
+            "UPDATE source SET status = 'processing', error_message = NULL "
+            "WHERE id = :sid AND status <> 'processing' RETURNING id"
+        ),
+        {"sid": source.id},
+    ).first()
+    session.commit()
+    if claimed is None:
+        return
     source.status = "processing"
     source.error_message = None
-    session.add(source)
-    session.commit()
+    session.exec(delete(Chunk).where(col(Chunk.source_id) == source.id))
 
     def mark_failed(message: str) -> None:
         source.status = "failed"
@@ -285,10 +296,46 @@ def process_source(
         session.rollback()
 
 
+# Session-level advisory locks outlive transactions, so they must be taken and
+# released on ONE dedicated connection held open for the whole critical section.
+# The request Session checks pooled connections in/out per transaction — a lock
+# taken through it would be stranded on a returned connection (pool rollback
+# does not release session locks), breaking mutual exclusion or deadlocking a
+# concurrent uploader.
+_UPLOAD_LOCK_SQL = sql_text("SELECT pg_advisory_lock(hashtextextended(:key, 0))")
+_UPLOAD_UNLOCK_SQL = sql_text("SELECT pg_advisory_unlock(hashtextextended(:key, 0))")
+
+
 async def create_source_from_upload(
     *, session: Session, notebook: Notebook, upload: UploadFile
 ) -> Source:
     suffix, media_type = validate_upload(upload)
+    # Serialize one owner's uploads so two concurrent requests cannot both pass
+    # enforce_user_storage_limit before either size is counted.
+    lock_key = f"user-storage:{notebook.owner_id}"
+    with engine.connect() as lock_conn:
+        lock_conn.execute(_UPLOAD_LOCK_SQL, {"key": lock_key})
+        try:
+            return await _create_source_locked(
+                session=session, notebook=notebook, upload=upload, suffix=suffix,
+                media_type=media_type,
+            )
+        finally:
+            try:
+                lock_conn.execute(_UPLOAD_UNLOCK_SQL, {"key": lock_key})
+            except Exception:
+                # Connection close below releases the lock via session teardown.
+                pass
+
+
+async def _create_source_locked(
+    *,
+    session: Session,
+    notebook: Notebook,
+    upload: UploadFile,
+    suffix: str,
+    media_type: str,
+) -> Source:
     source = Source(
         notebook_id=notebook.id,
         display_name=Path(upload.filename or "source").name[:255],
