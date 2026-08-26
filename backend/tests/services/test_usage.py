@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 
 from app.core.config import settings
 from app.core.security import encrypt_secret
-from app.models import UserProviderSettings, UserUsage
+from app.models import User, UserProviderSettings, UserUsage
 from app.services import usage
 from tests.utils.user import create_random_user
 
@@ -132,3 +132,61 @@ def test_usage_reservation_does_not_settle_into_a_new_period(
     row = db.exec(select(UserUsage).where(UserUsage.user_id == user.id)).one()
     assert row.period_start == next_period
     assert row.chat_tokens == 777
+
+
+def _verified_user(db: Session) -> User:
+    user = create_random_user(db)
+    user.is_email_verified = True
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def _consume_full_chat_allowance(db: Session, user_id: uuid.UUID) -> None:
+    db.add(
+        UserUsage(
+            user_id=user_id,
+            chat_tokens=settings.FREE_QUOTA_CHAT_TOKENS,
+            embedding_chars=0,
+            period_start=usage.current_period(),
+        )
+    )
+    db.commit()
+
+
+def test_source_without_any_provider_is_none() -> None:
+    assert usage._source(has_own_key=False, server_configured=False) == "none"
+
+
+def test_check_chat_quota_raises_when_allowance_consumed(
+    db: Session, monkeypatch: MonkeyPatch
+) -> None:
+    monkeypatch.setattr(settings, "LLM_API_KEY", "server-secret-key")
+    monkeypatch.setattr(settings, "LLM_BASE_URL", "https://api.example.com/v1")
+    user = _verified_user(db)
+    _consume_full_chat_allowance(db, user.id)
+
+    with pytest.raises(usage.QuotaError, match="对话额度已用完"):
+        usage.check_chat_quota(session=db, user_id=user.id)
+
+
+def test_reserve_usage_lost_race_falls_back_to_generic_quota_error(
+    db: Session, monkeypatch: MonkeyPatch
+) -> None:
+    """Simulate the concurrent race: the fast-path check sees room (patched
+    away), the guarded UPDATE matches no row because another request took the
+    last allowance first."""
+    monkeypatch.setattr(settings, "LLM_API_KEY", "server-secret-key")
+    monkeypatch.setattr(settings, "LLM_BASE_URL", "https://api.example.com/v1")
+    user = _verified_user(db)
+    _consume_full_chat_allowance(db, user.id)
+    # First call bypasses the fast path (simulating the race window); the
+    # rebuilt status then yields the detailed allowance error.
+    responses = iter([None, usage.QuotaError("对话额度已用完（重建后）")])
+    monkeypatch.setattr(
+        usage, "_quota_error_for", lambda *_a, **_k: next(responses)
+    )
+
+    with pytest.raises(usage.QuotaError, match="重建后"):
+        usage.reserve_usage(session=db, user_id=user.id, chat_tokens=1000)

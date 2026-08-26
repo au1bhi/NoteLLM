@@ -39,3 +39,13 @@ def test_new_jwt_uses_derived_key_and_legacy_jwt_still_decodes() -> None:
 
     legacy = jwt.encode(claims, settings.SECRET_KEY, algorithm=security.ALGORITHM)
     assert security.decode_jwt(legacy)["sub"] == "test"
+
+
+def test_decrypt_secret_returns_none_for_undecryptable_ciphertext() -> None:
+    """A ciphertext under a foreign key fails both the HKDF key and the legacy
+    SHA-256 fallback — the caller gets None instead of an exception."""
+    from cryptography.fernet import Fernet
+
+    foreign = Fernet(Fernet.generate_key()).encrypt(b"x").decode()
+    assert security.decrypt_secret(foreign) is None
+    assert security.decrypt_secret("not-a-token-at-all") is None

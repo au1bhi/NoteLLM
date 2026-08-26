@@ -70,11 +70,18 @@ keep-runtime-typing = true
 
 [tool.coverage.run]
 source = ["app"]
+branch = true
 dynamic_context = "test_function"
+omit = [
+    # Deployment/bootstrap scripts exercised by compose smoke, not pytest.
+    "app/initial_data.py",
+    "app/backend_pre_start.py",
+]
 
 [tool.coverage.report]
 show_missing = true
 sort = "-Cover"
+fail_under = 85
 
 [tool.coverage.html]
 show_contexts = true

@@ -302,3 +302,79 @@ def test_same_bucket_count_is_atomic_across_concurrent_workers() -> None:
         results = list(executor.map(consume, range(worker_count)))
 
     assert sorted(results) == list(range(1, worker_count + 1))
+
+
+def _plain_request(peer: str | None, xff: str | None) -> Request:
+    headers = [(b"x-forwarded-for", xff.encode())] if xff is not None else []
+    client = (peer, 5555) if peer else None
+    return Request({"type": "http", "client": client, "headers": headers})
+
+
+def test_trusted_networks_parses_string_config_and_skips_garbage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        settings,
+        "TRUSTED_PROXY_CIDRS",
+        "10.0.0.0/8, not-a-cidr ,2001:db8::/32",
+    )
+    networks = rate_limit_module._trusted_networks()
+    assert len(networks) == 2
+    assert all(not network.prefixlen == 33 for network in networks)
+
+
+def test_valid_ip_rejects_garbage_but_strips_spaces() -> None:
+    assert rate_limit_module._valid_ip("  1.2.3.4 ") == "1.2.3.4"
+    assert rate_limit_module._valid_ip("junk") is None
+
+
+def test_client_ip_falls_back_to_peer_when_no_forwarded_hops(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "TRUSTED_PROXY_CIDRS", ["10.0.0.0/8"])
+    # Trusted peer without an XFF header → empty hop list returns the peer.
+    request = _plain_request("10.1.1.1", "")
+    assert client_ip(request) == "10.1.1.1"
+
+
+def test_rate_limit_identity_keeps_non_ips_verbatim() -> None:
+    assert _rate_limit_identity("junk-host") == "junk-host"
+    assert _rate_limit_identity("9.9.9.9") == "9.9.9.9"
+
+
+def test_rate_limit_dependency_disabled_short_circuits(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "RATE_LIMIT_ENABLED", False)
+    dependency = rate_limit_module.rate_limit(limit=1)
+    dependency(_plain_request("9.9.9.9", None))  # must not raise or store buckets
+
+
+def test_recipient_send_cooldown_disabled_allows_everything(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "RATE_LIMIT_ENABLED", False)
+    assert rate_limit_module.recipient_send_cooldown("a@example.com") is True
+
+
+def test_reset_swallows_missing_schema(monkeypatch: pytest.MonkeyPatch) -> None:
+    from sqlalchemy.exc import SQLAlchemyError
+
+    class BrokenSession:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            self._raised = False
+
+        def __enter__(self) -> "BrokenSession":
+            return self
+
+        def __exit__(self, *exc: object) -> bool:
+            return False
+
+        def execute(self, *args: object, **kwargs: object) -> None:
+            raise SQLAlchemyError("relation does not exist")
+
+        def commit(self) -> None:  # pragma: no cover - never reached
+            raise AssertionError
+
+    monkeypatch.setattr(rate_limit_module, "Session", BrokenSession)
+    rate_limit_module.reset()

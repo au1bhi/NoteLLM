@@ -125,3 +125,58 @@ def test_openapi_documents_turnstile_header_on_all_protected_routes() -> None:
             parameter["in"] == "header" and parameter["name"] == "X-Turnstile-Token"
             for parameter in parameters
         )
+
+
+def test_verify_response_maps_http_error_to_503(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inner = Mock()
+    inner.post.return_value.raise_for_status.side_effect = httpx.HTTPStatusError(
+        "boom", request=Mock(), response=Mock()
+    )
+    context = Mock()
+    context.__enter__ = Mock(return_value=inner)
+    context.__exit__ = Mock(return_value=False)
+    monkeypatch.setattr("app.core.turnstile.httpx.Client", Mock(return_value=context))
+    with pytest.raises(HTTPException) as captured:
+        _verify_response("token", "203.0.113.10")
+    assert captured.value.status_code == 503
+    assert "暂时不可用" in captured.value.detail
+
+
+def test_verify_response_accepts_only_success_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cases: list[tuple[object, bool]] = [
+        ([], False),  # non-dict payload
+        ({"success": False}, False),
+        ({}, False),
+        ({"success": True}, True),
+    ]
+
+    for payload, expected in cases:
+        inner = Mock()
+        inner.post.return_value.raise_for_status = Mock()
+        inner.post.return_value.json = Mock(return_value=payload)
+        context = Mock()
+        context.__enter__ = Mock(return_value=inner)
+        context.__exit__ = Mock(return_value=False)
+        monkeypatch.setattr(
+            "app.core.turnstile.httpx.Client", Mock(return_value=context)
+        )
+        assert _verify_response("token", "203.0.113.10") is expected
+
+
+def test_verify_response_maps_malformed_json_to_503(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inner = Mock()
+    inner.post.return_value.raise_for_status = Mock()
+    inner.post.return_value.json.side_effect = ValueError("not json")
+    context = Mock()
+    context.__enter__ = Mock(return_value=inner)
+    context.__exit__ = Mock(return_value=False)
+    monkeypatch.setattr("app.core.turnstile.httpx.Client", Mock(return_value=context))
+    with pytest.raises(HTTPException) as captured:
+        _verify_response("token", "203.0.113.10")
+    assert captured.value.status_code == 503

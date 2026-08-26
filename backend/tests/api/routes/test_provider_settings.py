@@ -1,4 +1,5 @@
 import socket
+import uuid
 
 import pytest
 from fastapi.testclient import TestClient
@@ -7,9 +8,16 @@ from sqlmodel import Session, select
 from app.core.config import settings
 from app.core.security import decrypt_secret, encrypt_secret
 from app.models import UserProviderSettings, UserUsage
+from app.services import provider_settings as ps_module
 from app.services.provider_settings import (
+    ProviderProbeError,
+    _first,
     effective_chat_config,
+    fetch_model_ids,
     load_user_provider_settings,
+    mask_secret,
+    resolve_api_base,
+    resolve_probe_target,
 )
 from app.services.usage import current_period
 from tests.utils.user import authentication_token_from_email, create_random_user
@@ -558,3 +566,112 @@ def test_models_probe_uses_server_billing_when_request_uses_server_key(
     assert usage.chat_tokens == 42_300
     assert used_keys == ["server-secret-key"] * 3
     assert len(used_proxy_urls) == 3
+
+
+# --- Service-layer probe helpers -------------------------------------------
+
+
+def test_resolve_api_base_and_mask_secret_edge_cases() -> None:
+    assert resolve_api_base("", "openai") == ""
+    assert resolve_api_base("https://a.example", "openai") == "https://a.example"
+    assert mask_secret(None) == ""
+    assert mask_secret("") == ""
+    assert mask_secret("short") == "***"
+    assert mask_secret("sk-1234567890") == "sk-1***7890"
+    assert _first("", "   ") == ""
+
+
+def test_probe_target_requires_server_or_byok_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "LLM_API_KEY", "")
+    monkeypatch.setattr(settings, "LLM_BASE_URL", "")
+    with pytest.raises(ProviderProbeError, match="请先配置 API Key"):
+        resolve_probe_target(
+            session=None,
+            user_id=uuid.uuid4(),
+            user_base_url="",
+            user_api_key="",
+            api_format="openai",
+        )
+
+
+def test_fetch_model_ids_maps_transport_failures_to_probe_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def boom(_root: str, _api_key: str, *, _proxy_url: str | None) -> object:
+        raise ValueError("not json")
+
+    monkeypatch.setattr(ps_module, "fetch_models_payload", boom)
+    with pytest.raises(ProviderProbeError) as simple:
+        fetch_model_ids("https://p.example", "k", proxy_url=None)
+    assert simple.value.status_code == 503
+    assert "Base URL" in simple.value.detail
+
+    with pytest.raises(ProviderProbeError) as hinted:
+        fetch_model_ids(
+            "https://p.example", "k", proxy_url=None, fallback_root="https://p.example/v1"
+        )
+    assert "根域名" in hinted.value.detail
+
+
+def test_fetch_model_ids_falls_back_then_succeeds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, str | None]] = []
+
+    def fake_fetch(root: str, _api_key: str, *, proxy_url: str | None) -> object:
+        calls.append((root, proxy_url))
+        if "/v1" not in root:
+            raise ValueError("html page")
+        return {"data": [{"id": "via-fallback"}]}
+
+    monkeypatch.setattr(ps_module, "fetch_models_payload", fake_fetch)
+    ids = fetch_model_ids(
+        "https://p.example",
+        "k",
+        proxy_url=None,
+        fallback_root="https://p.example/v1",
+    )
+    assert ids == ["via-fallback"]
+    assert calls == [
+        ("https://p.example", None),
+        ("https://p.example/v1", None),
+    ]
+
+
+def test_fetch_model_ids_rejects_malformed_payloads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        ps_module,
+        "fetch_models_payload",
+        lambda *_a, **_k: {"data": {"oops": True}},
+    )
+    with pytest.raises(ProviderProbeError, match="异常数据"):
+        fetch_model_ids("https://p.example", "k", proxy_url=None)
+
+    monkeypatch.setattr(
+        ps_module, "fetch_models_payload", lambda *_a, **_k: {"data": []}
+    )
+    with pytest.raises(ProviderProbeError, match="未返回任何模型"):
+        fetch_model_ids("https://p.example", "k", proxy_url=None)
+
+
+def test_fetch_model_ids_keeps_only_string_ids(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = {
+        "data": [
+            {"id": "m1"},
+            "junk",
+            {"id": None},
+            {"id": 123},
+            {"id": "m2"},
+            {"no-id": True},
+        ]
+    }
+    monkeypatch.setattr(
+        ps_module, "fetch_models_payload", lambda *_a, **_k: payload
+    )
+    assert fetch_model_ids("https://p.example", "k", proxy_url=None) == ["m1", "m2"]
