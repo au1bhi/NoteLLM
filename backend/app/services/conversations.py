@@ -1,4 +1,5 @@
 import uuid
+from collections.abc import Callable
 
 from sqlmodel import Session, col, select
 
@@ -118,8 +119,14 @@ def persist_answer(
     question: str,
     mode: AnswerMode = "grounded",
     source_ids: list[uuid.UUID] | None = None,
+    on_delta: Callable[[str], None] | None = None,
 ) -> GroundedAnswer:
-    """Generate and atomically persist one user/assistant exchange."""
+    """Generate and atomically persist one user/assistant exchange.
+
+    ``on_delta`` receives incremental display text while the provider streams;
+    persistence itself always runs to completion regardless of whether the
+    client stays connected.
+    """
     with Session(engine) as session:
         conversation = session.get(Conversation, conversation_id)
         if not conversation:
@@ -148,6 +155,7 @@ def persist_answer(
                 mode=mode,
                 source_ids=source_ids,
                 conversation_id=conversation.id,
+                on_delta=on_delta,
             )
             reservation.set_actual(
                 chat_tokens=answer.tokens_used,

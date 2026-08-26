@@ -1,5 +1,7 @@
 import ipaddress
 import socket
+from collections.abc import Iterator
+from contextlib import contextmanager
 from socket import AddressFamily, SocketKind
 from typing import Any
 
@@ -115,6 +117,67 @@ def validate_outbound_url(base_url: str) -> str:
     return value.rstrip("/")
 
 
+def _pinned_request_args(
+    parsed: URL, ip: str, headers: dict[str, str] | None
+) -> tuple[URL, dict[str, str]]:
+    display_host = f"[{ip}]" if ":" in ip else ip
+    pinned = parsed.copy_with(host=display_host)
+    netloc = parsed.netloc
+    host_header = netloc.decode() if isinstance(netloc, bytes) else str(netloc)
+    merged = dict(headers or {})
+    merged.setdefault("Host", host_header)
+    return pinned, merged
+
+
+@contextmanager
+def pinned_stream(
+    method: str,
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+    **kwargs: Any,
+) -> Iterator[httpx.Response]:
+    """Open an outbound HTTP request whose body can be consumed incrementally.
+
+    Same validation and IP-pinning guarantees as :func:`pinned_request`; the
+    caller consumes the response inside the context so streaming SSE bodies
+    work without buffering.
+    """
+    parsed = _parse_base_url(url)
+    ip = resolve_public_ip(parsed)
+    pinned, merged = _pinned_request_args(parsed, ip, headers)
+    kwargs.pop("trust_env", None)
+    with httpx.Client(trust_env=False) as client:
+        with client.stream(
+            method,
+            str(pinned),
+            headers=merged,
+            extensions={"sni_hostname": parsed.host},
+            **kwargs,
+        ) as response:
+            yield response
+
+
+@contextmanager
+def trusted_provider_stream(
+    method: str,
+    url: str,
+    *,
+    proxy_url: str,
+    headers: dict[str, str] | None = None,
+    **kwargs: Any,
+) -> Iterator[httpx.Response]:
+    """Streaming counterpart of :func:`trusted_provider_request` (operator
+    proxy; no local pinning — see that function for the rationale)."""
+    parsed = _parse_base_url(url)
+    kwargs.pop("trust_env", None)
+    with httpx.Client(proxy=proxy_url, trust_env=False) as client:
+        with client.stream(
+            method, str(parsed), headers=headers, **kwargs
+        ) as response:
+            yield response
+
+
 def pinned_request(
     method: str,
     url: str,
@@ -130,25 +193,9 @@ def pinned_request(
     ``Host`` header and (for HTTPS) as the TLS SNI / certificate-verification
     name. `trust_env` is forced off so proxy environment variables never apply.
     """
-    parsed = _parse_base_url(url)
-    ip = resolve_public_ip(parsed)
-    display_host = f"[{ip}]" if ":" in ip else ip
-    pinned = parsed.copy_with(host=display_host)
-    netloc = parsed.netloc
-    host_header = netloc.decode() if isinstance(netloc, bytes) else str(netloc)
-    merged = dict(headers or {})
-    merged.setdefault("Host", host_header)
-    # trust_env is pinned off at the Client level so proxy environment
-    # variables never route (or leak) the request.
-    kwargs.pop("trust_env", None)
-    with httpx.Client(trust_env=False) as client:
-        return client.request(
-            method,
-            str(pinned),
-            headers=merged,
-            extensions={"sni_hostname": parsed.host},
-            **kwargs,
-        )
+    with pinned_stream(method, url, headers=headers, **kwargs) as response:
+        response.read()
+        return response
 
 
 def trusted_provider_request(
@@ -167,12 +214,8 @@ def trusted_provider_request(
     used for server environment configuration, never for a user's BYOK URL,
     which continues to use :func:`pinned_request`.
     """
-    parsed = _parse_base_url(url)
-    kwargs.pop("trust_env", None)
-    with httpx.Client(proxy=proxy_url, trust_env=False) as client:
-        return client.request(
-            method,
-            str(parsed),
-            headers=headers,
-            **kwargs,
-        )
+    with trusted_provider_stream(
+        method, url, proxy_url=proxy_url, headers=headers, **kwargs
+    ) as response:
+        response.read()
+        return response

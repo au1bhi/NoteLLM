@@ -1,4 +1,6 @@
+from collections.abc import Callable
 from datetime import date
+from typing import cast
 
 from fastapi.testclient import TestClient
 from pytest import MonkeyPatch
@@ -80,9 +82,18 @@ def test_message_stream_emits_delta_citations_and_done(
         headers=headers,
         json={},
     ).json()
+
+    def fake_persist(**kwargs: object) -> GroundedAnswer:
+        on_delta = cast(
+            Callable[[str], None] | None, kwargs.get("on_delta")
+        )
+        if on_delta is not None:
+            on_delta("Grounded ")
+            on_delta("answer")
+        return GroundedAnswer(content="Grounded answer", citations=[])
+
     monkeypatch.setattr(
-        "app.api.routes.conversations.persist_answer",
-        lambda **_: GroundedAnswer(content="Grounded answer", citations=[]),
+        "app.api.routes.conversations.persist_answer", fake_persist
     )
 
     response = client.post(
@@ -92,12 +103,16 @@ def test_message_stream_emits_delta_citations_and_done(
     )
 
     assert response.status_code == 200
-    assert "event: delta" in response.text
-    assert "event: citations" in response.text
-    assert "event: done" in response.text
+    assert response.text.index("event: delta") < response.text.index(
+        "event: citations"
+    )
+    assert response.text.index("event: citations") < response.text.index("event: done")
+    # Deltas arrive while producing, not replayed after persistence finished:
+    # two on_delta calls must surface as exactly two delta events.
+    assert response.text.count("event: delta") == 2
 
 
-def test_message_stream_chunks_chinese_content(
+def test_message_stream_forwards_on_delta_while_producing(
     client: TestClient,
     db: Session,
     monkeypatch: MonkeyPatch,
@@ -110,9 +125,20 @@ def test_message_stream_chunks_chinese_content(
         headers=headers,
         json={},
     ).json()
+    content = "资料不足，无法回答。"
+
+    def fake_persist(**kwargs: object) -> GroundedAnswer:
+        on_delta = cast(
+            Callable[[str], None] | None, kwargs.get("on_delta")
+        )
+        # Stream char-by-char like a real provider would for CJK text.
+        if on_delta is not None:
+            for char in content:
+                on_delta(char)
+        return GroundedAnswer(content=content, citations=[])
+
     monkeypatch.setattr(
-        "app.api.routes.conversations.persist_answer",
-        lambda **_: GroundedAnswer(content="资料不足，无法回答。", citations=[]),
+        "app.api.routes.conversations.persist_answer", fake_persist
     )
 
     response = client.post(
@@ -122,12 +148,52 @@ def test_message_stream_chunks_chinese_content(
     )
 
     assert response.status_code == 200
-    # Chinese text has no spaces, so a space-split would emit one giant delta.
-    # Each CJK character must stream as its own small chunk instead. SSE
-    # escapes non-ASCII as \uXXXX, so 资料不足 streams as 8 separate deltas.
     delta_events = response.text.count("event: delta")
-    assert delta_events == len("资料不足，无法回答。")
+    assert delta_events == len(content)
     assert "\\u8d44" in response.text  # 资
+
+
+def test_message_stream_mid_production_error_event(
+    client: TestClient,
+    db: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """A failure after some deltas surfaced still yields error+done."""
+    from app.services.chat import ChatError
+
+    user = create_random_user(db)
+    notebook = create_random_notebook(db=db, owner_id=user.id)
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+    conversation = client.post(
+        f"{settings.API_V1_STR}/notebooks/{notebook.id}/conversations/",
+        headers=headers,
+        json={},
+    ).json()
+
+    def fake_persist(**kwargs: object) -> GroundedAnswer:
+        on_delta = cast(
+            Callable[[str], None] | None, kwargs.get("on_delta")
+        )
+        if on_delta is not None:
+            on_delta("partial")
+        raise ChatError("模型服务商返回错误 (500)：boom")
+
+    monkeypatch.setattr(
+        "app.api.routes.conversations.persist_answer", fake_persist
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/conversations/{conversation['id']}/messages/stream",
+        headers=headers,
+        json={"content": "触发中途失败"},
+    )
+
+    assert response.status_code == 200
+    assert "event: delta" in response.text
+    assert response.text.index("event: delta") < response.text.index("event: error")
+    assert "boom" in response.text
+    assert response.text.index("event: error") < response.text.index("event: done")
+    assert "event: citations" not in response.text
 
 
 def test_message_stream_forwards_answer_mode(

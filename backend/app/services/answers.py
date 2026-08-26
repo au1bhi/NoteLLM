@@ -1,5 +1,6 @@
 import re
 import uuid
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
@@ -281,6 +282,7 @@ def answer_question(
     source_ids: list[uuid.UUID] | None = None,
     limit: int = DEFAULT_RETRIEVAL_LIMIT,
     conversation_id: uuid.UUID | None = None,
+    on_delta: Callable[[str], None] | None = None,
 ) -> GroundedAnswer:
     """Answer a question using the requested mode and recent conversation history."""
     history = build_conversation_history(
@@ -311,6 +313,7 @@ def answer_question(
                     question=query, evidence=build_evidence(retrieved), history=history
                 ),
                 system=build_system_rules(mode=mode),
+                on_delta=on_delta,
             )
             return GroundedAnswer(
                 citations=[],
@@ -328,7 +331,9 @@ def answer_question(
     )
     system = build_system_rules(mode=mode)
     pool = ThreadPoolExecutor(max_workers=2)
-    answer_future = pool.submit(chat_provider.answer, prompt=user_block, system=system)
+    answer_future = pool.submit(
+        chat_provider.answer, prompt=user_block, system=system, on_delta=on_delta
+    )
     suggestions_future = pool.submit(
         suggest_questions,
         chat_provider=chat_provider,

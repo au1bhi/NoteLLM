@@ -23,7 +23,13 @@ class FakeChatProvider:
         self.answer_result = answer
         self.suggestions = suggestions if suggestions is not None else []
 
-    def answer(self, *, prompt: str, system: str | None = None) -> ModelAnswer:
+    def answer(
+        self,
+        *,
+        prompt: str,
+        system: str | None = None,
+        on_delta: object = None,
+    ) -> ModelAnswer:
         return self.answer_result
 
     def complete_json(self, *, prompt: str, system: str | None = None) -> dict:

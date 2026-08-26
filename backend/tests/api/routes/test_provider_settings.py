@@ -538,11 +538,13 @@ def test_models_probe_uses_server_billing_when_request_uses_server_key(
     )
     db.commit()
     used_keys: list[str] = []
+    used_proxy_urls: list[str | None] = []
 
     def fake_fetch(
         _root: str, api_key: str, *, proxy_url: str | None = None
     ) -> dict[str, object]:
         used_keys.append(api_key)
+        used_proxy_urls.append(proxy_url)
         return {"data": [{"id": "gpt-4o"}]}
 
     monkeypatch.setattr("app.api.routes.users._fetch_models_payload", fake_fetch)
@@ -555,3 +557,4 @@ def test_models_probe_uses_server_billing_when_request_uses_server_key(
     assert usage is not None
     assert usage.chat_tokens == 42_300
     assert used_keys == ["server-secret-key"] * 3
+    assert len(used_proxy_urls) == 3

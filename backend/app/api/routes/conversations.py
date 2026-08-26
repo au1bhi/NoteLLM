@@ -1,11 +1,12 @@
+import asyncio
+import threading
 import uuid
-from collections.abc import AsyncIterable, Iterable
-from typing import Annotated
+from collections.abc import AsyncIterable
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from sqlmodel import Session, select
-from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import CurrentUser, SessionDep
 from app.core.rate_limit import rate_limit
@@ -18,6 +19,7 @@ from app.models import (
     Notebook,
     get_datetime_utc,
 )
+from app.services.answers import GroundedAnswer
 from app.services.chat import ChatError
 from app.services.conversations import conversation_detail, persist_answer
 from app.services.embeddings import EmbeddingError
@@ -104,32 +106,6 @@ def get_owned_conversation_or_404(
     )
 
 
-def _iter_stream_chunks(content: str) -> Iterable[str]:
-    """Yield small display chunks for SSE streaming.
-
-    Splitting on spaces alone breaks Chinese text (no spaces between words),
-    which would emit the whole answer as a single delta and defeat streaming.
-    Emit each CJK character individually and each Latin word (with its trailing
-    space) separately so both scripts stream at a natural reading pace.
-    """
-    buffer: list[str] = []
-
-    def flush() -> Iterable[str]:
-        if buffer:
-            yield "".join(buffer)
-            buffer.clear()
-
-    for char in content:
-        if ord(char) > 0x2E7F:  # CJK and full-width ranges start above U+2E7F
-            yield from flush()
-            yield char
-        else:
-            buffer.append(char)
-            if char == " ":
-                yield from flush()
-    yield from flush()
-
-
 @router.post(
     "/{conversation_id}/messages/stream",
     response_class=EventSourceResponse,
@@ -139,45 +115,79 @@ async def stream_message(
     conversation: Annotated[Conversation, Depends(get_owned_conversation_or_404)],
     message_in: ConversationMessageCreate,
 ) -> AsyncIterable[ServerSentEvent]:
+    """True provider-level SSE streaming.
+
+    A worker thread runs ``persist_answer`` while its ``on_delta`` callbacks
+    are bridged onto this event loop via a queue, so each answer fragment is
+    emitted the moment the provider produces it. Persistence always runs to
+    completion: if the client disconnects the generator is closed, but the
+    thread's DB writes still land (a disconnect event simply stops delivery).
+    """
     conversation_id = conversation.id
-    try:
-        answer = await run_in_threadpool(
-            lambda: persist_answer(
+    loop = asyncio.get_running_loop()
+    # Unbounded: one answer is capped at MAX_OUTPUT_TOKENS (~8 KB), far below
+    # any realistic memory concern.
+    queue: asyncio.Queue[tuple[str, object] | None] = asyncio.Queue()
+
+    def bridge(kind: str, payload: object) -> None:
+        try:
+            loop.call_soon_threadsafe(queue.put_nowait, (kind, payload))
+        except RuntimeError:
+            pass  # event loop gone (client disconnected/server shutdown)
+
+    def produce() -> None:
+        try:
+            answer = persist_answer(
                 conversation_id=conversation_id,
                 question=message_in.content,
                 mode=message_in.mode,
                 source_ids=message_in.source_ids,
+                on_delta=lambda text: bridge("delta", text),
             )
-        )
-    except (ChatError, EmbeddingError, QuotaError, RuntimeError) as error:
-        yield ServerSentEvent(data={"message": str(error)}, event="error")
-        yield ServerSentEvent(
-            data={"conversation_id": str(conversation_id)}, event="done"
-        )
-        return
-    except Exception as error:
-        yield ServerSentEvent(
-            data={"message": f"意外错误：{type(error).__name__}"},
-            event="error",
-        )
-        yield ServerSentEvent(
-            data={"conversation_id": str(conversation_id)}, event="done"
-        )
-        return
-    for chunk in _iter_stream_chunks(answer.content):
-        yield ServerSentEvent(data={"text": chunk}, event="delta")
-    yield ServerSentEvent(
-        data={
-            "citations": [
-                {
-                    "chunk_id": str(citation.chunk_id),
-                    "quote": citation.quote,
-                    "source_display_name": citation.source_display_name,
-                    "page_number": citation.page_number,
-                }
-                for citation in answer.citations
-            ]
-        },
-        event="citations",
-    )
-    yield ServerSentEvent(data={"conversation_id": str(conversation_id)}, event="done")
+        except (ChatError, EmbeddingError, QuotaError, RuntimeError) as error:
+            bridge("error", str(error))
+        except Exception as error:
+            bridge("error", f"意外错误：{type(error).__name__}")
+        else:
+            bridge("final", answer)
+
+    thread = threading.Thread(target=produce, name="stream-message-producer")
+    thread.start()
+
+    while True:
+        item = await queue.get()
+        if item is None:
+            break
+        kind, payload = item
+        if kind == "delta":
+            yield ServerSentEvent(data={"text": payload}, event="delta")
+        elif kind == "final":
+            answer = cast(GroundedAnswer, payload)
+            yield ServerSentEvent(
+                data={
+                    "citations": [
+                        {
+                            "chunk_id": str(citation.chunk_id),
+                            "quote": citation.quote,
+                            "source_display_name": citation.source_display_name,
+                            "page_number": citation.page_number,
+                        }
+                        for citation in answer.citations
+                    ]
+                },
+                event="citations",
+            )
+            yield ServerSentEvent(
+                data={"conversation_id": str(conversation_id)}, event="done"
+            )
+            break
+        else:  # error
+            yield ServerSentEvent(
+                data={"message": str(payload)}, event="error"
+            )
+            yield ServerSentEvent(
+                data={"conversation_id": str(conversation_id)}, event="done"
+            )
+            break
+    thread.join()
+

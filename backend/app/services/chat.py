@@ -2,13 +2,21 @@ import json
 import math
 import re
 import threading
+from collections.abc import Callable
+from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import Protocol
 
 import httpx
 
 from app.core.config import settings
-from app.core.ssrf import pinned_request, trusted_provider_request
+from app.core.ssrf import (
+    pinned_request,
+    pinned_stream,
+    trusted_provider_request,
+    trusted_provider_stream,
+)
+from app.services.chat_stream import JsonAnswerValueStream, ThinkSuppressor
 from app.services.provider_settings import ProviderConfig, resolve_api_base
 
 # Hard cap on a single answer's output tokens. Besides bounding latency, this
@@ -26,6 +34,13 @@ _PROVIDER_SEMAPHORE = threading.Semaphore(8)
 
 class ChatError(Exception):
     """Raised when the configured chat provider cannot produce a safe answer."""
+
+
+class _ProviderStatus(Exception):
+    def __init__(self, status_code: int, message: str) -> None:
+        super().__init__(f"{status_code}: {message}")
+        self.status_code = status_code
+        self.message = message
 
 
 def _is_cjk(char: str) -> bool:
@@ -72,7 +87,14 @@ class ModelAnswer:
 
 
 class ChatProvider(Protocol):
-    def answer(self, *, prompt: str, system: str | None = None) -> ModelAnswer: ...
+    def answer(
+        self,
+        *,
+        prompt: str,
+        system: str | None = None,
+        on_delta: Callable[[str], None] | None = None,
+    ) -> ModelAnswer: ...
+
     def complete_json(
         self, *, prompt: str, system: str | None = None
     ) -> dict[str, object]: ...
@@ -84,7 +106,157 @@ class OpenAICompatibleChatProvider:
         self.total_tokens_used = 0
         self._tokens_lock = threading.Lock()
 
-    def _chat(self, *, prompt: str, system: str | None = None) -> str:
+    def _provider_error_message(self, response: httpx.Response) -> str:
+        try:
+            err_payload = response.json()
+            if isinstance(err_payload, dict):
+                err_data = err_payload.get("error")
+                if isinstance(err_data, dict):
+                    return str(err_data.get("message") or "")
+                if isinstance(err_data, str):
+                    return err_data
+                if "message" in err_payload:
+                    return str(err_payload["message"])
+        except Exception:
+            pass
+        return response.text[:200]
+
+    def _request_body(
+        self,
+        *,
+        messages: list[dict[str, str]],
+        streaming: bool,
+    ) -> dict[str, object]:
+        body: dict[str, object] = {
+            "model": self.config.model,
+            "messages": messages,
+            "response_format": {"type": "json_object"},
+            "temperature": 0,
+            "max_tokens": MAX_OUTPUT_TOKENS,
+        }
+        if streaming:
+            body["stream"] = True
+            # Non-OpenAI gateways ignore unknown options; OpenAI needs it to
+            # include usage stats in the final chunk.
+            body["stream_options"] = {"include_usage": True}
+        return body
+
+    def _open_stream(
+        self,
+        *,
+        endpoint: str,
+        headers: dict[str, str],
+        body: dict[str, object],
+    ) -> AbstractContextManager[httpx.Response]:
+        if self.config.server_proxy_url:
+            return trusted_provider_stream(
+                "POST",
+                endpoint,
+                proxy_url=self.config.server_proxy_url,
+                headers=headers,
+                json=body,
+                timeout=60.0,
+            )
+        return pinned_stream(
+            "POST",
+            endpoint,
+            headers=headers,
+            json=body,
+            timeout=60.0,
+        )
+
+    def _attempt_stream(
+        self,
+        *,
+        endpoint: str,
+        body: dict[str, object],
+        prompt: str,
+        on_delta: Callable[[str], None],
+        raw_parts: list[str],
+    ) -> None:
+        """Run one streaming attempt; raises _ProviderStatus on HTTP errors.
+
+        Appends the full think-filtered payload text to ``raw_parts`` so the
+        caller can authoritatively parse answer+citations afterwards. Only the
+        decoded ``"answer"`` value is forwarded to ``on_delta`` (display view);
+        raw envelope/reasoning text never reaches the client. Tokens are
+        recorded here; a rejected attempt (non-200) records none.
+        """
+        headers = {"Authorization": f"Bearer {self.config.api_key}"}
+        suppressor = ThinkSuppressor()
+        value_stream = JsonAnswerValueStream()
+        usage_tokens: int | None = None
+        with self._open_stream(
+            endpoint=endpoint, headers=headers, body=body
+        ) as response:
+            if response.status_code != 200:
+                # Inside a streaming context the body isn't buffered yet;
+                # materialize the (small) error document before inspecting it.
+                response.read()
+                raise _ProviderStatus(
+                    response.status_code,
+                    self._provider_error_message(response),
+                )
+            for line in response.iter_lines():
+                line = line.strip()
+                if not line.startswith("data:") or line == "data:":
+                    continue
+                payload_text = line[len("data:") :].strip()
+                if payload_text == "[DONE]":
+                    break
+                try:
+                    payload = json.loads(payload_text)
+                except json.JSONDecodeError:
+                    continue
+                usage = payload.get("usage")
+                if isinstance(usage, dict) and isinstance(
+                    usage.get("total_tokens"), (int, float)
+                ):
+                    usage_tokens = int(usage["total_tokens"])
+                choices = payload.get("choices")
+                if not isinstance(choices, list) or not choices:
+                    continue
+                first_choice = choices[0]
+                delta_obj = (
+                    first_choice.get("delta", {})
+                    if isinstance(first_choice, dict)
+                    else {}
+                )
+                piece = (
+                    delta_obj.get("content")
+                    if isinstance(delta_obj, dict)
+                    else None
+                )
+                if not isinstance(piece, str) or not piece:
+                    continue
+                filtered = suppressor.feed(piece)
+                if filtered:
+                    raw_parts.append(filtered)
+                visible = value_stream.feed(filtered)
+                if visible:
+                    on_delta(visible)
+
+        tail = suppressor.flush()
+        if tail:
+            raw_parts.append(tail)
+            visible_tail = value_stream.feed(tail)
+            if visible_tail:
+                on_delta(visible_tail)
+        actual = (
+            usage_tokens
+            if usage_tokens is not None
+            else estimate_tokens(prompt) + estimate_tokens("".join(raw_parts))
+        )
+        with self._tokens_lock:
+            self.total_tokens_used += actual
+
+    def _chat(
+        self,
+        *,
+        prompt: str,
+        system: str | None = None,
+        on_delta: Callable[[str], None] | None = None,
+    ) -> str:
         if not self.config.base_url or not self.config.api_key or not self.config.model:
             raise ChatError(
                 "对话模型尚未配置。请在设置中填写 API Key，或由管理员配置服务端模型。"
@@ -99,41 +271,134 @@ class OpenAICompatibleChatProvider:
             messages.append({"role": "system", "content": system})
         messages.append({"role": "user", "content": prompt})
 
-        request_body: dict[str, object] = {
-            "model": self.config.model,
-            "messages": messages,
-            "response_format": {"type": "json_object"},
-            "temperature": 0,
-            "max_tokens": MAX_OUTPUT_TOKENS,
-        }
-
-        def _do_post(body: dict[str, object]) -> httpx.Response:
-            if self.config.server_proxy_url:
-                return trusted_provider_request(
-                    "POST",
-                    endpoint,
-                    proxy_url=self.config.server_proxy_url,
-                    headers={"Authorization": f"Bearer {self.config.api_key}"},
-                    json=body,
-                    timeout=60.0,
+        try:
+            if on_delta is not None:
+                return self._chat_streaming(
+                    endpoint=endpoint,
+                    messages=messages,
+                    prompt=prompt,
+                    on_delta=on_delta,
                 )
-            return pinned_request(
-                "POST",
-                endpoint,
-                headers={"Authorization": f"Bearer {self.config.api_key}"},
-                json=body,
-                timeout=60.0,
-            )
+            return self._chat_blocking(endpoint=endpoint, messages=messages, prompt=prompt)
+        except ChatError:
+            raise
+        except (httpx.HTTPError, KeyError, TypeError, ValueError, IndexError) as error:
+            raise ChatError(
+                f"对话模型通信失败：{type(error).__name__} {error}"
+            ) from error
 
+    def _chat_streaming(
+        self,
+        *,
+        endpoint: str,
+        messages: list[dict[str, str]],
+        prompt: str,
+        on_delta: Callable[[str], None],
+    ) -> str:
+        request_body = self._request_body(messages=messages, streaming=True)
+        fallback_body = {
+            key: val for key, val in request_body.items() if key != "response_format"
+        }
+        raw_parts: list[str] = []
         try:
             with _PROVIDER_SEMAPHORE:
-                response = _do_post(request_body)
+                body = request_body
+                format_fallback_tried = False
+                while True:
+                    try:
+                        self._attempt_stream(
+                            endpoint=endpoint,
+                            body=body,
+                            prompt=prompt,
+                            on_delta=on_delta,
+                            raw_parts=raw_parts,
+                        )
+                        break
+                    except _ProviderStatus as status_error:
+                        if (
+                            status_error.status_code == 400
+                            and not format_fallback_tried
+                            and (
+                                "response_format" in status_error.message
+                                or "format" in status_error.message
+                            )
+                        ):
+                            # Some OpenAI-compatible gateways reject
+                            # response_format; retry once without it. A 400
+                            # precedes any body bytes, so no deltas were sent
+                            # under the failed attempt.
+                            format_fallback_tried = True
+                            body = fallback_body
+                            continue
+                        raise ChatError(
+                            f"模型服务商返回错误"
+                            f" ({status_error.status_code})：{status_error.message}"
+                        ) from None
+        except ChatError:
+            # A mid-stream network failure can leave partial text delivered;
+            # surfacing the error lets callers send an error event too.
+            raise
+        except (httpx.HTTPError, KeyError, TypeError, ValueError, IndexError) as error:
+            raise ChatError(
+                f"对话模型通信失败：{type(error).__name__} {error}"
+            ) from error
+        return "".join(raw_parts)
+
+    def _chat_blocking(
+        self,
+        *,
+        endpoint: str,
+        messages: list[dict[str, str]],
+        prompt: str,
+    ) -> str:
+        request_body = self._request_body(messages=messages, streaming=False)
+        try:
+            with _PROVIDER_SEMAPHORE:
+                response = (
+                    trusted_provider_request(
+                        "POST",
+                        endpoint,
+                        proxy_url=self.config.server_proxy_url,
+                        headers={"Authorization": f"Bearer {self.config.api_key}"},
+                        json=request_body,
+                        timeout=60.0,
+                    )
+                    if self.config.server_proxy_url
+                    else pinned_request(
+                        "POST",
+                        endpoint,
+                        headers={"Authorization": f"Bearer {self.config.api_key}"},
+                        json=request_body,
+                        timeout=60.0,
+                    )
+                )
                 if response.status_code == 400 and (
                     "response_format" in response.text or "format" in response.text
                 ):
                     body_fallback = dict(request_body)
                     body_fallback.pop("response_format", None)
-                    response = _do_post(body_fallback)
+                    response = (
+                        trusted_provider_request(
+                            "POST",
+                            endpoint,
+                            proxy_url=self.config.server_proxy_url,
+                            headers={
+                                "Authorization": f"Bearer {self.config.api_key}"
+                            },
+                            json=body_fallback,
+                            timeout=60.0,
+                        )
+                        if self.config.server_proxy_url
+                        else pinned_request(
+                            "POST",
+                            endpoint,
+                            headers={
+                                "Authorization": f"Bearer {self.config.api_key}"
+                            },
+                            json=body_fallback,
+                            timeout=60.0,
+                        )
+                    )
 
             if response.status_code != 200:
                 err_msg = ""
@@ -207,8 +472,14 @@ class OpenAICompatibleChatProvider:
             raise ChatError("对话模型未返回 JSON 对象")
         return parsed
 
-    def answer(self, *, prompt: str, system: str | None = None) -> ModelAnswer:
-        raw_content = self._chat(prompt=prompt, system=system)
+    def answer(
+        self,
+        *,
+        prompt: str,
+        system: str | None = None,
+        on_delta: Callable[[str], None] | None = None,
+    ) -> ModelAnswer:
+        raw_content = self._chat(prompt=prompt, system=system, on_delta=on_delta)
         cleaned = clean_json_text(raw_content)
         try:
             data = json.loads(cleaned)
