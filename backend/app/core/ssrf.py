@@ -1,7 +1,7 @@
 import ipaddress
 import socket
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import AbstractContextManager, contextmanager
 from socket import AddressFamily, SocketKind
 from typing import Any
 
@@ -219,3 +219,40 @@ def trusted_provider_request(
     ) as response:
         response.read()
         return response
+
+
+def provider_stream(
+    method: str,
+    url: str,
+    *,
+    proxy_url: str | None,
+    headers: dict[str, str] | None = None,
+    **kwargs: Any,
+) -> AbstractContextManager[httpx.Response]:
+    """Pick the right streaming transport for a provider config.
+
+    Operator proxies get :func:`trusted_provider_stream`; everything else is
+    DNS-validated and IP-pinned via :func:`pinned_stream`. Single dispatch
+    point so call sites never re-implement the choice.
+    """
+    if proxy_url:
+        return trusted_provider_stream(
+            method, url, proxy_url=proxy_url, headers=headers, **kwargs
+        )
+    return pinned_stream(method, url, headers=headers, **kwargs)
+
+
+def provider_request(
+    method: str,
+    url: str,
+    *,
+    proxy_url: str | None,
+    headers: dict[str, str] | None = None,
+    **kwargs: Any,
+) -> httpx.Response:
+    """Blocking counterpart of :func:`provider_stream`."""
+    if proxy_url:
+        return trusted_provider_request(
+            method, url, proxy_url=proxy_url, headers=headers, **kwargs
+        )
+    return pinned_request(method, url, headers=headers, **kwargs)

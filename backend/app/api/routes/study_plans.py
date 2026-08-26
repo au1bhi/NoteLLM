@@ -150,7 +150,7 @@ def create_or_regenerate_study_plan(
                 chat_provider=provider,
             )
             reservation.set_actual(
-                chat_tokens=getattr(provider, "total_tokens_used", 0)
+                chat_tokens=provider.total_tokens_used
             )
     except QuotaError as error:
         raise HTTPException(status_code=429, detail=str(error)) from error
@@ -247,7 +247,7 @@ def ai_adjust_plan(
                 chat_provider=provider,
             )
             reservation.set_actual(
-                chat_tokens=getattr(provider, "total_tokens_used", 0)
+                chat_tokens=provider.total_tokens_used
             )
     except QuotaError as error:
         raise HTTPException(status_code=429, detail=str(error)) from error

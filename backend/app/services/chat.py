@@ -11,10 +11,8 @@ import httpx
 
 from app.core.config import settings
 from app.core.ssrf import (
-    pinned_request,
-    pinned_stream,
-    trusted_provider_request,
-    trusted_provider_stream,
+    provider_request,
+    provider_stream,
 )
 from app.services.chat_stream import JsonAnswerValueStream, ThinkSuppressor
 from app.services.provider_settings import ProviderConfig, resolve_api_base
@@ -41,6 +39,17 @@ class _ProviderStatus(Exception):
         super().__init__(f"{status_code}: {message}")
         self.status_code = status_code
         self.message = message
+
+
+def _is_format_rejection(message: str) -> bool:
+    """True when a 400 body blames the ``response_format`` option.
+
+    Match the explicit option name (OpenAI/vLLM style) or a JSON-key-style
+    mention of ``format``; unrelated prose containing the word must not spend
+    a second billable request on a retry that will fail the same way.
+    """
+    lowered = message.lower()
+    return "response_format" in lowered or '"format"' in lowered
 
 
 def _is_cjk(char: str) -> bool:
@@ -87,6 +96,10 @@ class ModelAnswer:
 
 
 class ChatProvider(Protocol):
+    # Total provider tokens billed through this instance so far; used for quota
+    # accounting. Declared on the protocol so call sites can read it directly.
+    total_tokens_used: int
+
     def answer(
         self,
         *,
@@ -148,18 +161,10 @@ class OpenAICompatibleChatProvider:
         headers: dict[str, str],
         body: dict[str, object],
     ) -> AbstractContextManager[httpx.Response]:
-        if self.config.server_proxy_url:
-            return trusted_provider_stream(
-                "POST",
-                endpoint,
-                proxy_url=self.config.server_proxy_url,
-                headers=headers,
-                json=body,
-                timeout=60.0,
-            )
-        return pinned_stream(
+        return provider_stream(
             "POST",
             endpoint,
+            proxy_url=self.config.server_proxy_url or None,
             headers=headers,
             json=body,
             timeout=60.0,
@@ -318,10 +323,7 @@ class OpenAICompatibleChatProvider:
                         if (
                             status_error.status_code == 400
                             and not format_fallback_tried
-                            and (
-                                "response_format" in status_error.message
-                                or "format" in status_error.message
-                            )
+                            and _is_format_rejection(status_error.message)
                         ):
                             # Some OpenAI-compatible gateways reject
                             # response_format; retry once without it. A 400
@@ -352,72 +354,38 @@ class OpenAICompatibleChatProvider:
         prompt: str,
     ) -> str:
         request_body = self._request_body(messages=messages, streaming=False)
+        headers = {"Authorization": f"Bearer {self.config.api_key}"}
+
+        def send(body: dict[str, object]) -> httpx.Response:
+            return provider_request(
+                "POST",
+                endpoint,
+                proxy_url=self.config.server_proxy_url or None,
+                headers=headers,
+                json=body,
+                timeout=60.0,
+            )
+
         try:
             with _PROVIDER_SEMAPHORE:
-                response = (
-                    trusted_provider_request(
-                        "POST",
-                        endpoint,
-                        proxy_url=self.config.server_proxy_url,
-                        headers={"Authorization": f"Bearer {self.config.api_key}"},
-                        json=request_body,
-                        timeout=60.0,
-                    )
-                    if self.config.server_proxy_url
-                    else pinned_request(
-                        "POST",
-                        endpoint,
-                        headers={"Authorization": f"Bearer {self.config.api_key}"},
-                        json=request_body,
-                        timeout=60.0,
-                    )
-                )
-                if response.status_code == 400 and (
-                    "response_format" in response.text or "format" in response.text
+                response = send(request_body)
+                if response.status_code == 400 and _is_format_rejection(
+                    self._provider_error_message(response)
                 ):
-                    body_fallback = dict(request_body)
-                    body_fallback.pop("response_format", None)
-                    response = (
-                        trusted_provider_request(
-                            "POST",
-                            endpoint,
-                            proxy_url=self.config.server_proxy_url,
-                            headers={
-                                "Authorization": f"Bearer {self.config.api_key}"
-                            },
-                            json=body_fallback,
-                            timeout=60.0,
-                        )
-                        if self.config.server_proxy_url
-                        else pinned_request(
-                            "POST",
-                            endpoint,
-                            headers={
-                                "Authorization": f"Bearer {self.config.api_key}"
-                            },
-                            json=body_fallback,
-                            timeout=60.0,
-                        )
+                    # Some OpenAI-compatible gateways reject response_format;
+                    # retry once without it.
+                    response = send(
+                        {
+                            key: val
+                            for key, val in request_body.items()
+                            if key != "response_format"
+                        }
                     )
 
             if response.status_code != 200:
-                err_msg = ""
-                try:
-                    err_payload = response.json()
-                    if isinstance(err_payload, dict):
-                        err_data = err_payload.get("error")
-                        if isinstance(err_data, dict):
-                            err_msg = str(err_data.get("message") or "")
-                        elif isinstance(err_data, str):
-                            err_msg = err_data
-                        elif "message" in err_payload:
-                            err_msg = str(err_payload["message"])
-                except Exception:
-                    pass
-                if not err_msg:
-                    err_msg = response.text[:200]
                 raise ChatError(
-                    f"模型服务商返回错误 ({response.status_code})：{err_msg}"
+                    f"模型服务商返回错误 ({response.status_code})："
+                    f"{self._provider_error_message(response)}"
                 )
 
             payload = response.json()

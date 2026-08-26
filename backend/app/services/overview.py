@@ -34,11 +34,6 @@ def build_overview_user(*, excerpts: str) -> str:
     )
 
 
-def build_overview_prompt(*, excerpts: str) -> str:
-    """Legacy combined prompt kept for callers that still want one string."""
-    return f"{build_overview_system()}\n\n{build_overview_user(excerpts=excerpts)}\n"
-
-
 def sample_ready_chunks(session: Session, notebook_id: uuid.UUID) -> list[str]:
     """Return a character-budgeted sample of the notebook's ready source text."""
     sources = session.exec(

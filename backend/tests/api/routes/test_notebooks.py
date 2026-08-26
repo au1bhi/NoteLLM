@@ -1,9 +1,11 @@
 import uuid
 
 from fastapi.testclient import TestClient
+from pytest import MonkeyPatch
 from sqlmodel import Session
 
 from app.core.config import settings
+from app.models import Source
 from tests.utils.notebook import create_random_notebook
 from tests.utils.user import authentication_token_from_email, create_random_user
 
@@ -85,3 +87,39 @@ def test_read_notebook_not_found(
         headers=normal_user_token_headers,
     )
     assert response.status_code == 404
+
+
+def test_retry_rejects_ready_source(
+    client: TestClient,
+    db: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    user = create_random_user(db)
+    notebook = create_random_notebook(db=db, owner_id=user.id)
+    source = Source(
+        notebook_id=notebook.id,
+        display_name="done.txt",
+        media_type="text/plain",
+        file_size_bytes=4,
+        storage_path="done.txt",
+        status="ready",
+    )
+    db.add(source)
+    db.commit()
+    db.refresh(source)
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+
+    def explode(_source_id: object) -> None:  # pragma: no cover
+        raise AssertionError("process_source_isolated must not run for ready sources")
+
+    monkeypatch.setattr(
+        "app.api.routes.notebooks.process_source_isolated", explode
+    )
+
+    response = client.post(
+        f"{settings.API_V1_STR}/notebooks/{notebook.id}"
+        f"/sources/{source.id}/retry",
+        headers=headers,
+    )
+
+    assert response.status_code == 409

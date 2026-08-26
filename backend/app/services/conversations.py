@@ -88,7 +88,9 @@ def conversation_detail(
         chunk = chunks_by_id.get(citation.chunk_id)
         source = sources_by_id.get(chunk.source_id) if chunk else None
         if not chunk or not source:
-            raise RuntimeError("Citation references a deleted chunk")
+            # Defensive: FK cascade makes orphans unreachable through normal
+            # writes, but a dangling row must never take down the whole view.
+            continue
         citations_by_message[citation.message_id].append(
             _citation_public(citation=citation, chunk=chunk, source=source)
         )

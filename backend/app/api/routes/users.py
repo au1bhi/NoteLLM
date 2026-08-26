@@ -2,7 +2,6 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlmodel import Session, col, func, select
@@ -20,11 +19,6 @@ from app.core.security import (
     encrypt_secret,
     get_password_hash,
     verify_password,
-)
-from app.core.ssrf import (
-    pinned_request,
-    trusted_provider_request,
-    validate_outbound_url,
 )
 from app.core.turnstile import require_turnstile
 from app.models import (
@@ -50,9 +44,11 @@ from app.models import (
     get_datetime_utc,
 )
 from app.services.provider_settings import (
+    ProviderProbeError,
+    fetch_model_ids,
     load_user_provider_settings,
     mask_secret,
-    resolve_api_base,
+    resolve_probe_target,
 )
 from app.services.sources import delete_owner_upload_files
 from app.services.usage import (
@@ -481,18 +477,6 @@ def delete_user_provider_settings(
     return Message(message="已清除模型配置")
 
 
-def _fetch_models_payload(root: str, api_key: str, *, proxy_url: str | None) -> object:
-    headers = {"Authorization": f"Bearer {api_key}"}
-    if proxy_url:
-        response = trusted_provider_request(
-            "GET", f"{root}/models", proxy_url=proxy_url, headers=headers, timeout=30.0
-        )
-    else:
-        response = pinned_request("GET", f"{root}/models", headers=headers, timeout=30.0)
-    response.raise_for_status()
-    return response.json()
-
-
 @router.post(
     "/me/provider-settings/models",
     response_model=list[ModelInfoPublic],
@@ -511,90 +495,19 @@ def fetch_available_models(
     user-supplied base_url is validated against internal-network targets.
     Keys are used once for this request and are never stored.
     """
-    server_base = str(settings.LLM_BASE_URL) if settings.LLM_BASE_URL else ""
-    server_key = settings.LLM_API_KEY or ""
-    user_base = body.base_url.strip()
-    user_key = body.api_key.strip()
-    if user_base and not user_key:
-        # The form masks stored keys, so an empty key here may just mean "use
-        # the one I saved" — fall back to it. Never send the *server's* key to
-        # an endpoint the user controls.
-        stored = load_user_provider_settings(session, current_user.id)
-        if stored and stored.chat_api_key:
-            user_key = decrypt_secret(stored.chat_api_key) or ""
-        if not user_key:
-            raise HTTPException(
-                status_code=422,
-                detail="自定义 Base URL 需要同时提供 API Key",
-            )
-    base_url = user_base or server_base
-    api_key = user_key or server_key
-    if user_base:
-        base_url = validate_outbound_url(base_url)
-    if not base_url or not api_key:
-        raise HTTPException(
-            status_code=422,
-            detail="请先配置 API Key，或使用服务端默认配置",
+    try:
+        target = resolve_probe_target(
+            session=session,
+            user_id=current_user.id,
+            user_base_url=body.base_url,
+            user_api_key=body.api_key,
+            api_format=body.api_format,
         )
-    root = resolve_api_base(base_url, body.api_format)
-    # When the base URL has no version path, the service may still serve the
-    # OpenAI API under /v1 (common for aggregator gateways) — probe it.
-    fallback_root: str | None = resolve_api_base(base_url, "openai_v1")
-    if body.api_format == "openai_v1" or fallback_root == root:
-        fallback_root = None
-    # The server-configured endpoint is reached through the operator proxy when
-    # one is configured (mirrors chat/embedding); a user-supplied BYOK URL
-    # always stays on the strict DNS-pinned path.
-    proxy_url = (
-        str(settings.SERVER_PROVIDER_PROXY_URL)
-        if not user_base and settings.SERVER_PROVIDER_PROXY_URL
-        else None
-    )
-
-    def fetch_models() -> list[str]:
-        try:
-            payload = _fetch_models_payload(root, api_key, proxy_url=proxy_url)
-        except (httpx.HTTPError, ValueError, TypeError) as error:
-            if fallback_root is None:
-                raise HTTPException(
-                    status_code=503,
-                    detail="无法获取模型，请检查 Base URL 与 API Key 是否正确",
-                ) from error
-            try:
-                payload = _fetch_models_payload(
-                    fallback_root, api_key, proxy_url=proxy_url
-                )
-            except (httpx.HTTPError, ValueError, TypeError) as fallback_error:
-                raise HTTPException(
-                    status_code=503,
-                    detail=(
-                        "无法获取模型。若 Base URL 是根域名（如 https://host），"
-                        "请在“API 格式”中选择“根域名，自动加 /v1”后重试。"
-                    ),
-                ) from fallback_error
-        data = payload.get("data", []) if isinstance(payload, dict) else None
-        if not isinstance(data, list):
-            raise HTTPException(status_code=502, detail="模型提供方返回了异常数据")
-        # Bind the extracted id to a variable so the isinstance() narrows it —
-        # ty does not narrow a repeated `item.get("id")` call expression.
-        model_ids = [
-            model_id
-            for item in data
-            if isinstance(item, dict)
-            for model_id in [item.get("id")]
-            if isinstance(model_id, str)
-        ][:100]
-        if not model_ids:
-            raise HTTPException(status_code=502, detail="模型提供方未返回任何模型")
-        return model_ids
-
-    if user_key:
-        model_ids = fetch_models()
-    else:
-        # A server-billed probe reserves a bounded amount and keeps a nominal
-        # cost on success. The context refunds the full reservation on errors.
-        user_settings = load_user_provider_settings(session, current_user.id)
-        try:
+        if target.billed_by_server:
+            # A server-billed probe reserves a bounded amount and keeps a
+            # nominal cost on success. The context refunds the full
+            # reservation on errors.
+            user_settings = load_user_provider_settings(session, current_user.id)
             with usage_reservation(
                 session=session,
                 user_id=current_user.id,
@@ -602,10 +515,26 @@ def fetch_available_models(
                 chat_tokens=500,
                 chat_source="server",
             ) as reservation:
-                model_ids = fetch_models()
+                model_ids = fetch_model_ids(
+                    target.root,
+                    target.api_key,
+                    proxy_url=target.proxy_url,
+                    fallback_root=target.fallback_root,
+                )
                 reservation.set_actual(chat_tokens=100)
-        except QuotaError as error:
-            raise HTTPException(status_code=429, detail=str(error)) from error
+        else:
+            model_ids = fetch_model_ids(
+                target.root,
+                target.api_key,
+                proxy_url=target.proxy_url,
+                fallback_root=target.fallback_root,
+            )
+    except QuotaError as error:
+        raise HTTPException(status_code=429, detail=str(error)) from error
+    except ProviderProbeError as error:
+        raise HTTPException(
+            status_code=error.status_code, detail=error.detail
+        ) from None
     return [ModelInfoPublic(id=model_id) for model_id in model_ids]
 
 

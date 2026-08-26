@@ -2,12 +2,14 @@ import uuid
 from collections.abc import Sequence
 from typing import cast
 
+import pytest
 from pytest import MonkeyPatch
 from sqlmodel import Session
 
 from app.models import Chunk
 from app.services.answers import INSUFFICIENT_EVIDENCE_ANSWER, answer_question
-from app.services.chat import ModelAnswer
+from app.services.chat import ChatError, ModelAnswer
+from app.services.embeddings import EmbeddingError
 from app.services.retrieval import RetrievedChunk
 
 
@@ -22,6 +24,7 @@ class FakeChatProvider:
     ) -> None:
         self.answer_result = answer
         self.suggestions = suggestions if suggestions is not None else []
+        self.total_tokens_used = 0
 
     def answer(
         self,
@@ -232,7 +235,7 @@ def test_suggestions_are_best_effort_on_failure(monkeypatch: MonkeyPatch) -> Non
 
     class BrokenSuggestionsProvider(FakeChatProvider):
         def complete_json(self, *, prompt: str, system: str | None = None) -> dict:
-            raise AttributeError("no suggestions today")
+            raise ChatError("suggestions provider outage")
 
     answer = answer_question(
         session=cast(Session, None),
@@ -249,6 +252,27 @@ def test_suggestions_are_best_effort_on_failure(monkeypatch: MonkeyPatch) -> Non
 
     assert answer.suggestions == []
     assert answer.content == "Verified evidence answers the question."
+
+
+def test_answer_propagates_embedding_failure(monkeypatch: MonkeyPatch) -> None:
+    """Retrieval outages must surface to callers (SSE error / 503), never
+    degrade into a silent 'insufficient evidence' answer that still bills."""
+
+    def failing_retrieve(**_: object) -> list[RetrievedChunk]:
+        raise EmbeddingError("嵌入服务商返回错误 (500)：outage")
+
+    monkeypatch.setattr("app.services.answers.retrieve_chunks", failing_retrieve)
+
+    with pytest.raises(EmbeddingError):
+        answer_question(
+            session=cast(Session, None),
+            notebook_id=uuid.uuid4(),
+            query="What is verified?",
+            embedding_provider=FakeEmbeddingProvider(),
+            chat_provider=FakeChatProvider(
+                ModelAnswer(content="unused", citation_chunk_ids=[])
+            ),
+        )
 
 
 def test_answer_forwards_limit_to_retrieve_chunks(monkeypatch: MonkeyPatch) -> None:

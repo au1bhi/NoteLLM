@@ -628,6 +628,8 @@ class StudyPlanPublic(SQLModel):
     end_date: date
     timezone: str
     reminder_enabled: bool
+    # Single source of truth for the daily reminder hour; the delivery job in
+    # services/study_plans.py parses its hour from this string.
     reminder_time: str = "09:00"
     email_reminder_available: bool
     created_at: datetime

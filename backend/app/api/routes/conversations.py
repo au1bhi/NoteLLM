@@ -127,7 +127,7 @@ async def stream_message(
     loop = asyncio.get_running_loop()
     # Unbounded: one answer is capped at MAX_OUTPUT_TOKENS (~8 KB), far below
     # any realistic memory concern.
-    queue: asyncio.Queue[tuple[str, object] | None] = asyncio.Queue()
+    queue: asyncio.Queue[tuple[str, object]] = asyncio.Queue()
 
     def bridge(kind: str, payload: object) -> None:
         try:
@@ -156,8 +156,6 @@ async def stream_message(
 
     while True:
         item = await queue.get()
-        if item is None:
-            break
         kind, payload = item
         if kind == "delta":
             yield ServerSentEvent(data={"text": payload}, event="delta")

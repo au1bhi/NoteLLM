@@ -372,7 +372,7 @@ def test_fetch_models_uses_openai_v1_format(
 
         return Response()
 
-    monkeypatch.setattr("app.api.routes.users.pinned_request", fake_request)
+    monkeypatch.setattr("app.services.provider_settings.provider_request", fake_request)
     _, headers = _auth(client, db)
     response = client.post(
         _url() + "/models",
@@ -384,7 +384,7 @@ def test_fetch_models_uses_openai_v1_format(
         },
     )
     assert response.status_code == 200
-    # pinned_request is mocked out here; these tests assert the endpoint path
+    # provider_request is mocked out here; these tests assert the endpoint path
     # resolution, not the SSRF pinning (covered by tests/core/test_ssrf.py).
     assert calls == ["https://provider.example.com/v1/models"]
     assert response.json() == [{"id": "deepseek-v4-flash"}]
@@ -411,7 +411,7 @@ def test_fetch_models_falls_back_to_v1(
 
         return Response()
 
-    monkeypatch.setattr("app.api.routes.users.pinned_request", fake_request)
+    monkeypatch.setattr("app.services.provider_settings.provider_request", fake_request)
     _, headers = _auth(client, db)
     response = client.post(
         _url() + "/models",
@@ -446,7 +446,7 @@ def test_fetch_models_uses_stored_key_when_key_empty(
 
         return Response()
 
-    monkeypatch.setattr("app.api.routes.users.pinned_request", fake_request)
+    monkeypatch.setattr("app.services.provider_settings.provider_request", fake_request)
     response = client.post(
         _url() + "/models",
         headers=headers,
@@ -547,7 +547,7 @@ def test_models_probe_uses_server_billing_when_request_uses_server_key(
         used_proxy_urls.append(proxy_url)
         return {"data": [{"id": "gpt-4o"}]}
 
-    monkeypatch.setattr("app.api.routes.users._fetch_models_payload", fake_fetch)
+    monkeypatch.setattr("app.services.provider_settings.fetch_models_payload", fake_fetch)
     for _ in range(3):
         r = client.post(_url() + "/models", headers=headers, json={})
         assert r.status_code == 200

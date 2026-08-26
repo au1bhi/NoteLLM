@@ -25,7 +25,7 @@ def test_server_chat_provider_uses_explicit_trusted_proxy(
         )
 
     monkeypatch.setattr(
-        "app.services.chat.trusted_provider_request", fake_trusted_request
+        "app.services.chat.provider_request", fake_trusted_request
     )
     provider = OpenAICompatibleChatProvider(
         ProviderConfig(
@@ -63,7 +63,7 @@ def test_complete_json_rejects_non_object_payload(
             request=httpx.Request(method, url),
         )
 
-    monkeypatch.setattr("app.services.chat.pinned_request", fake_request)
+    monkeypatch.setattr("app.services.chat.provider_request", fake_request)
     provider = OpenAICompatibleChatProvider(
         ProviderConfig(
             base_url="https://models.example/v1",

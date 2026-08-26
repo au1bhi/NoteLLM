@@ -302,7 +302,7 @@ def _generate_and_store_overview(
                 session=session, notebook_id=notebook.id, chat_provider=chat_provider
             )
             reservation.set_actual(
-                chat_tokens=getattr(chat_provider, "total_tokens_used", 0)
+                chat_tokens=chat_provider.total_tokens_used
             )
     except QuotaError as error:
         raise HTTPException(status_code=429, detail=str(error)) from error
@@ -382,7 +382,7 @@ def generate_notebook_study_guide(
                 session=session, notebook_id=notebook_id, chat_provider=chat_provider
             )
             reservation.set_actual(
-                chat_tokens=getattr(chat_provider, "total_tokens_used", 0)
+                chat_tokens=chat_provider.total_tokens_used
             )
     except QuotaError as error:
         raise HTTPException(status_code=429, detail=str(error)) from error
@@ -466,6 +466,11 @@ async def retry_source(
     source = get_source_or_404(
         session=session, notebook_id=notebook_id, source_id=source_id
     )
+    if source.status == "ready":
+        raise HTTPException(
+            status_code=409,
+            detail="资料已处理完成，无需重试",
+        )
     await run_in_threadpool(process_source_isolated, source.id)
     session.refresh(source)
     _clear_overview(session, notebook)

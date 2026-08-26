@@ -156,7 +156,7 @@ class TestChatStreamingLoop:
             calls.append(cast(dict[str, object], body if body else {}))
             yield responder_factory(calls)
 
-        monkeypatch.setattr(chat_module, "pinned_stream", fake_stream)
+        monkeypatch.setattr(chat_module, "provider_stream", fake_stream)
         return calls
 
     def test_answer_streams_answer_value_only_and_parses_full_envelope(
@@ -241,7 +241,7 @@ class TestChatStreamingLoop:
             attempts.append(cast(dict[str, object], body if body else {}))
             yield responders[current["index"]]
 
-        monkeypatch.setattr(chat_module, "pinned_stream", fake_stream)
+        monkeypatch.setattr(chat_module, "provider_stream", fake_stream)
 
         provider = OpenAICompatibleChatProvider(_config())
         deltas: list[str] = []

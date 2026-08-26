@@ -28,6 +28,7 @@ from app.models import (
     get_datetime_utc,
 )
 from app.services.chat import ChatError, ChatProvider
+from app.services.message_history import render_message_history
 from app.utils import send_email_safely
 
 logger = logging.getLogger(__name__)
@@ -36,7 +37,8 @@ MIN_PLAN_DAYS = 3
 MAX_PLAN_DAYS = 60
 MAX_CONTEXT_CHARS = 16_000
 MAX_CONTEXT_MESSAGES = 30
-REMINDER_HOUR = 9
+# Derived from the API-exposed reminder_time so there is one source of truth.
+REMINDER_HOUR = int(StudyPlanPublic.model_fields["reminder_time"].default.split(":")[0])
 
 
 @dataclass(frozen=True)
@@ -75,18 +77,12 @@ def conversation_text(session: Session, conversation_id: uuid.UUID) -> str:
             .limit(MAX_CONTEXT_MESSAGES)
         ).all()
     )
-    messages.reverse()
-    rendered: list[str] = []
-    remaining = MAX_CONTEXT_CHARS
-    for message in messages:
-        label = "学习者" if message.role == "user" else "助教"
-        content = message.content.strip()
-        if not content or remaining <= 0:
-            continue
-        excerpt = content[:remaining]
-        rendered.append(f"{label}：{excerpt}")
-        remaining -= len(excerpt)
-    return "\n\n".join(rendered)
+    return render_message_history(
+        list(reversed(messages)),
+        assistant_label="助教",
+        max_messages=MAX_CONTEXT_MESSAGES,
+        max_chars=MAX_CONTEXT_CHARS,
+    )
 
 
 def build_study_plan_prompt(*, conversation: str) -> str:
@@ -407,12 +403,21 @@ def store_generated_plan(
     return plan
 
 
-def plan_public(*, session: Session, plan: StudyPlan, user: User) -> StudyPlanPublic:
-    tasks = session.exec(
-        select(StudyTask)
-        .where(StudyTask.plan_id == plan.id)
-        .order_by(col(StudyTask.sort_order), col(StudyTask.start_date))
-    ).all()
+def plan_public(
+    *,
+    session: Session,
+    plan: StudyPlan,
+    user: User,
+    tasks: list[StudyTask] | None = None,
+) -> StudyPlanPublic:
+    if tasks is None:
+        tasks = list(
+            session.exec(
+                select(StudyTask)
+                .where(StudyTask.plan_id == plan.id)
+                .order_by(col(StudyTask.sort_order), col(StudyTask.start_date))
+            ).all()
+        )
     return StudyPlanPublic(
         id=plan.id,
         conversation_id=plan.conversation_id,
@@ -441,26 +446,7 @@ def plan_list_item(
     conversation: Conversation,
     tasks: list[StudyTask] | None = None,
 ) -> StudyPlanListItem:
-    if tasks is None:
-        public = plan_public(session=session, plan=plan, user=user)
-    else:
-        public = StudyPlanPublic(
-            id=plan.id,
-            conversation_id=plan.conversation_id,
-            title=plan.title,
-            summary=plan.summary,
-            difficulty=_difficulty(plan.difficulty),
-            start_date=plan.start_date,
-            end_date=plan.end_date,
-            timezone=plan.timezone,
-            reminder_enabled=plan.reminder_enabled,
-            email_reminder_available=bool(
-                settings.emails_enabled and user.is_email_verified
-            ),
-            created_at=plan.created_at,
-            updated_at=plan.updated_at,
-            tasks=[StudyTaskPublic.model_validate(task) for task in tasks],
-        )
+    public = plan_public(session=session, plan=plan, user=user, tasks=tasks)
     return StudyPlanListItem(
         **public.model_dump(),
         notebook_id=notebook.id,

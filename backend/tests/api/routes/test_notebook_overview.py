@@ -21,6 +21,7 @@ class FakeOverviewProvider:
         self.topics = topics if topics is not None else ["topic one"]
         self.payload = payload
         self.calls = 0
+        self.total_tokens_used = 0
         self.last_prompt = ""
         self.last_system: str | None = None
 

@@ -19,7 +19,7 @@ def test_embedding_provider_requires_configuration(
     monkeypatch.setattr(settings, "EMBEDDING_API_KEY", None)
     monkeypatch.setattr(settings, "EMBEDDING_MODEL", None)
 
-    with pytest.raises(EmbeddingError, match="not configured"):
+    with pytest.raises(EmbeddingError, match="尚未配置"):
         get_embedding_provider().embed(["question"])
 
 
@@ -50,7 +50,7 @@ def test_embedding_provider_orders_vectors_and_validates_dimensions(
             request=httpx.Request("POST", url),
         )
 
-    monkeypatch.setattr("app.services.embeddings.pinned_request", fake_pinned_request)
+    monkeypatch.setattr("app.services.embeddings.provider_request", fake_pinned_request)
     assert get_embedding_provider().embed(["first", "second"]) == [
         [1.0, 1.0],
         [2.0, 2.0],
@@ -80,7 +80,7 @@ def test_server_provider_uses_explicit_trusted_proxy(
         )
 
     monkeypatch.setattr(
-        "app.services.embeddings.trusted_provider_request", fake_trusted_request
+        "app.services.embeddings.provider_request", fake_trusted_request
     )
     monkeypatch.setattr(settings, "EMBEDDING_DIMENSIONS", 2)
     provider = OpenAICompatibleEmbeddingProvider(

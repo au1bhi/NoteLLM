@@ -45,13 +45,6 @@ def build_study_guide_user(*, excerpts: str) -> str:
     )
 
 
-def build_study_guide_prompt(*, excerpts: str) -> str:
-    """Legacy combined prompt kept for callers that still want one string."""
-    return (
-        f"{build_study_guide_system()}\n\n{build_study_guide_user(excerpts=excerpts)}\n"
-    )
-
-
 def generate_study_guide(
     *,
     session: Session,

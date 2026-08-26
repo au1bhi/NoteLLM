@@ -106,26 +106,6 @@ def ensure_period(session: Session, user_id: uuid.UUID) -> UserUsage:
     return usage
 
 
-def record_usage(
-    *,
-    session: Session,
-    user_id: uuid.UUID,
-    chat_tokens: int = 0,
-    embedding_chars: int = 0,
-) -> None:
-    """Accumulate usage for a user within the current allowance period."""
-    usage = ensure_period(session, user_id)
-    usage.chat_tokens += max(0, chat_tokens)
-    usage.embedding_chars += max(0, embedding_chars)
-    usage.updated_at = datetime.now(UTC)
-    session.add(usage)
-    session.commit()
-
-
-def get_usage(session: Session, user_id: uuid.UUID) -> UserUsage:
-    return ensure_period(session, user_id)
-
-
 def save_usage_tombstone(
     *, session: Session, emails: Iterable[str], usage: UserUsage | None
 ) -> None:

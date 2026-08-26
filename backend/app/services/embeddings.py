@@ -5,7 +5,7 @@ from typing import Protocol
 import httpx
 
 from app.core.config import settings
-from app.core.ssrf import pinned_request, trusted_provider_request
+from app.core.ssrf import provider_request
 from app.services.provider_settings import ProviderConfig, resolve_api_base
 
 
@@ -29,9 +29,7 @@ class OpenAICompatibleEmbeddingProvider:
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
         if not self.config.base_url or not self.config.api_key or not self.config.model:
             raise EmbeddingError(
-                "Embedding is not configured. Add your API key in Settings, or "
-                "set EMBEDDING_BASE_URL, EMBEDDING_API_KEY, and EMBEDDING_MODEL "
-                "on the server."
+                "嵌入模型尚未配置。请在设置中填写 API Key，或由管理员配置服务端模型。"
             )
 
         endpoint = (
@@ -45,23 +43,13 @@ class OpenAICompatibleEmbeddingProvider:
                     "input": list(texts),
                     "dimensions": settings.EMBEDDING_DIMENSIONS,
                 }
-                response = (
-                    trusted_provider_request(
-                        "POST",
-                        endpoint,
-                        proxy_url=self.config.server_proxy_url,
-                        headers={"Authorization": f"Bearer {self.config.api_key}"},
-                        json=request_body,
-                        timeout=30.0,
-                    )
-                    if self.config.server_proxy_url
-                    else pinned_request(
-                        "POST",
-                        endpoint,
-                        headers={"Authorization": f"Bearer {self.config.api_key}"},
-                        json=request_body,
-                        timeout=30.0,
-                    )
+                response = provider_request(
+                    "POST",
+                    endpoint,
+                    proxy_url=self.config.server_proxy_url or None,
+                    headers={"Authorization": f"Bearer {self.config.api_key}"},
+                    json=request_body,
+                    timeout=30.0,
                 )
             response.raise_for_status()
             data = response.json()["data"]
