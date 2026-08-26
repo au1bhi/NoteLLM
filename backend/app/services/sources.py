@@ -1,6 +1,7 @@
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import timedelta
 from pathlib import Path
 
 import fitz  # type: ignore[import-untyped]
@@ -23,6 +24,9 @@ CHUNK_OVERLAP = 150
 CHUNK_MIN_BREAK = 500
 UPLOAD_CHUNK_SIZE = 64 * 1024
 EMBEDDING_BATCH_SIZE = 64
+# A live processing run always finishes well inside this window; anything
+# older is a crashed worker's residue and may be reclaimed by retry.
+SOURCE_PROCESSING_STALE_SECONDS = 30 * 60
 
 SUPPORTED_EXTENSIONS = {
     ".md": "text/markdown",
@@ -196,12 +200,21 @@ def process_source(
     validate_chunk_params(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
     # Atomically claim the source so a retry racing an in-flight upload
     # processing run cannot double-embed (duplicate chunks, double billing).
+    # A row left in "processing" past the staleness window is a crashed
+    # worker's residue — reclaim it instead of locking the source forever.
+    now = get_datetime_utc()
     claimed = session.execute(  # ty: ignore[deprecated] -- raw SQL Row
         sql_text(
-            "UPDATE source SET status = 'processing', error_message = NULL "
-            "WHERE id = :sid AND status <> 'processing' RETURNING id"
+            "UPDATE source SET status = 'processing', error_message = NULL, "
+            "claimed_at = :now WHERE id = :sid AND (status <> 'processing' "
+            "OR claimed_at IS NULL OR claimed_at <= :stale_cutoff) RETURNING id"
         ),
-        {"sid": source.id},
+        {
+            "sid": source.id,
+            "now": now,
+            "stale_cutoff": now
+            - timedelta(seconds=SOURCE_PROCESSING_STALE_SECONDS),
+        },
     ).first()
     session.commit()
     if claimed is None:

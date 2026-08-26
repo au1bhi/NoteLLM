@@ -411,6 +411,13 @@ class Source(SourceBase, table=True):
     status: SourceStatus = Field(
         default="pending", sa_column=Column(String(32), nullable=False)
     )
+    # When the processing claim was taken (see process_source): a row stuck in
+    # "processing" whose claim is older than the staleness window is a crashed
+    # worker's residue and may be reclaimed by a retry.
+    claimed_at: datetime | None = Field(
+        default=None,
+        sa_type=DateTime(timezone=True),  # type: ignore
+    )
     error_message: str | None = Field(default=None, max_length=1000)
     page_count: int | None = Field(default=None, ge=0)
     char_count: int | None = Field(default=None, ge=0)

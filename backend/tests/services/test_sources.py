@@ -134,6 +134,78 @@ def test_process_source_stops_before_provider_when_notebook_is_missing(
     provider_factory.assert_not_called()
 
 
+def test_process_source_reclaims_stale_processing_claim(
+    db: Session, tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    """A 'processing' row whose claim expired is a crashed worker's residue."""
+    from datetime import UTC, datetime, timedelta
+
+
+    monkeypatch.setattr(settings, "UPLOADS_DIR", tmp_path)
+    user = create_random_user(db)
+    notebook = Notebook(owner_id=user.id, title="stale claim test")
+    db.add(notebook)
+    db.commit()
+    db.refresh(notebook)
+    stale = datetime.now(UTC) - timedelta(minutes=31)
+    source = Source(
+        notebook_id=notebook.id,
+        display_name="crashed.txt",
+        media_type="text/plain",
+        file_size_bytes=2,
+        storage_path="crashed.txt",
+        status="processing",
+        claimed_at=stale,
+    )
+    db.add(source)
+    db.commit()
+    db.refresh(source)
+    upload_dir = tmp_path / str(notebook.id)
+    upload_dir.mkdir(parents=True)
+    # Whitespace-only content passes the claim but fails extraction.
+    (upload_dir / source.storage_path).write_text(" \n ", encoding="utf-8")
+
+    process_source(session=db, source=source)
+
+    db.refresh(source)
+    assert source.status == "failed"
+
+
+def test_process_source_skips_fresh_processing_claim(
+    db: Session, tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    """A live in-flight run keeps the claim: a racing retry does nothing."""
+    from app.models import get_datetime_utc
+
+    monkeypatch.setattr(settings, "UPLOADS_DIR", tmp_path)
+    provider_factory = MagicMock()
+    monkeypatch.setattr("app.services.sources.get_embedding_provider", provider_factory)
+    user = create_random_user(db)
+    notebook = Notebook(owner_id=user.id, title="fresh claim test")
+    db.add(notebook)
+    db.commit()
+    db.refresh(notebook)
+    source = Source(
+        notebook_id=notebook.id,
+        display_name="inflight.txt",
+        media_type="text/plain",
+        file_size_bytes=5,
+        storage_path="inflight.txt",
+        status="processing",
+        claimed_at=get_datetime_utc(),
+    )
+    db.add(source)
+    db.commit()
+    db.refresh(source)
+
+    process_source(session=db, source=source)
+
+    db.refresh(source)
+    assert source.status == "processing"
+    assert source.error_message is None
+    provider_factory.assert_not_called()
+
+
 def test_extract_pages_from_real_pdf_preserves_page_numbers(tmp_path: Path) -> None:
     path = tmp_path / "two-pages.pdf"
     document = fitz.open()
