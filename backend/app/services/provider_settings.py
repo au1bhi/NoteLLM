@@ -58,15 +58,24 @@ def load_user_provider_settings(
 
 
 def has_own_chat_key(user_settings: UserProviderSettings | None) -> bool:
-    """True when the user configured their own (decryptable) chat API key."""
+    """True when the user is on their own chat endpoint with a decryptable key.
+
+    A key without a user-supplied base_url is not BYOK: the call would land on
+    the server's endpoint, so it is server-billed regardless of the key. This
+    keeps the quota ``source`` consistent with ``effective_chat_config``.
+    """
     if user_settings is None or not user_settings.chat_api_key:
+        return False
+    if not (user_settings.chat_base_url or "").strip():
         return False
     return bool(decrypt_secret(user_settings.chat_api_key))
 
 
 def has_own_embedding_key(user_settings: UserProviderSettings | None) -> bool:
-    """True when the user configured their own (decryptable) embedding key."""
+    """True when the user is on their own embedding endpoint with a decryptable key."""
     if user_settings is None or not user_settings.embedding_api_key:
+        return False
+    if not (user_settings.embedding_base_url or "").strip():
         return False
     return bool(decrypt_secret(user_settings.embedding_api_key))
 
@@ -103,7 +112,11 @@ def effective_chat_config(
     user_key = ""
     if user_settings and user_settings.chat_api_key:
         user_key = decrypt_secret(user_settings.chat_api_key) or ""
-    if user_key:
+    # A user key is only meaningful against a user-supplied endpoint. Sending a
+    # user key to the server's endpoint/proxy (when the user supplied no
+    # base_url) only generates rejected requests that burn operator resources;
+    # the operator key is the one authorized for the server endpoint.
+    if user_key and user_base_url:
         api_key = user_key
         # User-billed: honoring the user's model choice only costs them.
         model = _first(
@@ -151,7 +164,9 @@ def effective_embedding_config(
     user_key = ""
     if user_settings and user_settings.embedding_api_key:
         user_key = decrypt_secret(user_settings.embedding_api_key) or ""
-    if user_key:
+    # A user key only counts against a user-supplied endpoint; a user key
+    # without a user endpoint is not sent to the server endpoint/proxy.
+    if user_key and user_base_url:
         api_key = user_key
         model = _first(
             user_settings.embedding_model if user_settings else None, server_model

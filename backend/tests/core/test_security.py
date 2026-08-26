@@ -3,6 +3,7 @@ import hashlib
 from datetime import UTC, datetime, timedelta
 
 import jwt
+import pytest
 from cryptography.fernet import Fernet
 
 from app.core import security
@@ -49,3 +50,27 @@ def test_decrypt_secret_returns_none_for_undecryptable_ciphertext() -> None:
     foreign = Fernet(Fernet.generate_key()).encrypt(b"x").decode()
     assert security.decrypt_secret(foreign) is None
     assert security.decrypt_secret("not-a-token-at-all") is None
+
+
+def test_decode_jwt_rejects_token_without_exp() -> None:
+    """A token with no ``exp`` must be rejected — otherwise a no-exp token is
+    a permanent credential that never expires (red-team finding)."""
+    token = security.encode_jwt({"sub": "user-1"})  # no exp
+    with pytest.raises(jwt.InvalidTokenError):
+        security.decode_jwt(token)
+
+
+def test_decode_jwt_rejects_token_without_sub() -> None:
+    """A token with no ``sub`` is not a valid access token."""
+    token = security.encode_jwt(
+        {"exp": datetime.now(UTC) + timedelta(minutes=5)}
+    )
+    with pytest.raises(jwt.InvalidTokenError):
+        security.decode_jwt(token)
+
+
+def test_decode_jwt_rejects_legacy_token_without_exp() -> None:
+    """The legacy raw-secret decode path must enforce exp too."""
+    token = jwt.encode({"sub": "u"}, settings.SECRET_KEY, algorithm=security.ALGORITHM)
+    with pytest.raises(jwt.InvalidTokenError):
+        security.decode_jwt(token)

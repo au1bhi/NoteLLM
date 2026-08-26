@@ -208,7 +208,9 @@ def test_user_usage_unlimited_with_own_key(client: TestClient, db: Session) -> N
         _url(),
         headers=headers,
         json={
+            "chat_base_url": "https://byok.example.com/v1",
             "chat_api_key": "sk-my-own-key-123456",
+            "embedding_base_url": "https://byok-emb.example.com/v1",
             "embedding_api_key": "embed-own-123",
         },
     )
@@ -483,8 +485,9 @@ def test_server_billed_uses_server_model(monkeypatch: pytest.MonkeyPatch) -> Non
 
 
 def test_user_billed_allows_user_model(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A user who supplies their own key is billed on it, so their model choice
-    (which only costs them) is honored."""
+    """A user who supplies their own key on their own endpoint is billed on it,
+    so their model choice (which only costs them) is honored."""
+    _public_dns(monkeypatch)
     monkeypatch.setattr(settings, "LLM_API_KEY", "server-key")
     monkeypatch.setattr(settings, "LLM_BASE_URL", "https://api.example.com/v1")
     monkeypatch.setattr(settings, "LLM_MODEL", "server-model")
@@ -492,12 +495,39 @@ def test_user_billed_allows_user_model(monkeypatch: pytest.MonkeyPatch) -> None:
 
     user_settings = UserProviderSettings(
         user_id=_uuid.uuid4(),
+        chat_base_url="https://byok.example.com/v1",
         chat_api_key=encrypt_secret("user-key"),
         chat_model="my-own-model",
     )
     config = effective_chat_config(user_settings)
     assert config.api_key == "user-key"
     assert config.model == "my-own-model"
+
+
+def test_user_key_without_base_url_uses_server_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A user key without a user endpoint must NOT be sent to the server's
+    endpoint/proxy — it would only generate rejected requests that burn
+    operator resources (red-team finding: empty-url + fake-key abuse)."""
+    monkeypatch.setattr(settings, "LLM_API_KEY", "server-key")
+    monkeypatch.setattr(settings, "LLM_BASE_URL", "https://api.example.com/v1")
+    monkeypatch.setattr(settings, "LLM_MODEL", "server-model")
+    import uuid as _uuid
+
+    user_settings = UserProviderSettings(
+        user_id=_uuid.uuid4(),
+        chat_api_key=encrypt_secret("fake-key"),
+        chat_model="attacker-model",
+    )
+    config = effective_chat_config(user_settings)
+    # Server endpoint → server key, server model. The user's key and model are
+    # ignored so the operator endpoint is not probed with a bad key. The proxy
+    # is the operator's and may still be set; what matters is that the KEY is
+    # the server's, not the user's fake key.
+    assert config.api_key == "server-key"
+    assert config.model == "server-model"
+    assert "fake-key" not in config.api_key
 
 
 def test_server_model_forced_on_server_default_endpoint(
@@ -569,6 +599,47 @@ def test_models_probe_uses_server_billing_when_request_uses_server_key(
 
 
 # --- Service-layer probe helpers -------------------------------------------
+
+
+def test_has_own_chat_key_requires_both_key_and_base_url() -> None:
+    from app.services.provider_settings import has_own_chat_key
+
+    assert has_own_chat_key(None) is False
+    # Key but no base_url → not BYOK (server endpoint is used).
+    settings_only = UserProviderSettings(
+        user_id=uuid.uuid4(), chat_api_key=encrypt_secret("k")
+    )
+    assert has_own_chat_key(settings_only) is False
+    # Key + base_url → BYOK.
+    byok = UserProviderSettings(
+        user_id=uuid.uuid4(),
+        chat_base_url="https://byok.example.com/v1",
+        chat_api_key=encrypt_secret("k"),
+    )
+    assert has_own_chat_key(byok) is True
+    # base_url but undecryptable key → not BYOK.
+    bad = UserProviderSettings(
+        user_id=uuid.uuid4(),
+        chat_base_url="https://byok.example.com/v1",
+        chat_api_key="not-a-ciphertext",
+    )
+    assert has_own_chat_key(bad) is False
+
+
+def test_has_own_embedding_key_requires_both_key_and_base_url() -> None:
+    from app.services.provider_settings import has_own_embedding_key
+
+    assert has_own_embedding_key(None) is False
+    settings_only = UserProviderSettings(
+        user_id=uuid.uuid4(), embedding_api_key=encrypt_secret("k")
+    )
+    assert has_own_embedding_key(settings_only) is False
+    byok = UserProviderSettings(
+        user_id=uuid.uuid4(),
+        embedding_base_url="https://byok-emb.example.com/v1",
+        embedding_api_key=encrypt_secret("k"),
+    )
+    assert has_own_embedding_key(byok) is True
 
 
 def test_resolve_api_base_and_mask_secret_edge_cases() -> None:

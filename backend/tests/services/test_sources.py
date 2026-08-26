@@ -12,6 +12,7 @@ from app.models import Chunk, Notebook, Source
 from app.services.sources import (
     CHUNK_SIZE,
     ExtractedPage,
+    delete_source_file,
     extract_pages,
     process_source,
     split_page,
@@ -266,3 +267,26 @@ def test_corrupt_pdf_marks_source_failed_and_removes_existing_chunks(
     assert source.error_message == "无法打开该 PDF"
     assert db.exec(select(Chunk).where(Chunk.source_id == source.id)).all() == []
     provider.assert_not_called()
+
+
+def test_delete_source_file_refuses_path_outside_uploads_dir(
+    tmp_path: Path, monkeypatch: MonkeyPatch
+) -> None:
+    """delete_source_file must not unlink anything outside UPLOADS_DIR even
+    if storage_path were ever injected (defense-in-depth, red-team finding)."""
+    uploads = tmp_path / "uploads"
+    uploads.mkdir()
+    outside = tmp_path / "secret.txt"
+    outside.write_text("do-not-delete")
+    monkeypatch.setattr(settings, "UPLOADS_DIR", uploads)
+
+    # A crafted storage_path with traversal that resolves outside uploads.
+    source = Source(
+        notebook_id=uuid.uuid4(),
+        display_name="evil.txt",
+        media_type="text/plain",
+        file_size_bytes=0,
+        storage_path="../../secret.txt",
+    )
+    delete_source_file(source)
+    assert outside.read_text() == "do-not-delete"

@@ -20,7 +20,7 @@ from app.models import (
     get_datetime_utc,
 )
 from app.services.answers import GroundedAnswer
-from app.services.chat import ChatError
+from app.services.chat import ChatError, _safe_error_text
 from app.services.conversations import conversation_detail, persist_answer
 from app.services.embeddings import EmbeddingError
 from app.services.usage import QuotaError
@@ -145,7 +145,7 @@ async def stream_message(
                 on_delta=lambda text: bridge("delta", text),
             )
         except (ChatError, EmbeddingError, QuotaError, RuntimeError) as error:
-            bridge("error", str(error))
+            bridge("error", _safe_error_text(error))
         except Exception as error:
             bridge("error", f"意外错误：{type(error).__name__}")
         else:

@@ -29,7 +29,7 @@ from app.models import (
     StudySectionPublic,
     get_datetime_utc,
 )
-from app.services.chat import ChatError, get_chat_provider
+from app.services.chat import ChatError, _safe_error_text, get_chat_provider
 from app.services.embeddings import EmbeddingError, get_embedding_provider
 from app.services.overview import generate_overview, store_overview
 from app.services.provider_settings import (
@@ -260,9 +260,9 @@ def search_notebook(
                 limit=search_in.limit,
             )
     except EmbeddingError as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
+        raise HTTPException(status_code=503, detail=_safe_error_text(error)) from error
     except QuotaError as error:
-        raise HTTPException(status_code=429, detail=str(error)) from error
+        raise HTTPException(status_code=429, detail=_safe_error_text(error)) from error
     return RetrievedChunksPublic(
         data=[
             RetrievedChunkPublic(
@@ -305,9 +305,9 @@ def _generate_and_store_overview(
                 chat_tokens=chat_provider.total_tokens_used
             )
     except QuotaError as error:
-        raise HTTPException(status_code=429, detail=str(error)) from error
+        raise HTTPException(status_code=429, detail=_safe_error_text(error)) from error
     except ChatError as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
+        raise HTTPException(status_code=503, detail=_safe_error_text(error)) from error
     store_overview(session=session, notebook=notebook, overview=overview)
 
 
@@ -385,9 +385,9 @@ def generate_notebook_study_guide(
                 chat_tokens=chat_provider.total_tokens_used
             )
     except QuotaError as error:
-        raise HTTPException(status_code=429, detail=str(error)) from error
+        raise HTTPException(status_code=429, detail=_safe_error_text(error)) from error
     except ChatError as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
+        raise HTTPException(status_code=503, detail=_safe_error_text(error)) from error
     return StudyGuidePublic(
         sections=[
             StudySectionPublic(title=section.title, content=section.content)
@@ -418,7 +418,7 @@ async def upload_source(
     try:
         check_embedding_quota(session, current_user.id, user_settings)
     except QuotaError as error:
-        raise HTTPException(status_code=429, detail=str(error)) from error
+        raise HTTPException(status_code=429, detail=_safe_error_text(error)) from error
     created = await create_source_from_upload(
         session=session, notebook=notebook, upload=file
     )

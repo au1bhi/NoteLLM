@@ -8,6 +8,17 @@ from tests.utils.notebook import create_random_notebook
 from tests.utils.user import authentication_token_from_email, create_random_user
 
 
+def _public_dns(monkeypatch) -> None:
+    """Resolve every hostname to a public IP so BYOK URL validation passes
+    offline (mirrors the helper in test_provider_settings)."""
+    import socket
+
+    def fake_resolve(_host: str) -> list[tuple]:
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0))]
+
+    monkeypatch.setattr("app.core.ssrf._resolve", fake_resolve)
+
+
 def _sse_messages(text: str) -> list[dict[str, str]]:
     """Parse the `data:` payloads of a Server-Sent Events response."""
     import json
@@ -173,7 +184,10 @@ def test_reserve_with_own_key_is_unlimited(client: TestClient, db: Session) -> N
     client.put(
         f"{settings.API_V1_STR}/users/me/provider-settings",
         headers=authentication_token_from_email(client=client, email=user.email, db=db),
-        json={"chat_api_key": "sk-my-own-key-123456"},
+        json={
+            "chat_base_url": "https://byok.example.com/v1",
+            "chat_api_key": "sk-my-own-key-123456",
+        },
     )
     with Session(engine) as session:
         chat_reserved, _ = reserve_usage(
@@ -183,7 +197,7 @@ def test_reserve_with_own_key_is_unlimited(client: TestClient, db: Session) -> N
 
 
 def test_search_refund_does_not_wipe_byok_embedding_usage(
-    client: TestClient, db: Session
+    client: TestClient, db: Session, monkeypatch
 ) -> None:
     """A failed BYOK search must not refund len(query) against a counter that
     was never incremented — that would let repeated failures erase usage."""
@@ -194,6 +208,7 @@ def test_search_refund_does_not_wipe_byok_embedding_usage(
     user = create_random_user(db)
     notebook = create_random_notebook(db=db, owner_id=user.id)
     headers = authentication_token_from_email(client=client, email=user.email, db=db)
+    _public_dns(monkeypatch)
     seeded = 4_000
     db.add(
         UserUsage(
@@ -206,7 +221,10 @@ def test_search_refund_does_not_wipe_byok_embedding_usage(
     client.put(
         f"{settings.API_V1_STR}/users/me/provider-settings",
         headers=headers,
-        json={"embedding_api_key": "sk-my-own-embedding-key"},
+        json={
+            "embedding_base_url": "https://byok-emb.example.com/v1",
+            "embedding_api_key": "sk-my-own-embedding-key",
+        },
     )
     with patch(
         "app.api.routes.notebooks.retrieve_chunks",

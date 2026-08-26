@@ -401,9 +401,17 @@ def process_source_isolated(source_id: uuid.UUID) -> None:
 
 
 def delete_source_file(source: Source) -> None:
-    source_path = get_upload_path(source)
-    source_path.unlink(missing_ok=True)
-    parent = source_path.parent
+    path = get_upload_path(source)
+    # Defense-in-depth: the resolved path must remain inside UPLOADS_DIR even
+    # if storage_path were ever injected (today it is a uuid+suffix the server
+    # generates, so the check never bites — but it bounds the blast radius).
+    resolved = path.resolve()
+    try:
+        resolved.relative_to(settings.UPLOADS_DIR.resolve())
+    except ValueError:
+        return
+    resolved.unlink(missing_ok=True)
+    parent = resolved.parent
     if parent.exists() and not any(parent.iterdir()):
         parent.rmdir()
 

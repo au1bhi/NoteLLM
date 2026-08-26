@@ -212,3 +212,64 @@ def test_clean_json_text_extracts_object_from_fences() -> None:
     fenced = '```json\n<think>x</think>{"answer":"好","citations":[]}\n```'
     assert clean_json_text(fenced) == '{"answer":"好","citations":[]}'
     assert clean_json_text("no braces here") == "no braces here"
+
+
+# --- Error-channel redaction (URL + key leak) --------------------------------
+
+
+def test_safe_error_text_redacts_url_and_key() -> None:
+    from app.services.chat import _safe_error_text_from_value
+
+    raw = (
+        "ConnectError: [Errno 111] Failed to connect to "
+        "https://proxy.operator.internal:7890 "
+        "Authorization: Bearer sk-proj-AbCdEf1234567890"
+    )
+    redacted = _safe_error_text_from_value(raw)
+    assert "proxy.operator.internal" not in redacted
+    assert "<endpoint-redacted>" in redacted
+    assert "sk-proj-AbCdEf1234567890" not in redacted
+    assert "<key-redacted>" in redacted
+
+
+def test_safe_error_text_caps_length() -> None:
+    from app.services.chat import _safe_error_text_from_value
+
+    assert len(_safe_error_text_from_value("x" * 500)) <= 200
+
+
+def test_provider_error_message_redacts_endpoint_and_key() -> None:
+    provider = OpenAICompatibleChatProvider(
+        ProviderConfig(base_url="https://models.example/v1", api_key="k", model="m")
+    )
+    msg = provider._provider_error_message(
+        _response(500, {"error": {"message": "https://evil.example.com sk-leaked-key"}})
+    )
+    assert "evil.example.com" not in msg
+    assert "sk-leaked-key" not in msg
+
+
+# --- Provider usage floor (prevent zeroing the bill) -------------------------
+
+
+def test_blocking_usage_floored_at_prompt_cost(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A provider that under-reports total_tokens must not zero out the bill:
+    the recorded usage is at least the prompt's own token cost."""
+    from app.services.chat import estimate_tokens
+
+    provider = OpenAICompatibleChatProvider(
+        ProviderConfig(base_url="https://models.example/v1", api_key="k", model="m")
+    )
+    prompt = "请帮我总结这段笔记内容并给出要点" * 10
+    monkeypatch.setattr(
+        "app.services.chat.provider_request",
+        lambda *a, **k: _response(
+            200,
+            {
+                "choices": [{"message": {"content": '{"answer":"ok","citations":[]}'}}],
+                "usage": {"total_tokens": 1},  # provider under-reports
+            },
+        ),
+    )
+    provider.answer(prompt=prompt)
+    assert provider.total_tokens_used >= estimate_tokens(prompt)

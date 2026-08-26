@@ -87,12 +87,28 @@ def encode_jwt(claims: dict[str, Any]) -> str:
 
 
 def decode_jwt(token: str) -> dict[str, Any]:
-    """Decode HKDF tokens, accepting legacy raw-secret tokens during upgrade."""
+    """Decode HKDF tokens, accepting legacy raw-secret tokens during upgrade.
+
+    ``exp`` and ``sub`` are required claims: every token this app issues
+    carries both, so rejecting a token without them closes the door on a
+    no-exp token that would otherwise never expire. Legacy raw-secret tokens
+    (issued before the HKDF migration) likewise always carried ``exp``.
+    """
     try:
-        return jwt.decode(token, jwt_signing_key(), algorithms=[ALGORITHM])
+        return jwt.decode(
+            token,
+            jwt_signing_key(),
+            algorithms=[ALGORITHM],
+            options={"require": ["exp", "sub"]},
+        )
     except jwt.InvalidTokenError as current_error:
         try:
-            return jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+            return jwt.decode(
+                token,
+                settings.SECRET_KEY,
+                algorithms=[ALGORITHM],
+                options={"require": ["exp", "sub"]},
+            )
         except jwt.InvalidTokenError:
             raise current_error
 

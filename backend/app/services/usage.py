@@ -3,9 +3,10 @@ from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Literal, cast
 
 from sqlalchemy import text as sql_text
+from sqlalchemy.engine import CursorResult
 from sqlmodel import Session, select
 
 from app.core.config import settings
@@ -280,8 +281,8 @@ _RESERVE_SQL = sql_text(
 _SETTLE_SQL = sql_text(
     """
     UPDATE userusage SET
-      chat_tokens = GREATEST(0, chat_tokens + :chat_delta),
-      embedding_chars = GREATEST(0, embedding_chars + :embedding_delta),
+      chat_tokens = CASE WHEN chat_tokens + :chat_delta < 0 THEN 0 ELSE chat_tokens + :chat_delta END,
+      embedding_chars = CASE WHEN embedding_chars + :embedding_delta < 0 THEN 0 ELSE embedding_chars + :embedding_delta END,
       updated_at = :now
     WHERE user_id = :user_id AND period_start = :period
     """
@@ -436,16 +437,21 @@ def settle_usage(
     if not chat_tokens and not embedding_chars:
         return
     period = period or current_period()
-    session.execute(  # ty: ignore[deprecated] -- raw SQL is intentional
-        _SETTLE_SQL,
-        {
-            "user_id": user_id,
-            "chat_delta": chat_tokens,
-            "embedding_delta": embedding_chars,
-            "period": period,
-            "now": datetime.now(UTC),
-        },
-    )
+    params = {
+        "user_id": user_id,
+        "chat_delta": chat_tokens,
+        "embedding_delta": embedding_chars,
+        "period": period,
+        "now": datetime.now(UTC),
+    }
+    result = session.execute(_SETTLE_SQL, params)  # ty: ignore[deprecated] -- raw SQL is intentional
+    if cast(CursorResult, result).rowcount == 0:
+        # The reservation row rolled into a new month before reconciliation.
+        # Land the adjustment on the ACTIVE-period row instead of silently
+        # dropping it (cross-period accounting gap found by QUOTA/BIZABUSE).
+        session.execute(  # ty: ignore[deprecated] -- raw SQL is intentional
+            _SETTLE_SQL, {**params, "period": current_period()}
+        )
     session.commit()
 
 
@@ -460,6 +466,7 @@ class UsageReservation:
     period: datetime
     _actual_chat_tokens: int | None = None
     _actual_embedding_chars: int | None = None
+    _settled: bool = False
 
     def set_actual(
         self,
@@ -478,6 +485,9 @@ class UsageReservation:
             self._actual_embedding_chars = max(0, embedding_chars)
 
     def _reconcile(self, *, succeeded: bool) -> None:
+        if self._settled:
+            return
+        self._settled = True
         actual_chat = (
             self._actual_chat_tokens
             if succeeded and self._actual_chat_tokens is not None

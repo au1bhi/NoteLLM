@@ -17,6 +17,26 @@ from app.core.ssrf import (
 from app.services.chat_stream import JsonAnswerValueStream, ThinkSuppressor
 from app.services.provider_settings import ProviderConfig, resolve_api_base
 
+
+def _safe_error_text(error: BaseException) -> str:
+    """Redact endpoints/URLs from provider error strings before echoing them.
+
+    Upstream transport exceptions embed the operator-side base_url/proxy host;
+    these must never reach a client through shared (server-billed) features.
+    """
+    return _safe_error_text_from_value(str(error))
+
+
+def _safe_error_text_from_value(value: object) -> str:
+    """Shared redaction + length cap for any value surfaced to clients."""
+    text = re.sub(r"https?://[^\s'\"]+", "<endpoint-redacted>", str(value or ""))
+    # Bearer tokens / OpenAI-style keys carried in Authorization headers or
+    # echoed by upstream error bodies are redacted too.
+    text = re.sub(r"(?i)(bearer\s+)[A-Za-z0-9._-]+", r"\1<key-redacted>", text)
+    text = re.sub(r"sk-[A-Za-z0-9_]+", "<key-redacted>", text)
+    return text[:200]
+
+
 # Hard cap on a single answer's output tokens. Besides bounding latency, this
 # keeps the real cost of one request inside the reserved quota margin, so a
 # burst of concurrent questions cannot overspend the monthly allowance by far
@@ -125,14 +145,14 @@ class OpenAICompatibleChatProvider:
             if isinstance(err_payload, dict):
                 err_data = err_payload.get("error")
                 if isinstance(err_data, dict):
-                    return str(err_data.get("message") or "")
+                    return _safe_error_text_from_value(err_data.get("message"))
                 if isinstance(err_data, str):
-                    return err_data
+                    return _safe_error_text_from_value(err_data)
                 if "message" in err_payload:
-                    return str(err_payload["message"])
+                    return _safe_error_text_from_value(err_payload["message"])
         except Exception:
             pass
-        return response.text[:200]
+        return _safe_error_text_from_value(response.text[:200])
 
     def _request_body(
         self,
@@ -247,11 +267,14 @@ class OpenAICompatibleChatProvider:
             visible_tail = value_stream.feed(tail)
             if visible_tail:
                 on_delta(visible_tail)
-        actual = (
-            usage_tokens
-            if usage_tokens is not None
-            else estimate_tokens(prompt) + estimate_tokens("".join(raw_parts))
-        )
+        prompt_cost = estimate_tokens(prompt)
+        if usage_tokens is not None:
+            # A provider that under-reports usage to near-zero could zero out the
+            # bill via settle_usage. Floor the reported figure at the prompt's
+            # own token cost, which the operator pays regardless of the response.
+            actual = max(usage_tokens, prompt_cost)
+        else:
+            actual = prompt_cost + estimate_tokens("".join(raw_parts))
         with self._tokens_lock:
             self.total_tokens_used += actual
 
@@ -289,7 +312,7 @@ class OpenAICompatibleChatProvider:
             raise
         except (httpx.HTTPError, KeyError, TypeError, ValueError, IndexError) as error:
             raise ChatError(
-                f"对话模型通信失败：{type(error).__name__} {error}"
+                f"对话模型通信失败：{type(error).__name__} {_safe_error_text(error)}"
             ) from error
 
     def _chat_streaming(
@@ -342,7 +365,7 @@ class OpenAICompatibleChatProvider:
             raise
         except (httpx.HTTPError, KeyError, TypeError, ValueError, IndexError) as error:
             raise ChatError(
-                f"对话模型通信失败：{type(error).__name__} {error}"
+                f"对话模型通信失败：{type(error).__name__} {_safe_error_text(error)}"
             ) from error
         return "".join(raw_parts)
 
@@ -410,19 +433,23 @@ class OpenAICompatibleChatProvider:
             tokens: object = None
             if isinstance(usage, dict):
                 tokens = usage.get("total_tokens")
-                if isinstance(tokens, (int, float)):
-                    with self._tokens_lock:
-                        self.total_tokens_used += int(tokens)
-            if not tokens:
+            prompt_cost = estimate_tokens(prompt)
+            if isinstance(tokens, (int, float)):
+                # Floor reported usage at the prompt cost to prevent a provider
+                # from under-reporting and zeroing out the bill via settle_usage.
+                actual = max(int(tokens), prompt_cost)
                 with self._tokens_lock:
-                    self.total_tokens_used += estimate_tokens(prompt) + estimate_tokens(
+                    self.total_tokens_used += actual
+            else:
+                with self._tokens_lock:
+                    self.total_tokens_used += prompt_cost + estimate_tokens(
                         content
                     )
         except ChatError:
             raise
         except (httpx.HTTPError, KeyError, TypeError, ValueError, IndexError) as error:
             raise ChatError(
-                f"对话模型通信失败：{type(error).__name__} {error}"
+                f"对话模型通信失败：{type(error).__name__} {_safe_error_text(error)}"
             ) from error
         return content
 

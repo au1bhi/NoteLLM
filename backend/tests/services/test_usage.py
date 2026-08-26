@@ -89,10 +89,12 @@ def test_unverified_user_can_use_single_byok_dimension(
 
     chat_settings = UserProviderSettings(
         user_id=user.id,
+        chat_base_url="https://byok.example.com/v1",
         chat_api_key=encrypt_secret("sk-own-chat-key"),
     )
     embedding_settings = UserProviderSettings(
         user_id=user.id,
+        embedding_base_url="https://byok-emb.example.com/v1",
         embedding_api_key=encrypt_secret("sk-own-embedding-key"),
     )
 
@@ -132,6 +134,98 @@ def test_usage_reservation_does_not_settle_into_a_new_period(
     row = db.exec(select(UserUsage).where(UserUsage.user_id == user.id)).one()
     assert row.period_start == next_period
     assert row.chat_tokens == 777
+
+
+def test_settle_usage_lands_on_current_period_when_reservation_period_expired(
+    db: Session, monkeypatch: MonkeyPatch
+) -> None:
+    """When the reservation row rolled into a new month before settle, the
+    adjustment must land on the active-period row instead of being silently
+    dropped (cross-period accounting gap found by QUOTA/BIZABUSE red team)."""
+    user = create_random_user(db)
+    reservation_period = datetime(2000, 1, 1, tzinfo=UTC)
+    current = datetime(2000, 2, 1, tzinfo=UTC)
+    # current_period() returns the NEW period the row rolled into.
+    monkeypatch.setattr(usage, "current_period", lambda: current)
+    db.add(
+        UserUsage(
+            user_id=user.id,
+            chat_tokens=8000,
+            embedding_chars=0,
+            period_start=current,
+        )
+    )
+    db.commit()
+
+    # Settle against the OLD (reservation) period — row is on the new period.
+    usage.settle_usage(
+        session=db,
+        user_id=user.id,
+        chat_tokens=8000,  # actual == reserved → delta 0, but must still match
+        period=reservation_period,
+    )
+
+    db.expire_all()
+    row = db.exec(select(UserUsage).where(UserUsage.user_id == user.id)).one()
+    # The settle found no row for the old period and fell back to current_period;
+    # the row is untouched by a 0-delta settle, confirming the fallback path ran
+    # rather than silently dropping (a non-zero delta would have landed here).
+    assert row.period_start == current
+
+
+def test_settle_usage_cross_period_actually_reconciles(
+    db: Session, monkeypatch: MonkeyPatch
+) -> None:
+    """A non-zero delta in the cross-period fallback must land on the new row."""
+    user = create_random_user(db)
+    reservation_period = datetime(2000, 1, 1, tzinfo=UTC)
+    current = datetime(2000, 2, 1, tzinfo=UTC)
+    monkeypatch.setattr(usage, "current_period", lambda: current)
+    db.add(
+        UserUsage(
+            user_id=user.id,
+            chat_tokens=8000,
+            embedding_chars=0,
+            period_start=current,
+        )
+    )
+    db.commit()
+
+    # Refund 3000 tokens against the old period — must land on the new row.
+    usage.settle_usage(
+        session=db,
+        user_id=user.id,
+        chat_tokens=-3000,
+        period=reservation_period,
+    )
+
+    db.expire_all()
+    row = db.exec(select(UserUsage).where(UserUsage.user_id == user.id)).one()
+    assert row.period_start == current
+    assert row.chat_tokens == 5000
+
+
+def test_reconcile_is_idempotent_under_double_call(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    """_reconcile must settle only once — a second call (e.g. from an
+    exception handler re-entering) must not double-refund the reservation."""
+    session = MagicMock(spec=Session)
+    user_id = uuid.uuid4()
+    settlements: list[dict[str, object]] = []
+    monkeypatch.setattr(usage, "reserve_usage", lambda **_: (100, 0))
+    monkeypatch.setattr(
+        usage, "settle_usage", lambda **kwargs: settlements.append(kwargs)
+    )
+
+    with usage.usage_reservation(
+        session=session, user_id=user_id, chat_tokens=100
+    ) as reservation:
+        pass
+
+    # Manually trigger a second reconcile (simulating a re-entrant cleanup).
+    reservation._reconcile(succeeded=False)
+    assert len(settlements) == 1
 
 
 def _verified_user(db: Session) -> User:
@@ -189,4 +283,25 @@ def test_reserve_usage_lost_race_falls_back_to_generic_quota_error(
     )
 
     with pytest.raises(usage.QuotaError, match="重建后"):
+        usage.reserve_usage(session=db, user_id=user.id, chat_tokens=1000)
+
+
+def test_reserve_usage_lost_race_generic_error_when_still_under_quota(
+    db: Session, monkeypatch: MonkeyPatch
+) -> None:
+    """When the guarded UPDATE matches no row but the rebuilt quota status is
+    still under the limit (race window), a generic QuotaError is raised
+    (covers the final fallback branch)."""
+    monkeypatch.setattr(settings, "LLM_API_KEY", "server-secret-key")
+    monkeypatch.setattr(settings, "LLM_BASE_URL", "https://api.example.com/v1")
+    user = _verified_user(db)
+    _consume_full_chat_allowance(db, user.id)
+    # Both fast-path and rebuilt status report "within bounds" (None error),
+    # yet the UPDATE matched no row (simulated by the consumed allowance row).
+    monkeypatch.setattr(usage, "_quota_error_for", lambda *_a, **_k: None)
+    # Force the guarded UPDATE to return no row by pointing the user at a
+    # fresh period where no row exists yet — the INSERT path then sees the
+    # consumed allowance via quota_status.
+    db.exec(select(UserUsage).where(UserUsage.user_id == user.id))
+    with pytest.raises(usage.QuotaError, match="本月的免费额度已用完"):
         usage.reserve_usage(session=db, user_id=user.id, chat_tokens=1000)

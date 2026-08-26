@@ -254,6 +254,30 @@ class TestChatStreamingLoop:
         # No duplicate emission from the failed first attempt.
         assert deltas == ["ok"]
 
+    def test_usage_chunk_floored_at_prompt_cost(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A provider under-reporting usage must not zero out the bill - the
+        recorded usage is at least the prompt's own token cost (red-team
+        finding: provider lies about usage to free-ride)."""
+        prompt = "\u8bf7\u5e2e\u6211\u603b\u7ed3\u8fd9\u6bb5\u7b14\u8bb0\u5185\u5bb9\u5e76\u7ed9\u51fa\u8981\u70b9" * 10
+        lines = [
+            sse('{"answer": "hi", '),
+            'data: {"choices": [], "usage": {"total_tokens": 1}}',
+        ]
+
+        def responder(_calls: list[dict[str, object]]) -> StubResponse:
+            return StubResponse(lines=lines)
+
+        self._patch_stream(monkeypatch, responder)
+
+        provider = OpenAICompatibleChatProvider(_config())
+        provider.answer(prompt=prompt, on_delta=lambda _t: None)
+
+        floor = chat_module.estimate_tokens(prompt)
+        assert provider.total_tokens_used >= floor
+
+
     def test_provider_error_status_raises_chat_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
