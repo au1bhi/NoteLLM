@@ -2,7 +2,7 @@ import json
 import math
 import re
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 from typing import Protocol
@@ -18,22 +18,39 @@ from app.services.chat_stream import JsonAnswerValueStream, ThinkSuppressor
 from app.services.provider_settings import ProviderConfig, resolve_api_base
 
 
-def _safe_error_text(error: BaseException) -> str:
+def _safe_error_text(
+    error: BaseException, secrets: Sequence[str] = ()
+) -> str:
     """Redact endpoints/URLs from provider error strings before echoing them.
 
     Upstream transport exceptions embed the operator-side base_url/proxy host;
     these must never reach a client through shared (server-billed) features.
     """
-    return _safe_error_text_from_value(str(error))
+    return _safe_error_text_from_value(str(error), secrets)
 
 
-def _safe_error_text_from_value(value: object) -> str:
-    """Shared redaction + length cap for any value surfaced to clients."""
+def _safe_error_text_from_value(
+    value: object, secrets: Sequence[str] = ()
+) -> str:
+    """Shared redaction + length cap for any value surfaced to clients.
+
+    Besides regex-based URL/``sk-``/Bearer redaction, any concrete secret
+    string handed to ``secrets`` is removed by exact-substring replacement.
+    A provider key that lacks the ``sk-`` prefix (an operator key, ``ak-…``,
+    or raw hex) would otherwise survive the regex redactor if an upstream
+    gateway echoes it bare in an error body — scrubbing the actual in-flight
+    key closes that gap with zero false positives (exact match only).
+    """
     text = re.sub(r"https?://[^\s'\"]+", "<endpoint-redacted>", str(value or ""))
     # Bearer tokens / OpenAI-style keys carried in Authorization headers or
     # echoed by upstream error bodies are redacted too.
     text = re.sub(r"(?i)(bearer\s+)[A-Za-z0-9._-]+", r"\1<key-redacted>", text)
     text = re.sub(r"sk-[A-Za-z0-9_]+", "<key-redacted>", text)
+    for secret in secrets:
+        # Skip empty / too-short values: an 8-char floor avoids redacting
+        # short common substrings that happen to appear in provider prose.
+        if secret and len(secret) >= 8:
+            text = text.replace(secret, "<key-redacted>")
     return text[:200]
 
 
@@ -145,14 +162,22 @@ class OpenAICompatibleChatProvider:
             if isinstance(err_payload, dict):
                 err_data = err_payload.get("error")
                 if isinstance(err_data, dict):
-                    return _safe_error_text_from_value(err_data.get("message"))
+                    return _safe_error_text_from_value(
+                        err_data.get("message"), [self.config.api_key]
+                    )
                 if isinstance(err_data, str):
-                    return _safe_error_text_from_value(err_data)
+                    return _safe_error_text_from_value(
+                        err_data, [self.config.api_key]
+                    )
                 if "message" in err_payload:
-                    return _safe_error_text_from_value(err_payload["message"])
+                    return _safe_error_text_from_value(
+                        err_payload["message"], [self.config.api_key]
+                    )
         except Exception:
             pass
-        return _safe_error_text_from_value(response.text[:200])
+        return _safe_error_text_from_value(
+            response.text[:200], [self.config.api_key]
+        )
 
     def _request_body(
         self,
@@ -312,7 +337,8 @@ class OpenAICompatibleChatProvider:
             raise
         except (httpx.HTTPError, KeyError, TypeError, ValueError, IndexError) as error:
             raise ChatError(
-                f"对话模型通信失败：{type(error).__name__} {_safe_error_text(error)}"
+                f"对话模型通信失败：{type(error).__name__} "
+                f"{_safe_error_text(error, [self.config.api_key])}"
             ) from error
 
     def _chat_streaming(
@@ -365,7 +391,8 @@ class OpenAICompatibleChatProvider:
             raise
         except (httpx.HTTPError, KeyError, TypeError, ValueError, IndexError) as error:
             raise ChatError(
-                f"对话模型通信失败：{type(error).__name__} {_safe_error_text(error)}"
+                f"对话模型通信失败：{type(error).__name__} "
+                f"{_safe_error_text(error, [self.config.api_key])}"
             ) from error
         return "".join(raw_parts)
 
@@ -449,7 +476,8 @@ class OpenAICompatibleChatProvider:
             raise
         except (httpx.HTTPError, KeyError, TypeError, ValueError, IndexError) as error:
             raise ChatError(
-                f"对话模型通信失败：{type(error).__name__} {_safe_error_text(error)}"
+                f"对话模型通信失败：{type(error).__name__} "
+                f"{_safe_error_text(error, [self.config.api_key])}"
             ) from error
         return content
 

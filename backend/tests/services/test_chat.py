@@ -249,6 +249,33 @@ def test_provider_error_message_redacts_endpoint_and_key() -> None:
     assert "sk-leaked-key" not in msg
 
 
+def test_provider_error_message_redacts_bare_non_sk_key() -> None:
+    """A gateway that echoes a bare key (no sk- prefix / no Bearer) in an error
+    body must still have it scrubbed — exact-substring scrub of the in-flight
+    key closes the regex redactor's blind spot (red-team round-2 P3)."""
+    bare_key = "ci-fake-chat-key-0123456789abcdef"
+    provider = OpenAICompatibleChatProvider(
+        ProviderConfig(base_url="https://models.example/v1", api_key=bare_key, model="m")
+    )
+    msg = provider._provider_error_message(
+        _response(
+            500,
+            {"error": {"message": f"unauthorized: key {bare_key} rejected"}},
+        )
+    )
+    assert bare_key not in msg
+    assert "<key-redacted>" in msg
+
+
+def test_safe_error_text_short_secret_is_not_scrubbed() -> None:
+    """An 8-char floor prevents redacting short common substrings."""
+    from app.services.chat import _safe_error_text_from_value
+
+    text = "an api key 'short' was noted"
+    assert _safe_error_text_from_value(text, ["short"]) == text
+    assert "<key-redacted>" not in _safe_error_text_from_value(text, ["short"])
+
+
 # --- Provider usage floor (prevent zeroing the bill) -------------------------
 
 
