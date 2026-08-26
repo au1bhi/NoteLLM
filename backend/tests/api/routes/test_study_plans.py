@@ -1,6 +1,7 @@
 import uuid
 from datetime import date
 
+import pytest
 from fastapi.testclient import TestClient
 from pytest import MonkeyPatch
 from sqlmodel import Session
@@ -461,3 +462,329 @@ def test_cross_user_study_plan_security_isolation(
     assert r.status_code == 200
     assert len(r.json()["data"]) == 0
 
+
+
+def test_read_conversation_plan_none_then_present(
+    client: TestClient, db: Session
+) -> None:
+    user, conversation = _conversation_with_message(db)
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+    url = f"{settings.API_V1_STR}/conversations/{conversation.id}/study-plan"
+    response = client.get(url, headers=headers)
+    assert response.status_code == 200
+    assert response.json() is None
+
+    plan = _add_plan(
+        db,
+        conversation_id=conversation.id,
+        title="冲刺计划",
+        start=date(2026, 9, 1),
+        end=date(2026, 9, 7),
+        task_title="读材料",
+    )
+    response = client.get(url, headers=headers)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["id"] == str(plan.id)
+    assert body["title"] == "冲刺计划"
+    assert body["tasks"], "tasks should be embedded in the detail payload"
+
+
+def test_read_conversation_plan_maps_missing_schema(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    from unittest.mock import MagicMock
+
+    from fastapi import HTTPException
+    from sqlalchemy.exc import ProgrammingError
+
+    from app.api.routes.study_plans import read_conversation_study_plan
+
+    conversation_stub = MagicMock()
+    conversation_stub.id = uuid.uuid4()
+    monkeypatch.setattr(
+        "app.api.routes.study_plans.get_conversation_or_404",
+        lambda **_: conversation_stub,
+    )
+    broken_session = MagicMock()
+    broken_session.exec.side_effect = ProgrammingError(
+        'relation "study_plan" does not exist', None, Exception("42P01")
+    )
+    with pytest.raises(HTTPException) as captured:
+        read_conversation_study_plan(
+            conversation_id=uuid.uuid4(),
+            session=broken_session,
+            current_user=MagicMock(),
+        )
+    assert captured.value.status_code == 503
+
+
+def test_create_rejects_invalid_timezone(client: TestClient, db: Session) -> None:
+    user, conversation = _conversation_with_message(db)
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+    response = client.post(
+        f"{settings.API_V1_STR}/conversations/{conversation.id}/study-plan",
+        headers=headers,
+        json={"timezone": "Mars/Olympus"},
+    )
+    assert response.status_code == 422
+
+
+def test_create_maps_quota_and_value_errors(
+    client: TestClient,
+    db: Session,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    user, conversation = _conversation_with_message(db)
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+    url = f"{settings.API_V1_STR}/conversations/{conversation.id}/study-plan"
+
+    from contextlib import contextmanager
+
+    from app.services.usage import QuotaError, usage_reservation
+
+    @contextmanager
+    def quota_blocked(**_kwargs):
+        raise QuotaError("本月的免费对话额度已用完（测试）")
+        yield
+
+    monkeypatch.setattr(
+        "app.api.routes.study_plans.usage_reservation", quota_blocked
+    )
+    response = client.post(url, headers=headers, json={"timezone": "Asia/Shanghai"})
+    assert response.status_code == 429
+    assert "测试" in response.json()["detail"]
+
+    # Restore the real reservation so only generate_study_plan fails next.
+    monkeypatch.setattr(
+        "app.api.routes.study_plans.usage_reservation", usage_reservation
+    )
+
+    def bad_payload(**_kwargs):
+        raise ValueError("模型返回的计划缺少字段")
+
+    monkeypatch.setattr(
+        "app.api.routes.study_plans.generate_study_plan", bad_payload
+    )
+    monkeypatch.setattr(
+        "app.api.routes.study_plans.get_chat_provider",
+        lambda _config: FakePlanProvider(),
+    )
+    response = client.post(url, headers=headers, json={"timezone": "Asia/Shanghai"})
+    assert response.status_code == 400
+    assert "计划" in response.json()["detail"]
+
+
+def _adjust_url(plan_id: uuid.UUID) -> str:
+    return f"{settings.API_V1_STR}/study-plans/{plan_id}/ai-adjust"
+
+
+def test_ai_adjust_plan_regenerates_tasks(
+    client: TestClient, db: Session, monkeypatch: MonkeyPatch
+) -> None:
+    user, conversation = _conversation_with_message(db)
+    plan = _add_plan(
+        db,
+        conversation_id=conversation.id,
+        title="旧标题",
+        start=date(2026, 9, 1),
+        end=date(2026, 9, 7),
+        task_title="旧任务",
+    )
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+
+    seen_instructions: list[str] = []
+    provider = FakePlanProvider()
+
+    original_complete = provider.complete_json
+
+    def capture(*, prompt: str, system: str | None = None):
+        seen_instructions.append(prompt)
+        return original_complete(prompt=prompt, system=system)
+
+    provider.complete_json = capture  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "app.api.routes.study_plans.get_chat_provider", lambda _config: provider
+    )
+
+    response = client.post(
+        _adjust_url(plan.id),
+        headers=headers,
+        json={"instruction": "改为只覆盖前三天，加大每日强度", "timezone": "UTC"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert any("前三天" in prompt for prompt in seen_instructions)
+    # store_generated_plan replaced the old task set on the SAME plan row.
+    assert [t["title"] for t in body["tasks"]] == ["理解检索流程", "实现与验收"]
+    assert body["timezone"] == "UTC"
+
+
+def test_ai_adjust_plan_validations(
+    client: TestClient, db: Session
+) -> None:
+    user, conversation = _conversation_with_message(db)
+    plan = _add_plan(
+        db,
+        conversation_id=conversation.id,
+        title="p",
+        start=date(2026, 9, 1),
+        end=date(2026, 9, 2),
+        task_title="t",
+    )
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+    base = {"instruction": "压缩一下"}
+
+    response = client.post(
+        _adjust_url(plan.id), headers=headers, json={**base, "timezone": "Nope/X"}
+    )
+    assert response.status_code == 422
+
+    response = client.post(
+        _adjust_url(plan.id),
+        headers=headers,
+        json={"instruction": "   ", "timezone": "UTC"},
+    )
+    assert response.status_code == 400
+    assert "调整要求" in response.json()["detail"]
+
+    other_user = create_random_user(db)
+    other_headers = authentication_token_from_email(
+        client=client, email=other_user.email, db=db
+    )
+    response = client.post(
+        _adjust_url(plan.id), headers=other_headers, json={**base, "timezone": "UTC"}
+    )
+    assert response.status_code == 404
+
+
+def test_task_crud_lifecycle_and_bounds(
+    client: TestClient, db: Session
+) -> None:
+    user, conversation = _conversation_with_message(db)
+    plan = _add_plan(
+        db,
+        conversation_id=conversation.id,
+        title="c",
+        start=date(2026, 9, 1),
+        end=date(2026, 9, 5),
+        task_title="existing",
+    )
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+    tasks_url = f"{settings.API_V1_STR}/study-plans/{plan.id}/tasks"
+
+    response = client.post(
+        tasks_url,
+        headers=headers,
+        json={
+            "title": "bad range",
+            "start_date": "2026-09-09",
+            "end_date": "2026-09-08",
+        },
+    )
+    assert response.status_code == 422
+    assert "结束日期" in response.json()["detail"]
+
+    response = client.post(
+        tasks_url,
+        headers=headers,
+        json={
+            "title": "  完成实验  ",
+            "start_date": "2026-08-30",
+            "end_date": "2026-09-10",
+            "estimated_minutes": 90,
+        },
+    )
+    assert response.status_code == 200
+    created = response.json()
+    assert created["title"] == "完成实验"
+    assert created["estimated_minutes"] == 90
+
+    db.expire_all()
+    refreshed = db.get(StudyPlan, plan.id)
+    assert refreshed is not None
+    # Bounds grew to cover the new task.
+    assert str(refreshed.start_date) == "2026-08-30"
+    assert str(refreshed.end_date) == "2026-09-10"
+
+    task_id = created["id"]
+    task_url = f"{tasks_url}/{task_id}"
+
+    response = client.patch(task_url, headers=headers, json={"title": "   "})
+    assert response.status_code == 422
+
+    response = client.patch(
+        task_url,
+        headers=headers,
+        json={"is_completed": True, "description": "已验收"},
+    )
+    assert response.status_code == 200
+    assert response.json()["is_completed"] is True
+
+    response = client.patch(
+        task_url,
+        headers=headers,
+        json={"start_date": "2026-09-20", "end_date": "2026-09-19"},
+    )
+    assert response.status_code == 422
+
+    response = client.patch(f"{tasks_url}/{uuid.uuid4()}", headers=headers, json={})
+    assert response.status_code == 404
+
+    # Deleting one of two tasks re-computes bounds from the survivor.
+    response = client.delete(task_url, headers=headers)
+    assert response.status_code == 200
+    db.expire_all()
+    refreshed = db.get(StudyPlan, plan.id)
+    assert refreshed is not None
+    assert str(refreshed.end_date) != "2026-09-10"
+
+
+def test_delete_plan_removes_row(client: TestClient, db: Session) -> None:
+    user, conversation = _conversation_with_message(db)
+    plan = _add_plan(
+        db,
+        conversation_id=conversation.id,
+        title="gone",
+        start=date(2026, 9, 1),
+        end=date(2026, 9, 2),
+        task_title="t",
+    )
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+    url = f"{settings.API_V1_STR}/study-plans/{plan.id}"
+    response = client.delete(url, headers=headers)
+    assert response.status_code == 200
+    assert response.json() == {"message": "学习计划已删除"}
+
+
+def test_update_plan_edit_branches(client: TestClient, db: Session) -> None:
+    user, conversation = _conversation_with_message(db)
+    plan = _add_plan(
+        db,
+        conversation_id=conversation.id,
+        title="原始",
+        start=date(2026, 9, 1),
+        end=date(2026, 9, 3),
+        task_title="t",
+    )
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+    url = f"{settings.API_V1_STR}/study-plans/{plan.id}"
+    assert settings.emails_enabled is False  # precondition for the 400 branch
+
+    response = client.patch(url, headers=headers, json={"title": "   "})
+    assert response.status_code == 422
+    assert "计划标题" in response.json()["detail"]
+
+    response = client.patch(
+        url, headers=headers, json={"summary": "新的总结", "reminder_enabled": True}
+    )
+    assert response.status_code == 400  # emails disabled on the test server
+    assert "邮件发送服务" in response.json()["detail"]
+
+    response = client.patch(
+        url, headers=headers, json={"timezone": "Europe/Berlin", "summary": "第二次"}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["timezone"] == "Europe/Berlin"
+    assert body["summary"] == "第二次"

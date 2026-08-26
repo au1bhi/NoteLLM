@@ -296,3 +296,41 @@ def test_answer_forwards_limit_to_retrieve_chunks(monkeypatch: MonkeyPatch) -> N
     )
 
     assert captured["limit"] == 3
+
+
+# --- Conversational/meta detection & retrieval contextualisation -----------
+
+
+def test_conversational_detection_table() -> None:
+    from app.services.answers import is_conversational_or_meta_query as is_meta
+
+    assert is_meta("") is True
+    assert is_meta("  ") is True
+    assert is_meta("你好！") is True
+    assert is_meta("Hey!") is True
+    assert is_meta("Hey there~") is False  # two-word form is not in the anchor list
+    assert is_meta("who are you") is True
+    assert is_meta("你叫什么名字") is True
+    # Real content questions stay False.
+    assert is_meta("什么是向量检索？") is False
+    assert is_meta("explain pgvector index types") is False
+    # Short follow-ups only count when history context exists.
+    assert is_meta("继续", history="") is False
+    assert is_meta("继续", history="学习者：解释一下 HNSW") is True
+    assert is_meta("上文提到的那个为什么不对呀呢", history="x") is True
+
+
+def test_contextualize_retrieval_query_rules() -> None:
+    from app.services.answers import contextualize_retrieval_query as ctx
+
+    assert ctx(query="它") == "它"  # no history
+    assert ctx(query="长问题" * 20, history="学习者：旧话题") == "长问题" * 20
+    merged = ctx(
+        query="它的优缺点是什么",
+        history="助手：略\n学习者：HNSW 索引原理",
+    )
+    assert merged.startswith("HNSW 索引原理")
+    assert merged.endswith("它的优缺点是什么")
+    # Identical topic must NOT be duplicated into the query.
+    same = ctx(query="HNSW 索引原理", history="学习者：HNSW 索引原理")
+    assert same == "HNSW 索引原理"
