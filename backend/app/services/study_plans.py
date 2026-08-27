@@ -290,13 +290,12 @@ def build_study_plan_adjust_prompt(
 5. 不要输出 Markdown 或解释性文字，只输出纯 JSON。"""
 
 
-def adjust_study_plan(
-    *,
-    session: Session,
-    plan: StudyPlan,
-    instruction: str,
-    chat_provider: ChatProvider,
-) -> GeneratedStudyPlan:
+def build_plan_info(session: Session, plan: StudyPlan) -> dict[str, object]:
+    """Assemble the current plan + its tasks as a JSON-serialisable dict.
+
+    Shared by the ai-adjust reserve path (so the route can reserve on the full
+    assembled prompt, not just ``instruction + plan.summary``) and the service.
+    """
     tasks = list(
         session.exec(
             select(StudyTask)
@@ -304,7 +303,7 @@ def adjust_study_plan(
             .order_by(col(StudyTask.sort_order).asc(), col(StudyTask.start_date).asc())
         ).all()
     )
-    plan_info = {
+    return {
         "title": plan.title,
         "summary": plan.summary,
         "difficulty": plan.difficulty,
@@ -322,6 +321,16 @@ def adjust_study_plan(
             for t in tasks
         ],
     }
+
+
+def adjust_study_plan(
+    *,
+    session: Session,
+    plan: StudyPlan,
+    instruction: str,
+    chat_provider: ChatProvider,
+) -> GeneratedStudyPlan:
+    plan_info = build_plan_info(session, plan)
     context = conversation_text(session, plan.conversation_id)
     prompt = build_study_plan_adjust_prompt(
         current_plan_summary=json.dumps(plan_info, ensure_ascii=False, indent=2),

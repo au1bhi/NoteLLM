@@ -66,21 +66,37 @@ def get_user_by_email(*, session: Session, email: str) -> User | None:
     return session_user
 
 
-# Dummy hash to use for timing attack prevention when user is not found
-# This is an Argon2 hash of a random password, used to ensure constant-time comparison
-DUMMY_HASH = "$argon2id$v=19$m=65536,t=3,p=4$MjQyZWE1MzBjYjJlZTI0Yw$YTU4NGM5ZTZmYjE2NzZlZjY0ZWY3ZGRkY2U2OWFjNjk"
+# Dummy hashes for timing-equalization. pwdlib verifies a stored hash with the
+# single hasher matching its format (argon2 ~54ms, bcrypt ~187ms), so the three
+# outcomes — not-found, found-argon2-wrong, found-bcrypt-wrong — span a 4.5x
+# cost range. To remove BOTH the not-found oracle AND the stored-hash-type
+# fingerprint, every wrong/not-found path must do the *same total work*: one
+# argon2 verify + one bcrypt verify (~240ms). The not-found branch runs both
+# dummies; the found-wrong branch runs the real verify plus the OTHER hasher's
+# dummy. Hash format is detected via the leading prefix (red-team round 4).
+DUMMY_HASH_ARGON2 = "$argon2id$v=19$m=65536,t=3,p=4$MjQyZWE1MzBjYjJlZTI0Yw$YTU4NGM5ZTZmYjE2NzZlZjY0ZWY3ZGRkY2U2OWFjNjk"
+DUMMY_HASH_BCRYPT = "$2b$12$xsPUgT6uNDP5pBEeATRrheducE/NFrCh3Fvokm1oJqphq3vXJ8YjO"
 
 
 def authenticate(*, session: Session, email: str, password: str) -> User | None:
     # The OAuth2 form sends the raw string, so normalize here too.
     db_user = get_user_by_email(session=session, email=email)
     if not db_user:
-        # Prevent timing attacks by running password verification even when user doesn't exist
-        # This ensures the response time is similar whether or not the email exists
-        verify_password(password, DUMMY_HASH)
+        # Not-found runs both dummies (~240ms) so it cannot be distinguished
+        # from a found-wrong path, which also costs one argon2 + one bcrypt.
+        verify_password(password, DUMMY_HASH_ARGON2)
+        verify_password(password, DUMMY_HASH_BCRYPT)
         return None
     verified, updated_password_hash = verify_password(password, db_user.hashed_password)
+    # Pad the found-wrong path with the *other* hasher's dummy so its total cost
+    # matches not-found (one argon2 + one bcrypt), removing the hash-type
+    # fingerprint. A correct password already cost the real verify and returns
+    # immediately — accepting a ~130ms penalty on successful login is fine.
     if not verified:
+        if db_user.hashed_password.startswith("$argon2"):
+            verify_password(password, DUMMY_HASH_BCRYPT)
+        elif db_user.hashed_password.startswith("$2"):
+            verify_password(password, DUMMY_HASH_ARGON2)
         return None
     if updated_password_hash:
         db_user.hashed_password = updated_password_hash

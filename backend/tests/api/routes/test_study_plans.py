@@ -788,3 +788,102 @@ def test_update_plan_edit_branches(client: TestClient, db: Session) -> None:
     body = response.json()
     assert body["timezone"] == "Europe/Berlin"
     assert body["summary"] == "第二次"
+
+
+def test_ai_adjust_reserve_covers_full_assembled_prompt(
+    client: TestClient, db: Session, monkeypatch: MonkeyPatch
+) -> None:
+    """The ai-adjust reservation must cover the full assembled prompt (plan JSON
+    + ≤16k-char conversation context + instruction + schema wrapper), not just
+    ``instruction + plan.summary``. Under-reserving let a server-billed user
+    settle above their monthly cap (red-team round 4)."""
+    from contextlib import contextmanager
+
+    from app.services.usage import usage_reservation
+
+    user, conversation = _conversation_with_message(db)
+    plan = _add_plan(
+        db,
+        conversation_id=conversation.id,
+        title="旧标题",
+        start=date(2026, 9, 1),
+        end=date(2026, 9, 7),
+        task_title="旧任务",
+    )
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+
+    captured: dict[str, object] = {}
+
+    @contextmanager
+    def capturing_reservation(**kwargs):
+        captured["chat_tokens"] = kwargs.get("chat_tokens")
+        with usage_reservation(**kwargs) as reservation:
+            yield reservation
+
+    monkeypatch.setattr(
+        "app.api.routes.study_plans.usage_reservation", capturing_reservation
+    )
+    monkeypatch.setattr(
+        "app.api.routes.study_plans.get_chat_provider",
+        lambda _config: FakePlanProvider(),
+    )
+
+    instruction = "改为只覆盖前三天"
+    response = client.post(
+        _adjust_url(plan.id),
+        headers=headers,
+        json={"instruction": instruction, "timezone": "UTC"},
+    )
+    assert response.status_code == 200, response.text
+
+    reserved = int(captured["chat_tokens"])  # type: ignore[arg-type]
+    # The reserve must exceed what the old under-counting estimate produced
+    # (estimate_tokens(instruction + plan.summary) alone). The full prompt adds
+    # the conversation context + plan task list, so the reserve is strictly
+    # larger than the naive instruction+summary estimate.
+    from app.services.usage import estimate_tokens
+
+    naive = estimate_tokens(instruction + plan.summary) + 16_000
+    assert reserved > naive
+
+
+def test_generate_study_plan_reserve_covers_full_prompt(
+    client: TestClient, db: Session, monkeypatch: MonkeyPatch
+) -> None:
+    """The generate reservation must cover the full assembled prompt, not just
+    the raw conversation context (red-team round 4: reserving ``context`` alone
+    missed the JSON-schema instruction wrapper + system prompt)."""
+    from contextlib import contextmanager
+
+    from app.services.usage import usage_reservation
+
+    user, conversation = _conversation_with_message(db)
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+    url = f"{settings.API_V1_STR}/conversations/{conversation.id}/study-plan"
+
+    captured: dict[str, object] = {}
+
+    @contextmanager
+    def capturing_reservation(**kwargs):
+        captured["chat_tokens"] = kwargs.get("chat_tokens")
+        with usage_reservation(**kwargs) as reservation:
+            yield reservation
+
+    monkeypatch.setattr(
+        "app.api.routes.study_plans.usage_reservation", capturing_reservation
+    )
+    monkeypatch.setattr(
+        "app.api.routes.study_plans.get_chat_provider",
+        lambda _config: FakePlanProvider(),
+    )
+
+    response = client.post(url, headers=headers, json={"timezone": "UTC"})
+    assert response.status_code == 200, response.text
+
+    from app.services.study_plans import build_study_plan_prompt, conversation_text
+    from app.services.usage import estimate_chat_reserve
+
+    expected = estimate_chat_reserve(
+        build_study_plan_prompt(conversation=conversation_text(db, conversation.id))
+    )
+    assert captured["chat_tokens"] == expected

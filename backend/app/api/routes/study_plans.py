@@ -1,3 +1,4 @@
+import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -31,6 +32,9 @@ from app.services.provider_settings import (
 from app.services.study_plans import (
     MISSING_STUDY_PLAN_SCHEMA,
     adjust_study_plan,
+    build_plan_info,
+    build_study_plan_adjust_prompt,
+    build_study_plan_prompt,
     conversation_text,
     generate_study_plan,
     is_missing_study_plan_schema,
@@ -138,11 +142,16 @@ def create_or_regenerate_study_plan(
     user_settings = load_user_provider_settings(session, current_user.id)
     provider = get_chat_provider(effective_chat_config(user_settings))
     try:
+        # Reserve on the full assembled prompt, not just ``context``: the service
+        # wraps the conversation in a JSON-schema instruction + system prompt, so
+        # reserving ``context`` alone under-counts and lets a server-billed user
+        # settle above their monthly cap (red-team round 4).
+        prompt = build_study_plan_prompt(conversation=context)
         with usage_reservation(
             session=session,
             user_id=current_user.id,
             user_settings=user_settings,
-            chat_tokens=estimate_chat_reserve(context),
+            chat_tokens=estimate_chat_reserve(prompt),
         ) as reservation:
             generated = generate_study_plan(
                 session=session,
@@ -234,11 +243,23 @@ def ai_adjust_plan(
     user_settings = load_user_provider_settings(session, current_user.id)
     provider = get_chat_provider(effective_chat_config(user_settings))
     try:
+        # Reserve on the full assembled prompt (plan JSON + conversation context
+        # + instruction + schema wrapper). The prior reserve on only
+        # ``instruction + plan.summary`` missed the ≤16k-char conversation
+        # context and plan task list, letting a server-billed user settle above
+        # their monthly cap (red-team round 4).
+        adjust_prompt = build_study_plan_adjust_prompt(
+            current_plan_summary=json.dumps(
+                build_plan_info(session, plan), ensure_ascii=False, indent=2
+            ),
+            instruction=instruction,
+            conversation=conversation_text(session, plan.conversation_id),
+        )
         with usage_reservation(
             session=session,
             user_id=current_user.id,
             user_settings=user_settings,
-            chat_tokens=estimate_chat_reserve(instruction + plan.summary),
+            chat_tokens=estimate_chat_reserve(adjust_prompt),
         ) as reservation:
             generated = adjust_study_plan(
                 session=session,
