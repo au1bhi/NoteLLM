@@ -145,7 +145,9 @@ def create_or_regenerate_study_plan(
         # Reserve on the full assembled prompt, not just ``context``: the service
         # wraps the conversation in a JSON-schema instruction + system prompt, so
         # reserving ``context`` alone under-counts and lets a server-billed user
-        # settle above their monthly cap (red-team round 4).
+        # settle above their monthly cap (red-team round 4). Pass the same prompt
+        # string into the service so it does not re-assemble from live state and
+        # re-open the reserve (red-team round 5 TOCTOU).
         prompt = build_study_plan_prompt(conversation=context)
         with usage_reservation(
             session=session,
@@ -154,9 +156,8 @@ def create_or_regenerate_study_plan(
             chat_tokens=estimate_chat_reserve(prompt),
         ) as reservation:
             generated = generate_study_plan(
-                session=session,
-                conversation_id=conversation.id,
                 chat_provider=provider,
+                prompt=prompt,
             )
             reservation.set_actual(
                 chat_tokens=provider.total_tokens_used
@@ -247,7 +248,9 @@ def ai_adjust_plan(
         # + instruction + schema wrapper). The prior reserve on only
         # ``instruction + plan.summary`` missed the ≤16k-char conversation
         # context and plan task list, letting a server-billed user settle above
-        # their monthly cap (red-team round 4).
+        # their monthly cap (red-team round 4). Pass the same prompt into the
+        # service so it does not re-assemble from live state and re-open the
+        # reserve (red-team round 5 TOCTOU).
         adjust_prompt = build_study_plan_adjust_prompt(
             current_plan_summary=json.dumps(
                 build_plan_info(session, plan), ensure_ascii=False, indent=2
@@ -262,10 +265,8 @@ def ai_adjust_plan(
             chat_tokens=estimate_chat_reserve(adjust_prompt),
         ) as reservation:
             generated = adjust_study_plan(
-                session=session,
-                plan=plan,
-                instruction=instruction,
                 chat_provider=provider,
+                prompt=adjust_prompt,
             )
             reservation.set_actual(
                 chat_tokens=provider.total_tokens_used

@@ -887,3 +887,112 @@ def test_generate_study_plan_reserve_covers_full_prompt(
         build_study_plan_prompt(conversation=conversation_text(db, conversation.id))
     )
     assert captured["chat_tokens"] == expected
+
+
+def test_ai_adjust_provider_prompt_equals_reserved_prompt(
+    client: TestClient, db: Session, monkeypatch: MonkeyPatch
+) -> None:
+    """The prompt sent to the provider must be the exact string the route
+    reserved quota on. Re-assembling it in the service from live plan/
+    conversation state would let a concurrent task/message insert grow the
+    actual prompt beyond the reserve — a TOCTOU re-opening the R4 overspend
+    (red-team round 5)."""
+    from contextlib import contextmanager
+
+    from app.services.usage import estimate_chat_reserve, usage_reservation
+
+    user, conversation = _conversation_with_message(db)
+    plan = _add_plan(
+        db,
+        conversation_id=conversation.id,
+        title="旧标题",
+        start=date(2026, 9, 1),
+        end=date(2026, 9, 7),
+        task_title="旧任务",
+    )
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+
+    reserved_tokens: dict[str, object] = {}
+    sent_prompt: dict[str, object] = {}
+
+    @contextmanager
+    def capturing_reservation(**kwargs):
+        reserved_tokens["chat_tokens"] = kwargs.get("chat_tokens")
+        with usage_reservation(**kwargs) as reservation:
+            yield reservation
+
+    provider = FakePlanProvider()
+    original = provider.complete_json
+
+    def capture_complete_json(*, prompt: str, system: str | None = None):
+        sent_prompt["prompt"] = prompt
+        return original(prompt=prompt, system=system)
+
+    provider.complete_json = capture_complete_json  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "app.api.routes.study_plans.usage_reservation", capturing_reservation
+    )
+    monkeypatch.setattr(
+        "app.api.routes.study_plans.get_chat_provider",
+        lambda _config: provider,
+    )
+
+    response = client.post(
+        _adjust_url(plan.id),
+        headers=headers,
+        json={"instruction": "改为只覆盖前三天", "timezone": "UTC"},
+    )
+    assert response.status_code == 200, response.text
+
+    # The reserve was computed on the exact prompt the provider received: the
+    # same string flows from route -> reservation -> service, with no second
+    # assembly in the service.
+    assert reserved_tokens["chat_tokens"] == estimate_chat_reserve(
+        sent_prompt["prompt"]  # type: ignore[arg-type]
+    )
+
+
+def test_generate_provider_prompt_equals_reserved_prompt(
+    client: TestClient, db: Session, monkeypatch: MonkeyPatch
+) -> None:
+    """Same TOCTOU guard for the generate path: the provider receives the exact
+    prompt the route reserved on (red-team round 5)."""
+    from contextlib import contextmanager
+
+    from app.services.usage import estimate_chat_reserve, usage_reservation
+
+    user, conversation = _conversation_with_message(db)
+    headers = authentication_token_from_email(client=client, email=user.email, db=db)
+    url = f"{settings.API_V1_STR}/conversations/{conversation.id}/study-plan"
+
+    reserved_tokens: dict[str, object] = {}
+    sent_prompt: dict[str, object] = {}
+
+    @contextmanager
+    def capturing_reservation(**kwargs):
+        reserved_tokens["chat_tokens"] = kwargs.get("chat_tokens")
+        with usage_reservation(**kwargs) as reservation:
+            yield reservation
+
+    provider = FakePlanProvider()
+    original = provider.complete_json
+
+    def capture_complete_json(*, prompt: str, system: str | None = None):
+        sent_prompt["prompt"] = prompt
+        return original(prompt=prompt, system=system)
+
+    provider.complete_json = capture_complete_json  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "app.api.routes.study_plans.usage_reservation", capturing_reservation
+    )
+    monkeypatch.setattr(
+        "app.api.routes.study_plans.get_chat_provider",
+        lambda _config: provider,
+    )
+
+    response = client.post(url, headers=headers, json={"timezone": "UTC"})
+    assert response.status_code == 200, response.text
+
+    assert reserved_tokens["chat_tokens"] == estimate_chat_reserve(
+        sent_prompt["prompt"]  # type: ignore[arg-type]
+    )

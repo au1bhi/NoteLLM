@@ -259,3 +259,70 @@ def test_authenticate_wrong_paths_cost_within_equalization_band(db: Session) -> 
     med = sorted([not_found_ms, found_argon_ms, found_bcrypt_ms])[1]
     for ms in (not_found_ms, found_argon_ms, found_bcrypt_ms):
         assert med * 0.6 <= ms <= med * 1.4
+
+
+def test_authenticate_argon2_success_pads_with_bcrypt_dummy(
+    db: Session, monkeypatch
+) -> None:
+    """A correct argon2 login must also run the bcrypt dummy, else it returns in
+    ~55ms — far faster than every wrong/not-found path (~240ms) — giving an
+    online brute-forcer a latency success-oracle at the rate-limit ceiling
+    (red-team round 5)."""
+    from app.core import security
+
+    real_verify = security.verify_password
+    seen: list[str] = []
+
+    def tracking_verify(plain: str, hashed: str):
+        seen.append(hashed)
+        return real_verify(plain, hashed)
+
+    email = random_email()
+    user = User(
+        email=email,
+        hashed_password=security.get_password_hash("correct-pw"),
+        email_canonical=email.lower(),
+    )
+    db.add(user)
+    db.commit()
+
+    monkeypatch.setattr(crud, "verify_password", tracking_verify)
+    authenticated = crud.authenticate(session=db, email=email, password="correct-pw")
+    assert authenticated is not None
+    # The real argon2 verify ran, plus the bcrypt dummy pads the success path
+    # up to the same ~240ms as every wrong/not-found path.
+    assert any(h.startswith("$argon2") for h in seen)
+    assert crud.DUMMY_HASH_BCRYPT in seen
+
+
+def test_authenticate_success_paths_cost_within_equalization_band(db: Session) -> None:
+    """A correct login must not be distinguishable from a wrong/not-found one by
+    timing — the prior fix left the argon2-success path ~187ms faster (red-team
+    round 5 success oracle)."""
+    import time
+
+    # argon2 correct (padded) — fresh argon2 user
+    email = random_email()
+    user = User(
+        email=email,
+        hashed_password=crud.get_password_hash("pw"),
+        email_canonical=email.lower(),
+    )
+    db.add(user)
+    db.commit()
+    t = time.perf_counter()
+    assert crud.authenticate(session=db, email=email, password="pw") is not None
+    success_argon_ms = (time.perf_counter() - t) * 1000
+
+    # not-found
+    t = time.perf_counter()
+    assert (
+        crud.authenticate(session=db, email="absent@example.com", password="wrong")
+        is None
+    )
+    not_found_ms = (time.perf_counter() - t) * 1000
+
+    med = sorted([success_argon_ms, not_found_ms])[0]
+    for ms in (success_argon_ms, not_found_ms):
+        assert med * 0.6 <= ms <= med * 1.4
+

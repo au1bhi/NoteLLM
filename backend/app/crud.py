@@ -88,16 +88,22 @@ def authenticate(*, session: Session, email: str, password: str) -> User | None:
         verify_password(password, DUMMY_HASH_BCRYPT)
         return None
     verified, updated_password_hash = verify_password(password, db_user.hashed_password)
-    # Pad the found-wrong path with the *other* hasher's dummy so its total cost
-    # matches not-found (one argon2 + one bcrypt), removing the hash-type
-    # fingerprint. A correct password already cost the real verify and returns
-    # immediately — accepting a ~130ms penalty on successful login is fine.
     if not verified:
+        # Pad the found-wrong path with the *other* hasher's dummy so its total
+        # cost matches not-found (one argon2 + one bcrypt), removing the
+        # stored-hash-type fingerprint (red-team round 4).
         if db_user.hashed_password.startswith("$argon2"):
             verify_password(password, DUMMY_HASH_BCRYPT)
         elif db_user.hashed_password.startswith("$2"):
             verify_password(password, DUMMY_HASH_ARGON2)
         return None
+    # Equalize the success path too. A correct argon2 login would otherwise return
+    # in ~55ms — far faster than every wrong/not-found path (~240ms) — giving an
+    # online brute-forcer a latency success-oracle at the rate-limit ceiling. A
+    # bcrypt-success already costs bcrypt verify + argon2 rehash (~240ms) when a
+    # rehash is due, so only the argon2-success path is under-padded (red-team R5).
+    if db_user.hashed_password.startswith("$argon2"):
+        verify_password(password, DUMMY_HASH_BCRYPT)
     if updated_password_hash:
         db_user.hashed_password = updated_password_hash
         session.add(db_user)
