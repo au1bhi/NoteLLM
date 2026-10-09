@@ -47,6 +47,9 @@ class Settings(BaseSettings):
     # Optional Cloudflare Turnstile protection for public auth endpoints.
     TURNSTILE_SITE_KEY: str | None = None
     TURNSTILE_SECRET_KEY: str | None = None
+    # Opt-in deployment guard: missing credentials must not silently disable
+    # a CAPTCHA that the operator expects to be mandatory.
+    TURNSTILE_REQUIRED: bool = False
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -82,6 +85,9 @@ class Settings(BaseSettings):
     # providers. It supports local Clash/Fake-IP development environments
     # without weakening SSRF validation for user-supplied provider URLs.
     SERVER_PROVIDER_PROXY_URL: HttpUrl | None = None
+    # Exact BYOK hostnames, comma-separated or JSON. Empty allows any public
+    # HTTPS provider; operators can close arbitrary public egress with a list.
+    BYOK_ALLOWED_HOSTS: Annotated[list[str] | str, BeforeValidator(parse_cors)] = []
 
     # Free-tier allowance, applied only to usage billed to the server's own
     # keys. Users who bring their own API key are not limited by these.
@@ -200,6 +206,10 @@ class Settings(BaseSettings):
                 raise ValueError(message)
         if self.RATE_LIMIT_MAX_ACTIVE_BUCKETS < 1:
             raise ValueError("RATE_LIMIT_MAX_ACTIVE_BUCKETS must be positive")
+        if self.ENVIRONMENT != "local" and not self.RATE_LIMIT_ENABLED:
+            raise ValueError(
+                "RATE_LIMIT_ENABLED must be true outside local development"
+            )
 
         if self.SMTP_TLS and self.SMTP_SSL:
             raise ValueError("SMTP_TLS and SMTP_SSL cannot both be enabled")
@@ -208,6 +218,8 @@ class Settings(BaseSettings):
             raise ValueError(
                 "TURNSTILE_SITE_KEY and TURNSTILE_SECRET_KEY must be configured together"
             )
+        if self.TURNSTILE_REQUIRED and not self.turnstile_enabled:
+            raise ValueError("TURNSTILE_REQUIRED requires both Turnstile keys")
 
         if self.ENVIRONMENT != "local":
             if not str(self.FRONTEND_HOST).startswith("https://"):

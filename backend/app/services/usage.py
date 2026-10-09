@@ -3,7 +3,7 @@ from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Literal, cast
+from typing import Any, Literal, cast
 
 from sqlalchemy import text as sql_text
 from sqlalchemy.engine import CursorResult
@@ -445,7 +445,7 @@ def settle_usage(
         "now": datetime.now(UTC),
     }
     result = session.execute(_SETTLE_SQL, params)  # ty: ignore[deprecated] -- raw SQL is intentional
-    if cast(CursorResult, result).rowcount == 0:
+    if cast(CursorResult[Any], result).rowcount == 0:
         # The reservation row rolled into a new month before reconciliation.
         # Land the adjustment on the ACTIVE-period row instead of silently
         # dropping it (cross-period accounting gap found by QUOTA/BIZABUSE).

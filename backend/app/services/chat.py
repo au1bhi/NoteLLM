@@ -18,9 +18,7 @@ from app.services.chat_stream import JsonAnswerValueStream, ThinkSuppressor
 from app.services.provider_settings import ProviderConfig, resolve_api_base
 
 
-def _safe_error_text(
-    error: BaseException, secrets: Sequence[str] = ()
-) -> str:
+def _safe_error_text(error: BaseException, secrets: Sequence[str] = ()) -> str:
     """Redact endpoints/URLs from provider error strings before echoing them.
 
     Upstream transport exceptions embed the operator-side base_url/proxy host;
@@ -29,9 +27,7 @@ def _safe_error_text(
     return _safe_error_text_from_value(str(error), secrets)
 
 
-def _safe_error_text_from_value(
-    value: object, secrets: Sequence[str] = ()
-) -> str:
+def _safe_error_text_from_value(value: object, secrets: Sequence[str] = ()) -> str:
     """Shared redaction + length cap for any value surfaced to clients.
 
     Besides regex-based URL/``sk-``/Bearer redaction, any concrete secret
@@ -93,9 +89,7 @@ def _is_cjk(char: str) -> bool:
     """CJK punctuation, kana, extended-A/compat ideographs, and fullwidth forms
     each cost roughly one token; the old U+4E00–U+9FFF range alone missed them."""
     o = ord(char)
-    return (
-        0x3000 <= o <= 0x9FFF or 0xF900 <= o <= 0xFAFF or 0xFF00 <= o <= 0xFFEF
-    )
+    return 0x3000 <= o <= 0x9FFF or 0xF900 <= o <= 0xFAFF or 0xFF00 <= o <= 0xFFEF
 
 
 def estimate_tokens(text: str) -> int:
@@ -166,18 +160,14 @@ class OpenAICompatibleChatProvider:
                         err_data.get("message"), [self.config.api_key]
                     )
                 if isinstance(err_data, str):
-                    return _safe_error_text_from_value(
-                        err_data, [self.config.api_key]
-                    )
+                    return _safe_error_text_from_value(err_data, [self.config.api_key])
                 if "message" in err_payload:
                     return _safe_error_text_from_value(
                         err_payload["message"], [self.config.api_key]
                     )
         except Exception:
             pass
-        return _safe_error_text_from_value(
-            response.text[:200], [self.config.api_key]
-        )
+        return _safe_error_text_from_value(response.text[:200], [self.config.api_key])
 
     def _request_body(
         self,
@@ -273,9 +263,7 @@ class OpenAICompatibleChatProvider:
                     else {}
                 )
                 piece = (
-                    delta_obj.get("content")
-                    if isinstance(delta_obj, dict)
-                    else None
+                    delta_obj.get("content") if isinstance(delta_obj, dict) else None
                 )
                 if not isinstance(piece, str) or not piece:
                     continue
@@ -332,7 +320,9 @@ class OpenAICompatibleChatProvider:
                     prompt=prompt,
                     on_delta=on_delta,
                 )
-            return self._chat_blocking(endpoint=endpoint, messages=messages, prompt=prompt)
+            return self._chat_blocking(
+                endpoint=endpoint, messages=messages, prompt=prompt
+            )
         except ChatError:
             raise
         except (httpx.HTTPError, KeyError, TypeError, ValueError, IndexError) as error:
@@ -469,9 +459,7 @@ class OpenAICompatibleChatProvider:
                     self.total_tokens_used += actual
             else:
                 with self._tokens_lock:
-                    self.total_tokens_used += prompt_cost + estimate_tokens(
-                        content
-                    )
+                    self.total_tokens_used += prompt_cost + estimate_tokens(content)
         except ChatError:
             raise
         except (httpx.HTTPError, KeyError, TypeError, ValueError, IndexError) as error:

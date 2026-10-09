@@ -180,12 +180,9 @@ async def stream_message(
             )
             break
         else:  # error
-            yield ServerSentEvent(
-                data={"message": str(payload)}, event="error"
-            )
+            yield ServerSentEvent(data={"message": str(payload)}, event="error")
             yield ServerSentEvent(
                 data={"conversation_id": str(conversation_id)}, event="done"
             )
             break
     thread.join()
-

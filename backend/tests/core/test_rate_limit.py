@@ -80,7 +80,8 @@ def test_login_endpoint_rate_limited_after_many_attempts(
     form = {"username": "nobody@example.com", "password": "wrong-password"}
 
     # First 20 attempts are allowed through to the (failing) credential check.
-    for _ in range(20):
+    for index in range(20):
+        form["username"] = f"nobody{index}@example.com"
         response = client.post(url, data=form)
         assert response.status_code == 400
 
@@ -173,6 +174,7 @@ def test_spoofed_x_forwarded_for_shares_one_rate_limit_bucket(
     form = {"username": "nobody@example.com", "password": "wrong-password"}
 
     for index in range(20):
+        form["username"] = f"nobody{index}@example.com"
         response = client.post(
             url,
             data=form,
@@ -378,3 +380,46 @@ def test_reset_swallows_missing_schema(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(rate_limit_module, "Session", BrokenSession)
     rate_limit_module.reset()
+
+
+@pytest.mark.parametrize("known_account", [True, False])
+def test_account_throttle_survives_ip_rotation_and_expires(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, known_account: bool
+) -> None:
+    _FrozenClock.current = datetime(2026, 10, 9, tzinfo=UTC)
+    monkeypatch.setattr(rate_limit_module, "datetime", _FrozenClock)
+    monkeypatch.setattr(settings, "TRUSTED_PROXY_CIDRS", ["127.0.0.1/32"])
+    email = settings.FIRST_SUPERUSER if known_account else "missing@gmail.com"
+    authenticate = Mock(return_value=None)
+    monkeypatch.setattr("app.api.routes.login.crud.authenticate", authenticate)
+    for index in range(11):
+        with TestClient(client.app, client=("127.0.0.1", 1234)) as peer:
+            response = peer.post(
+                f"{settings.API_V1_STR}/login/access-token",
+                data={
+                    "username": email.upper() if index % 2 else email,
+                    "password": "wrong",
+                },
+                headers={"X-Forwarded-For": f"203.0.113.{index + 1}"},
+            )
+        assert response.status_code == (400 if index < 10 else 429)
+    assert authenticate.call_count == 10
+    assert response.headers["Retry-After"] == "300"
+    # Continued rejected attempts do not extend the fixed expiry.
+    _FrozenClock.current += timedelta(seconds=301)
+    response = client.post(
+        f"{settings.API_V1_STR}/login/access-token",
+        data={"username": email, "password": "wrong"},
+    )
+    assert response.status_code == 400
+    assert authenticate.call_count == 11
+
+
+def test_account_throttle_disabled_only_for_local_tests(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "RATE_LIMIT_ENABLED", False)
+    consume = Mock()
+    monkeypatch.setattr(rate_limit_module, "_consume", consume)
+    rate_limit_module.limit_login_account("unused@example.com")
+    consume.assert_not_called()

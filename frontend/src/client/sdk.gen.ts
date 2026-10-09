@@ -72,6 +72,13 @@ export class ConversationsService {
 
     /**
      * Stream Message
+     * True provider-level SSE streaming.
+     *
+     * A worker thread runs ``persist_answer`` while its ``on_delta`` callbacks
+     * are bridged onto this event loop via a queue, so each answer fragment is
+     * emitted the moment the provider produces it. Persistence always runs to
+     * completion: if the client disconnects the generator is closed, but the
+     * thread's DB writes still land (a disconnect event simply stops delivery).
      * @param data The data for the request.
      * @param data.conversationId
      * @param data.requestBody

@@ -70,8 +70,9 @@ def test_get_provider_settings_defaults_empty(client: TestClient, db: Session) -
 
 
 def test_upsert_stores_encrypted_and_returns_masked(
-    client: TestClient, db: Session
+    client: TestClient, db: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _public_dns(monkeypatch)
     user, headers = _auth(client, db)
     payload = {
         "chat_base_url": "https://llm.example.com",
@@ -202,7 +203,10 @@ def test_user_usage_defaults_to_zero(client: TestClient, db: Session) -> None:
     assert body["chat_source"] == "server"
 
 
-def test_user_usage_unlimited_with_own_key(client: TestClient, db: Session) -> None:
+def test_user_usage_unlimited_with_own_key(
+    client: TestClient, db: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _public_dns(monkeypatch)
     user, headers = _auth(client, db)
     client.put(
         _url(),
@@ -585,7 +589,9 @@ def test_models_probe_uses_server_billing_when_request_uses_server_key(
         used_proxy_urls.append(proxy_url)
         return {"data": [{"id": "gpt-4o"}]}
 
-    monkeypatch.setattr("app.services.provider_settings.fetch_models_payload", fake_fetch)
+    monkeypatch.setattr(
+        "app.services.provider_settings.fetch_models_payload", fake_fetch
+    )
     for _ in range(3):
         r = client.post(_url() + "/models", headers=headers, json={})
         assert r.status_code == 200
@@ -681,7 +687,10 @@ def test_fetch_model_ids_maps_transport_failures_to_probe_error(
 
     with pytest.raises(ProviderProbeError) as hinted:
         fetch_model_ids(
-            "https://p.example", "k", proxy_url=None, fallback_root="https://p.example/v1"
+            "https://p.example",
+            "k",
+            proxy_url=None,
+            fallback_root="https://p.example/v1",
         )
     assert "根域名" in hinted.value.detail
 
@@ -742,7 +751,5 @@ def test_fetch_model_ids_keeps_only_string_ids(
             {"no-id": True},
         ]
     }
-    monkeypatch.setattr(
-        ps_module, "fetch_models_payload", lambda *_a, **_k: payload
-    )
+    monkeypatch.setattr(ps_module, "fetch_models_payload", lambda *_a, **_k: payload)
     assert fetch_model_ids("https://p.example", "k", proxy_url=None) == ["m1", "m2"]

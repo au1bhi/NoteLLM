@@ -136,6 +136,8 @@ services:
       - RATE_LIMIT_MAX_ACTIVE_BUCKETS=${RATE_LIMIT_MAX_ACTIVE_BUCKETS:-10000}
       - TURNSTILE_SITE_KEY=${TURNSTILE_SITE_KEY:-}
       - TURNSTILE_SECRET_KEY=${TURNSTILE_SECRET_KEY:-}
+      - TURNSTILE_REQUIRED=${TURNSTILE_REQUIRED:-false}
+      - BYOK_ALLOWED_HOSTS=${BYOK_ALLOWED_HOSTS:-}
 
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/utils/health-check/', timeout=3)"]

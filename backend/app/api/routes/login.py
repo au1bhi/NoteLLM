@@ -9,7 +9,7 @@ from app import crud
 from app.api.deps import CurrentUser, SessionDep, get_current_active_superuser
 from app.core import security
 from app.core.config import settings
-from app.core.rate_limit import rate_limit, recipient_send_cooldown
+from app.core.rate_limit import limit_login_account, rate_limit, recipient_send_cooldown
 from app.core.turnstile import require_turnstile
 from app.models import (
     Message,
@@ -19,6 +19,7 @@ from app.models import (
     UserUpdate,
 )
 from app.utils import (
+    canonical_email,
     generate_password_reset_token,
     generate_reset_password_email,
     reset_token_password_changed_at,
@@ -42,6 +43,7 @@ def login_access_token(
     """
     OAuth2 compatible token login, get an access token for future requests
     """
+    limit_login_account(canonical_email(form_data.username.strip()))
     user = crud.authenticate(
         session=session, email=form_data.username, password=form_data.password
     )

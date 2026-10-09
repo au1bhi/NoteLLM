@@ -12,6 +12,7 @@ from app.api.deps import (
     SessionDep,
     get_current_active_superuser,
 )
+from app.api.pagination import PageLimit, PageOffset
 from app.core.config import settings
 from app.core.rate_limit import rate_limit, recipient_send_cooldown
 from app.core.security import (
@@ -20,6 +21,7 @@ from app.core.security import (
     get_password_hash,
     verify_password,
 )
+from app.core.ssrf import validate_outbound_url
 from app.core.turnstile import require_turnstile
 from app.models import (
     Message,
@@ -112,7 +114,9 @@ def _tombstone_released_email(session: Session, user_id: uuid.UUID, email: str) 
     dependencies=[Depends(get_current_active_superuser)],
     response_model=UsersPublic,
 )
-def read_users(session: SessionDep, skip: int = 0, limit: int = 100) -> Any:
+def read_users(
+    session: SessionDep, skip: PageOffset = 0, limit: PageLimit = 100
+) -> Any:
     """
     Retrieve users.
     """
@@ -410,7 +414,11 @@ def read_user_provider_settings(
     return _provider_settings_public(settings_row)
 
 
-@router.put("/me/provider-settings", response_model=UserProviderSettingsPublic)
+@router.put(
+    "/me/provider-settings",
+    response_model=UserProviderSettingsPublic,
+    dependencies=[Depends(rate_limit(limit=10, window=60))],
+)
 def upsert_user_provider_settings(
     session: SessionDep,
     current_user: CurrentUser,
@@ -420,12 +428,16 @@ def upsert_user_provider_settings(
     Save the current user's provider settings. An empty API key keeps the
     stored key; empty base_url/model fall back to the server defaults.
     """
+    data = settings_in.model_dump(exclude_unset=True)
+    for field in ("chat_base_url", "embedding_base_url"):
+        if data.get(field):
+            value = data[field].strip()
+            data[field] = validate_outbound_url(value) if value else None
     settings_row = load_user_provider_settings(session, current_user.id)
     if settings_row is None:
         settings_row = UserProviderSettings(user_id=current_user.id)
         session.add(settings_row)
 
-    data = settings_in.model_dump(exclude_unset=True)
     for field in ("chat_api_key", "embedding_api_key"):
         if field in data:
             if data[field]:

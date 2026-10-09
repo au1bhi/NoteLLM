@@ -232,3 +232,23 @@ def recipient_send_cooldown(email: str, window: int = 60) -> bool:
         return True
     count, _ = _consume("recipient-send", email.strip().lower(), window)
     return count == 1
+
+
+def limit_login_account(identity: str) -> None:
+    """Bound distributed guessing, including nonexistent accounts.
+
+    Count attempts before checking credentials so concurrent requests and
+    successful logins cannot reset the budget. The fixed window expires even
+    under continued attack; no permanent account lockout or account lookup.
+    """
+    if not settings.RATE_LIMIT_ENABLED:
+        return
+    window = 300
+    count, started_at = _consume("login-account", identity, window)
+    if count > 10:
+        elapsed = (datetime.now(UTC) - started_at).total_seconds()
+        raise HTTPException(
+            status_code=429,
+            detail="登录尝试过于频繁，请稍后重试",
+            headers={"Retry-After": str(max(1, math.ceil(window - elapsed)))},
+        )

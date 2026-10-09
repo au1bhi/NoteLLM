@@ -6,6 +6,7 @@ from sqlalchemy.exc import ProgrammingError
 from sqlmodel import Session, col, select
 
 from app.api.deps import CurrentUser, SessionDep
+from app.api.pagination import PageLimit, PageOffset
 from app.api.routes.conversations import get_conversation_or_404
 from app.core.config import settings
 from app.core.rate_limit import rate_limit
@@ -56,8 +57,8 @@ router = APIRouter(tags=["study-plans"])
 def read_study_plans(
     session: SessionDep,
     current_user: CurrentUser,
-    skip: int = 0,
-    limit: int = 100,
+    skip: PageOffset = 0,
+    limit: PageLimit = 100,
     notebook_id: uuid.UUID | None = None,
 ) -> StudyPlansPublic:
     try:
@@ -159,9 +160,7 @@ def create_or_regenerate_study_plan(
                 chat_provider=provider,
                 prompt=prompt,
             )
-            reservation.set_actual(
-                chat_tokens=provider.total_tokens_used
-            )
+            reservation.set_actual(chat_tokens=provider.total_tokens_used)
     except QuotaError as error:
         raise HTTPException(status_code=429, detail=str(error)) from error
     except ValueError as error:
@@ -268,9 +267,7 @@ def ai_adjust_plan(
                 chat_provider=provider,
                 prompt=adjust_prompt,
             )
-            reservation.set_actual(
-                chat_tokens=provider.total_tokens_used
-            )
+            reservation.set_actual(chat_tokens=provider.total_tokens_used)
     except QuotaError as error:
         raise HTTPException(status_code=429, detail=str(error)) from error
     except ValueError as error:

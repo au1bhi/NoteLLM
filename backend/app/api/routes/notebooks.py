@@ -6,6 +6,7 @@ from sqlmodel import col, func, select
 from starlette.concurrency import run_in_threadpool
 
 from app.api.deps import CurrentUser, SessionDep
+from app.api.pagination import PageLimit, PageOffset
 from app.core.rate_limit import rate_limit
 from app.models import (
     Conversation,
@@ -75,7 +76,10 @@ def get_source_or_404(
 
 @router.get("/", response_model=NotebooksPublic)
 def read_notebooks(
-    session: SessionDep, current_user: CurrentUser, skip: int = 0, limit: int = 100
+    session: SessionDep,
+    current_user: CurrentUser,
+    skip: PageOffset = 0,
+    limit: PageLimit = 100,
 ) -> Any:
     statement = select(Notebook).where(Notebook.owner_id == current_user.id)
     count = session.exec(
@@ -157,8 +161,8 @@ def read_sources(
     notebook_id: uuid.UUID,
     session: SessionDep,
     current_user: CurrentUser,
-    skip: int = 0,
-    limit: int = 100,
+    skip: PageOffset = 0,
+    limit: PageLimit = 100,
 ) -> Any:
     get_notebook_or_404(
         session=session, current_user=current_user, notebook_id=notebook_id
@@ -182,8 +186,8 @@ def read_conversations(
     notebook_id: uuid.UUID,
     session: SessionDep,
     current_user: CurrentUser,
-    skip: int = 0,
-    limit: int = 100,
+    skip: PageOffset = 0,
+    limit: PageLimit = 100,
 ) -> ConversationsPublic:
     get_notebook_or_404(
         session=session, current_user=current_user, notebook_id=notebook_id
@@ -301,9 +305,7 @@ def _generate_and_store_overview(
             overview = generate_overview(
                 session=session, notebook_id=notebook.id, chat_provider=chat_provider
             )
-            reservation.set_actual(
-                chat_tokens=chat_provider.total_tokens_used
-            )
+            reservation.set_actual(chat_tokens=chat_provider.total_tokens_used)
     except QuotaError as error:
         raise HTTPException(status_code=429, detail=_safe_error_text(error)) from error
     except ChatError as error:
@@ -381,9 +383,7 @@ def generate_notebook_study_guide(
             guide = generate_study_guide(
                 session=session, notebook_id=notebook_id, chat_provider=chat_provider
             )
-            reservation.set_actual(
-                chat_tokens=chat_provider.total_tokens_used
-            )
+            reservation.set_actual(chat_tokens=chat_provider.total_tokens_used)
     except QuotaError as error:
         raise HTTPException(status_code=429, detail=_safe_error_text(error)) from error
     except ChatError as error:

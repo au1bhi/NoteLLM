@@ -180,3 +180,26 @@ def test_verify_response_maps_malformed_json_to_503(
     with pytest.raises(HTTPException) as captured:
         _verify_response("token", "203.0.113.10")
     assert captured.value.status_code == 503
+
+
+@pytest.mark.parametrize("environment", ["staging", "production"])
+def test_production_cannot_disable_rate_limits(environment: str) -> None:
+    config = settings.model_dump()
+    config.update(
+        ENVIRONMENT=environment,
+        FRONTEND_HOST="https://notellm.example.com",
+        RATE_LIMIT_ENABLED=False,
+    )
+    with pytest.raises(ValidationError, match="RATE_LIMIT_ENABLED must be true"):
+        Settings(_env_file=None, **config)
+
+
+def test_required_turnstile_cannot_silently_disable() -> None:
+    config = settings.model_dump()
+    config.update(
+        TURNSTILE_REQUIRED=True, TURNSTILE_SITE_KEY=None, TURNSTILE_SECRET_KEY=None
+    )
+    with pytest.raises(ValidationError, match="TURNSTILE_REQUIRED requires"):
+        Settings(_env_file=None, **config)
+    config.update(TURNSTILE_SITE_KEY="site", TURNSTILE_SECRET_KEY="secret")
+    assert Settings(_env_file=None, **config).turnstile_enabled

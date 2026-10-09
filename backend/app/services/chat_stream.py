@@ -104,9 +104,7 @@ class JsonAnswerValueStream:
                 self._search_from = 0
                 idx = self._buffer.find(_KEY)
                 if idx == -1:
-                    self._search_from = max(
-                        0, len(self._buffer) - len(_KEY) + 1
-                    )
+                    self._search_from = max(0, len(self._buffer) - len(_KEY) + 1)
                     break  # keep possible partial key, await more input
                 after = idx + len(_KEY)
                 nxt = self._buffer[after] if after < len(self._buffer) else ""

@@ -9,6 +9,8 @@ import httpx
 from fastapi import HTTPException
 from httpx import URL
 
+from app.core.config import settings
+
 type _AddrInfo = tuple[
     AddressFamily,
     SocketKind,
@@ -69,6 +71,10 @@ def _parse_base_url(base_url: str) -> URL:
         raise HTTPException(status_code=422, detail=_BLOCKED_DETAIL) from error
     if parsed.scheme not in {"http", "https"} or not parsed.host:
         raise HTTPException(status_code=422, detail="base_url 必须是 http(s) URL")
+    if parsed.userinfo or parsed.query or parsed.fragment:
+        raise HTTPException(
+            status_code=422, detail="base_url 不能包含用户名、密码、查询参数或片段"
+        )
     return parsed
 
 
@@ -112,9 +118,22 @@ def validate_outbound_url(base_url: str) -> str:
     (including non-canonical decimal/hex/shorthand numeric forms) to a private,
     loopback, link-local, reserved, CGNAT, multicast, or unspecified address, so
     the server cannot be pointed at internal services or cloud metadata."""
-    value = base_url.strip()
-    resolve_public_ip(_parse_base_url(value))
-    return value.rstrip("/")
+    parsed = _parse_base_url(base_url)
+    if parsed.scheme != "https" or parsed.port not in {None, 443}:
+        raise HTTPException(
+            status_code=422, detail="自定义 base_url 必须使用 HTTPS 443 端口"
+        )
+    allowed = settings.BYOK_ALLOWED_HOSTS
+    if isinstance(allowed, str):
+        allowed = [host.strip() for host in allowed.split(",") if host.strip()]
+    if allowed and parsed.host.lower().rstrip(".") not in {
+        host.lower().rstrip(".") for host in allowed
+    }:
+        raise HTTPException(
+            status_code=422, detail="该模型服务域名不在管理员允许列表中"
+        )
+    resolve_public_ip(parsed)
+    return str(parsed).rstrip("/")
 
 
 def _pinned_request_args(
@@ -147,6 +166,7 @@ def pinned_stream(
     ip = resolve_public_ip(parsed)
     pinned, merged = _pinned_request_args(parsed, ip, headers)
     kwargs.pop("trust_env", None)
+    kwargs["follow_redirects"] = False
     with httpx.Client(trust_env=False) as client:
         with client.stream(
             method,
@@ -171,10 +191,9 @@ def trusted_provider_stream(
     proxy; no local pinning — see that function for the rationale)."""
     parsed = _parse_base_url(url)
     kwargs.pop("trust_env", None)
+    kwargs["follow_redirects"] = False
     with httpx.Client(proxy=proxy_url, trust_env=False) as client:
-        with client.stream(
-            method, str(parsed), headers=headers, **kwargs
-        ) as response:
+        with client.stream(method, str(parsed), headers=headers, **kwargs) as response:
             yield response
 
 

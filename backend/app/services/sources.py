@@ -64,6 +64,8 @@ def get_upload_path(source: Source) -> Path:
 def validate_upload(upload: UploadFile) -> tuple[str, str]:
     if not upload.filename:
         raise HTTPException(status_code=400, detail="文件名不能为空")
+    if any(ord(char) < 32 or ord(char) == 127 for char in upload.filename):
+        raise HTTPException(status_code=400, detail="文件名不能包含控制字符")
 
     suffix = Path(upload.filename).suffix.lower()
     media_type = SUPPORTED_EXTENSIONS.get(suffix)
@@ -212,8 +214,7 @@ def process_source(
         {
             "sid": source.id,
             "now": now,
-            "stale_cutoff": now
-            - timedelta(seconds=SOURCE_PROCESSING_STALE_SECONDS),
+            "stale_cutoff": now - timedelta(seconds=SOURCE_PROCESSING_STALE_SECONDS),
         },
     ).first()
     session.commit()
@@ -330,7 +331,10 @@ async def create_source_from_upload(
         lock_conn.execute(_UPLOAD_LOCK_SQL, {"key": lock_key})
         try:
             return await _create_source_locked(
-                session=session, notebook=notebook, upload=upload, suffix=suffix,
+                session=session,
+                notebook=notebook,
+                upload=upload,
+                suffix=suffix,
                 media_type=media_type,
             )
         finally:

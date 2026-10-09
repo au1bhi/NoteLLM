@@ -28,14 +28,14 @@ def _assert_blocked(url: str) -> None:
 
 def test_blocks_canonical_private_hosts() -> None:
     for url in (
-        "http://127.0.0.1",
-        "http://localhost",
-        "http://[::1]",
-        "http://169.254.169.254",
-        "http://0.0.0.0",
-        "http://metadata.google.internal",
-        "http://10.0.0.5",
-        "http://192.168.1.1",
+        "https://127.0.0.1",
+        "https://localhost",
+        "https://[::1]",
+        "https://169.254.169.254",
+        "https://0.0.0.0",
+        "https://metadata.google.internal",
+        "https://10.0.0.5",
+        "https://192.168.1.1",
     ):
         _assert_blocked(url)
 
@@ -43,13 +43,13 @@ def test_blocks_canonical_private_hosts() -> None:
 def test_blocks_numeric_bypass_forms() -> None:
     # Each of these resolves to loopback or the cloud metadata address.
     for url in (
-        "http://2130706433",
-        "http://0xa9fea9fe",
-        "http://017700000001",
-        "http://127.1",
-        "http://127.0.1",
-        "http://0x7f.0.0.1",
-        "http://localhost.localdomain",
+        "https://2130706433",
+        "https://0xa9fea9fe",
+        "https://017700000001",
+        "https://127.1",
+        "https://127.0.1",
+        "https://0x7f.0.0.1",
+        "https://localhost.localdomain",
     ):
         _assert_blocked(url)
 
@@ -59,7 +59,7 @@ def test_blocks_unresolvable_host(monkeypatch: pytest.MonkeyPatch) -> None:
         raise socket.gaierror(-2, "Name or service not known")
 
     monkeypatch.setattr("app.core.ssrf._resolve", fail)
-    _assert_blocked("http://no-such-host.invalid")
+    _assert_blocked("https://no-such-host.invalid")
 
 
 def test_rejects_non_http_scheme() -> None:
@@ -87,11 +87,11 @@ def test_blocks_ipv4_mapped_ipv6_private_forms() -> None:
     from app.core.ssrf import validate_outbound_url
 
     for bad in (
-        "http://[::ffff:100.64.0.1]:8080/v1",  # CGNAT / Tailscale
-        "http://[::ffff:100.127.255.255]:80/",
-        "http://[::ffff:127.0.0.1]:8000/",  # loopback
-        "http://[::ffff:10.0.0.1]:8000/",  # RFC1918
-        "http://[::ffff:169.254.169.254]:80/",  # link-local/metadata
+        "https://[::ffff:100.64.0.1]/v1",  # CGNAT / Tailscale
+        "https://[::ffff:100.127.255.255]/",
+        "https://[::ffff:127.0.0.1]/",  # loopback
+        "https://[::ffff:10.0.0.1]/",  # RFC1918
+        "https://[::ffff:169.254.169.254]/",  # link-local/metadata
     ):
         try:
             validate_outbound_url(bad)
@@ -100,8 +100,8 @@ def test_blocks_ipv4_mapped_ipv6_private_forms() -> None:
         raise AssertionError(f"{bad} was not blocked")
 
     # A genuinely public IPv4-mapped address still passes.
-    assert validate_outbound_url("http://[::ffff:1.1.1.1]:8080/v1") == (
-        "http://[::ffff:1.1.1.1]:8080/v1"
+    assert validate_outbound_url("https://[::ffff:1.1.1.1]/v1") == (
+        "https://[::ffff:1.1.1.1]/v1"
     )
 
 
@@ -110,8 +110,8 @@ def test_blocks_ipv4_mapped_ipv6_private_forms() -> None:
 
 def test_rejects_urls_with_control_characters() -> None:
     """Unparseable URLs map to the same 422 as other rejections."""
-    _assert_blocked("http://a\nb.com")
-    _assert_blocked("http://exa\tmple.com")
+    _assert_blocked("https://a\nb.com")
+    _assert_blocked("https://exa\tmple.com")
 
 
 def test_blocks_local_suffix_without_dns(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -119,8 +119,8 @@ def test_blocks_local_suffix_without_dns(monkeypatch: pytest.MonkeyPatch) -> Non
         raise AssertionError(".local hosts must be rejected before DNS")
 
     monkeypatch.setattr("app.core.ssrf._resolve", fail)
-    _assert_blocked("http://printer.local")
-    _assert_blocked("http://")
+    _assert_blocked("https://printer.local")
+    _assert_blocked("https://")
 
 
 def test_skips_unusable_dns_entries(
@@ -137,9 +137,7 @@ def test_skips_unusable_dns_entries(
         ]
 
     monkeypatch.setattr("app.core.ssrf._resolve", dirty)
-    assert (
-        resolve_public_ip(httpx.URL("https://api.example.com")) == "9.9.9.9"
-    )
+    assert resolve_public_ip(httpx.URL("https://api.example.com")) == "9.9.9.9"
 
 
 def test_blocks_when_resolution_yields_no_addresses(
@@ -271,9 +269,7 @@ def test_blocking_requests_read_the_body(
     assert inner["called_with"][0] == "GET"
 
     @contextmanager
-    def fake_trusted_stream(
-        _method: str, _url: str, *, proxy_url: str, **_kwargs: Any
-    ):
+    def fake_trusted_stream(_method: str, _url: str, *, proxy_url: str, **_kwargs: Any):
         inner["trusted_proxy"] = proxy_url
         yield _FakeResponse()
 
@@ -303,13 +299,9 @@ def test_provider_dispatch_selects_transport_by_proxy(monkeypatch) -> None:
         "trusted_provider_stream",
         pick("trusted-stream", "ctx-trusted"),
     )
-    monkeypatch.setattr(
-        ssrf_mod, "pinned_stream", pick("pinned-stream", "ctx-pinned")
-    )
+    monkeypatch.setattr(ssrf_mod, "pinned_stream", pick("pinned-stream", "ctx-pinned"))
     assert (
-        provider_stream(
-            "GET", "u", proxy_url="http://p", headers={"h": "1"}
-        )
+        provider_stream("GET", "u", proxy_url="http://p", headers={"h": "1"})
         == "ctx-trusted"
     )
     assert provider_stream("GET", "u", proxy_url=None) == "ctx-pinned"
@@ -332,3 +324,72 @@ def test_provider_dispatch_selects_transport_by_proxy(monkeypatch) -> None:
         "trusted-request",
         "pinned-request",
     ]
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://user:secret@api.example.com/v1",
+        "https://api.example.com/v1?target=internal",
+        "https://api.example.com/v1#fragment",
+        "http://api.example.com",
+        "https://api.example.com:8443",
+    ],
+)
+def test_rejects_ambiguous_or_insecure_provider_urls(url: str) -> None:
+    _assert_blocked(url)
+
+
+def test_byok_allowlist_is_exact_and_still_checks_dns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ssrf_mod.settings, "BYOK_ALLOWED_HOSTS", ["API.EXAMPLE.COM"])
+    monkeypatch.setattr(
+        ssrf_mod,
+        "_resolve",
+        lambda host: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0))],
+    )
+    assert (
+        validate_outbound_url("https://api.example.com/v1")
+        == "https://api.example.com/v1"
+    )
+    _assert_blocked("https://api.example.com.attacker.example/v1")
+    _assert_blocked("https://sub.api.example.com/v1")
+    monkeypatch.setattr(
+        ssrf_mod.settings, "BYOK_ALLOWED_HOSTS", "api.example.com,other.example.com"
+    )
+    assert (
+        validate_outbound_url("https://other.example.com")
+        == "https://other.example.com"
+    )
+    monkeypatch.setattr(
+        ssrf_mod,
+        "_resolve",
+        lambda host: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 0))],
+    )
+    _assert_blocked("https://api.example.com")
+
+
+@pytest.mark.parametrize("trusted", [False, True])
+def test_transport_cannot_enable_redirects(
+    monkeypatch: pytest.MonkeyPatch, trusted: bool
+) -> None:
+    monkeypatch.setattr(
+        ssrf_mod,
+        "_resolve",
+        lambda host: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("8.8.8.8", 0))],
+    )
+    captured = _fake_client(monkeypatch)
+    context = (
+        trusted_provider_stream(
+            "GET",
+            "https://api.example.com",
+            proxy_url="http://proxy.example.com",
+            follow_redirects=True,
+        )
+        if trusted
+        else pinned_stream("GET", "https://api.example.com", follow_redirects=True)
+    )
+    with context:
+        pass
+    assert captured["request"]["follow_redirects"] is False
