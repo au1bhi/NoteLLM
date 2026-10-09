@@ -6,11 +6,14 @@ import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { authApi } from "@/services/auth"
 
+type TurnstileAction = "login" | "signup" | "password_recovery"
+
 interface TurnstileApi {
   render: (
     container: HTMLElement,
     options: {
       sitekey: string
+      action: TurnstileAction
       theme: "light" | "dark"
       language: string
       size: "flexible"
@@ -118,6 +121,7 @@ export function useTurnstile() {
 }
 
 interface TurnstileProps {
+  action: TurnstileAction
   enabled: boolean
   siteKey: string | null
   resetKey: number
@@ -128,6 +132,7 @@ interface TurnstileProps {
 }
 
 export function Turnstile({
+  action,
   enabled,
   siteKey,
   resetKey,
@@ -166,6 +171,7 @@ export function Turnstile({
           !disposed && currentAttempt === renderAttemptRef.current
         renderedWidgetId = turnstile.render(containerRef.current, {
           sitekey: siteKey,
+          action,
           theme: resolvedTheme === "dark" ? "dark" : "light",
           language: "zh-cn",
           size: "flexible",
@@ -208,7 +214,7 @@ export function Turnstile({
       if (widgetIdRef.current === renderedWidgetId) widgetIdRef.current = null
       onTokenChangeRef.current(null)
     }
-  }, [enabled, renderAttempt, resolvedTheme, siteKey])
+  }, [action, enabled, renderAttempt, resolvedTheme, siteKey])
 
   useEffect(() => {
     if (previousResetKey.current === resetKey) return

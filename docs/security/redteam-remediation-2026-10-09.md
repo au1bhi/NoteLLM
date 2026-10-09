@@ -29,7 +29,7 @@ BYOK 的产品功能本身需要访问用户选择的公网模型服务。因此
 
 ## 上线配置与复验
 
-1. 在 Cloudflare 创建绑定实际站点域名的 Turnstile widget，将有效 Site Key 和 Secret Key 写入服务器受保护的 `.env`，同时设置 `TURNSTILE_REQUIRED=true`。不得使用测试密钥冒充生产配置，不在日志、提交或聊天中输出 Secret Key。
+1. 在 Cloudflare 创建绑定实际站点域名的 Turnstile widget，将有效 Site Key 和 Secret Key 写入服务器受保护的 `.env`，同时设置 `TURNSTILE_REQUIRED=true` 和 `TURNSTILE_HOSTNAMES=notellm.au1bhi.com`（当前接入详见 `turnstile-integration.md`）。不得使用测试密钥冒充生产配置，不在日志、提交或聊天中输出 Secret Key。
 2. 根据实际使用的模型服务填写 `BYOK_ALLOWED_HOSTS`（例如 `api.openai.com,api.deepseek.com`，只是示例，不是本项目部署清单），确认已有用户配置兼容。保留 `RATE_LIMIT_ENABLED=true`。
 3. 前端仅在本地/CI 构建；服务器通过预构建产物和后端代码挂载更新。迁移门禁必须成功后再启动。nginx 配置先 `nginx -t` 再 reload；不要在轻量服务器编译。
 4. 真实浏览器完成验证码和登录；检查无验证码/无效验证码被拒绝、有效验证码可登录。用测试邮箱验证账号/IP 节流及过期恢复，不使用真实用户账号做失败尝试。

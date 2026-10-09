@@ -1,3 +1,5 @@
+import ipaddress
+import re
 import secrets
 import warnings
 from pathlib import Path
@@ -50,6 +52,7 @@ class Settings(BaseSettings):
     # Opt-in deployment guard: missing credentials must not silently disable
     # a CAPTCHA that the operator expects to be mandatory.
     TURNSTILE_REQUIRED: bool = False
+    TURNSTILE_HOSTNAMES: Annotated[list[str] | str, BeforeValidator(parse_cors)] = []
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -220,6 +223,32 @@ class Settings(BaseSettings):
             )
         if self.TURNSTILE_REQUIRED and not self.turnstile_enabled:
             raise ValueError("TURNSTILE_REQUIRED requires both Turnstile keys")
+        hosts = self.TURNSTILE_HOSTNAMES
+        if isinstance(hosts, str):
+            hosts = hosts.split(",")
+        self.TURNSTILE_HOSTNAMES = [
+            host.strip().lower() for host in hosts if host.strip()
+        ]
+        if self.turnstile_enabled and not self.TURNSTILE_HOSTNAMES:
+            raise ValueError(
+                "TURNSTILE_HOSTNAMES is required when Turnstile is enabled"
+            )
+        for host in self.TURNSTILE_HOSTNAMES:
+            if not re.fullmatch(r"[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?", host):
+                raise ValueError(
+                    "TURNSTILE_HOSTNAMES must contain exact hostnames, not URLs"
+                )
+            if self.ENVIRONMENT != "local":
+                try:
+                    is_local = not ipaddress.ip_address(host).is_global
+                except ValueError:
+                    is_local = host == "localhost" or host.endswith(
+                        (".localhost", ".local")
+                    )
+                if is_local:
+                    raise ValueError(
+                        "TURNSTILE_HOSTNAMES must not include local hosts in production"
+                    )
 
         if self.ENVIRONMENT != "local":
             if not str(self.FRONTEND_HOST).startswith("https://"):

@@ -78,13 +78,14 @@ function Login() {
   }, [])
 
   const onSubmit = (data: FormData) => {
-    if (submitLock.current || loginMutation.isPending) return
+    if (!turnstile.canSubmit || submitLock.current || loginMutation.isPending)
+      return
     submitLock.current = true
     loginMutation.mutate(
       { ...data, turnstileToken: turnstile.token ?? undefined },
       {
-        onError: turnstile.reset,
         onSettled: () => {
+          turnstile.reset()
           submitLock.current = false
         },
       },
@@ -150,6 +151,7 @@ function Login() {
             />
 
             <Turnstile
+              action="login"
               enabled={turnstile.enabled}
               siteKey={turnstile.siteKey}
               resetKey={turnstile.resetKey}

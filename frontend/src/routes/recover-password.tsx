@@ -79,7 +79,7 @@ function RecoverPassword() {
   })
 
   const onSubmit = async (data: FormData) => {
-    if (submitLock.current || mutation.isPending) return
+    if (!turnstile.canSubmit || submitLock.current || mutation.isPending) return
     submitLock.current = true
     mutation.mutate(data)
   }
@@ -119,6 +119,7 @@ function RecoverPassword() {
             />
 
             <Turnstile
+              action="password_recovery"
               enabled={turnstile.enabled}
               siteKey={turnstile.siteKey}
               resetKey={turnstile.resetKey}

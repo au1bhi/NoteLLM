@@ -14,6 +14,7 @@ from app.main import app
 def _enable(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(settings, "TURNSTILE_SITE_KEY", "test-site")
     monkeypatch.setattr(settings, "TURNSTILE_SECRET_KEY", "test-secret")
+    monkeypatch.setattr(settings, "TURNSTILE_HOSTNAMES", ["notellm.au1bhi.com"])
 
 
 @pytest.mark.parametrize(
@@ -80,7 +81,7 @@ def test_turnstile_network_failure_returns_503(
     context.__exit__ = Mock(return_value=False)
     monkeypatch.setattr("app.core.turnstile.httpx.Client", Mock(return_value=context))
     with pytest.raises(HTTPException) as captured:
-        _verify_response("token", "203.0.113.10")
+        _verify_response("token", "203.0.113.10", "login")
     assert captured.value.status_code == 503
 
 
@@ -139,7 +140,7 @@ def test_verify_response_maps_http_error_to_503(
     context.__exit__ = Mock(return_value=False)
     monkeypatch.setattr("app.core.turnstile.httpx.Client", Mock(return_value=context))
     with pytest.raises(HTTPException) as captured:
-        _verify_response("token", "203.0.113.10")
+        _verify_response("token", "203.0.113.10", "login")
     assert captured.value.status_code == 503
     assert "暂时不可用" in captured.value.detail
 
@@ -147,11 +148,23 @@ def test_verify_response_maps_http_error_to_503(
 def test_verify_response_accepts_only_success_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(settings, "TURNSTILE_HOSTNAMES", ["notellm.au1bhi.com"])
     cases: list[tuple[object, bool]] = [
         ([], False),  # non-dict payload
         ({"success": False}, False),
         ({}, False),
-        ({"success": True}, True),
+        ({"success": True}, False),
+        ({"success": True, "hostname": "notellm.au1bhi.com", "action": "login"}, True),
+        (
+            {"success": True, "hostname": "notellm.au1bhi.com", "action": "signup"},
+            False,
+        ),
+        ({"success": True, "hostname": "attacker.example", "action": "login"}, False),
+        ({"success": True, "hostname": "localhost", "action": "login"}, False),
+        (
+            {"success": "true", "hostname": "notellm.au1bhi.com", "action": "login"},
+            False,
+        ),
     ]
 
     for payload, expected in cases:
@@ -164,7 +177,7 @@ def test_verify_response_accepts_only_success_payload(
         monkeypatch.setattr(
             "app.core.turnstile.httpx.Client", Mock(return_value=context)
         )
-        assert _verify_response("token", "203.0.113.10") is expected
+        assert _verify_response("token", "203.0.113.10", "login") is expected
 
 
 def test_verify_response_maps_malformed_json_to_503(
@@ -178,7 +191,7 @@ def test_verify_response_maps_malformed_json_to_503(
     context.__exit__ = Mock(return_value=False)
     monkeypatch.setattr("app.core.turnstile.httpx.Client", Mock(return_value=context))
     with pytest.raises(HTTPException) as captured:
-        _verify_response("token", "203.0.113.10")
+        _verify_response("token", "203.0.113.10", "login")
     assert captured.value.status_code == 503
 
 
@@ -201,5 +214,152 @@ def test_required_turnstile_cannot_silently_disable() -> None:
     )
     with pytest.raises(ValidationError, match="TURNSTILE_REQUIRED requires"):
         Settings(_env_file=None, **config)
-    config.update(TURNSTILE_SITE_KEY="site", TURNSTILE_SECRET_KEY="secret")
+    config.update(
+        TURNSTILE_SITE_KEY="site",
+        TURNSTILE_SECRET_KEY="secret",
+        TURNSTILE_HOSTNAMES=["notellm.au1bhi.com"],
+    )
     assert Settings(_env_file=None, **config).turnstile_enabled
+
+
+@pytest.mark.parametrize(
+    "hostname",
+    [
+        "localhost",
+        "127.0.0.1",
+        "10.0.0.1",
+        "app.local",
+        "app.localhost",
+        "https://notellm.au1bhi.com",
+        "notellm.au1bhi.com:443",
+        "*.au1bhi.com",
+    ],
+)
+def test_production_turnstile_rejects_unsafe_expected_hosts(hostname: str) -> None:
+    config = settings.model_dump()
+    config.update(
+        ENVIRONMENT="production",
+        FRONTEND_HOST="https://notellm.au1bhi.com",
+        TURNSTILE_HOSTNAMES=[hostname],
+    )
+    with pytest.raises(ValidationError, match="TURNSTILE_HOSTNAMES"):
+        Settings(_env_file=None, **config)
+
+
+def test_turnstile_enabled_requires_hostname_allowlist() -> None:
+    config = settings.model_dump()
+    config.update(
+        TURNSTILE_SITE_KEY="test-site",
+        TURNSTILE_SECRET_KEY="test-secret",
+        TURNSTILE_HOSTNAMES=[],
+    )
+    with pytest.raises(ValidationError, match="TURNSTILE_HOSTNAMES is required"):
+        Settings(_env_file=None, **config)
+    config.update(TURNSTILE_HOSTNAMES=" Notellm.Au1bhi.Com , ")
+    assert Settings(_env_file=None, **config).TURNSTILE_HOSTNAMES == [
+        "notellm.au1bhi.com"
+    ]
+
+
+def test_runtime_missing_hosts_fails_closed(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable(monkeypatch)
+    monkeypatch.setattr(settings, "TURNSTILE_HOSTNAMES", [])
+    response = client.post(
+        f"{settings.API_V1_STR}/login/access-token",
+        data={"username": "nobody@example.com", "password": "bad"},
+        headers={"X-Turnstile-Token": "token"},
+    )
+    assert response.status_code == 503
+
+
+def _mock_siteverify(monkeypatch: pytest.MonkeyPatch, payloads: list[dict]) -> Mock:
+    inner = Mock()
+    responses = []
+    for payload in payloads:
+        response = Mock()
+        response.json.return_value = payload
+        responses.append(response)
+    inner.post.side_effect = responses
+    context = Mock()
+    context.__enter__ = Mock(return_value=inner)
+    context.__exit__ = Mock(return_value=False)
+    monkeypatch.setattr("app.core.turnstile.httpx.Client", Mock(return_value=context))
+    return inner
+
+
+@pytest.mark.parametrize(
+    ("path", "action"),
+    [
+        ("/login/access-token", "login"),
+        ("/users/signup", "signup"),
+        ("/password-recovery/nobody@example.com", "password_recovery"),
+    ],
+)
+def test_handlers_validate_siteverify_action_and_host(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch, path: str, action: str
+) -> None:
+    _enable(monkeypatch)
+    token_headers = {"X-Turnstile-Token": "test-token"}
+    body = (
+        {"username": "nobody@example.com", "password": "bad"}
+        if action == "login"
+        else {"email": "test@example.com", "password": "strong-password"}
+    )
+    for returned_action, hostname in [
+        ("wrong_action", "notellm.au1bhi.com"),
+        (action, "localhost"),
+        (action, "notellm.au1bhi.com.attacker.example"),
+        (action, "notellm.au1bhi.com"),
+    ]:
+        inner = _mock_siteverify(
+            monkeypatch,
+            [{"success": True, "action": returned_action, "hostname": hostname}],
+        )
+        response = client.post(
+            f"{settings.API_V1_STR}{path}",
+            headers=token_headers,
+            **({"data": body} if action == "login" else {"json": body}),
+        )
+        if returned_action == action and hostname == "notellm.au1bhi.com":
+            assert response.status_code == (400 if action == "login" else 200)
+            if action == "login":
+                assert response.json()["detail"] == "邮箱或密码错误"
+        else:
+            assert response.status_code == 400
+            assert response.json()["detail"].startswith("人机验证失败")
+        assert inner.post.call_args.args == (
+            "https://challenges.cloudflare.com/turnstile/v0/siteverify",
+        )
+        assert inner.post.call_args.kwargs["data"]["response"] == "test-token"
+        assert inner.post.call_args.kwargs["follow_redirects"] is False
+
+
+def test_login_success_then_siteverify_replay_rejection(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _enable(monkeypatch)
+    inner = _mock_siteverify(
+        monkeypatch,
+        [
+            {"success": True, "action": "login", "hostname": "notellm.au1bhi.com"},
+            {"success": False, "error-codes": ["timeout-or-duplicate"]},
+        ],
+    )
+    data = {
+        "username": settings.FIRST_SUPERUSER,
+        "password": settings.FIRST_SUPERUSER_PASSWORD,
+    }
+    headers = {"X-Turnstile-Token": "single-use-test-token"}
+    first = client.post(
+        f"{settings.API_V1_STR}/login/access-token", data=data, headers=headers
+    )
+    assert first.status_code == 200
+    assert first.json()["access_token"]
+    replay = client.post(
+        f"{settings.API_V1_STR}/login/access-token", data=data, headers=headers
+    )
+    assert replay.status_code == 400
+    assert replay.json()["detail"].startswith("人机验证失败")
+    assert inner.post.call_count == 2

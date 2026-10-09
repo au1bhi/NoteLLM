@@ -555,7 +555,7 @@ def fetch_available_models(
     response_model=SignupResult,
     dependencies=[
         Depends(rate_limit(limit=5, window=60)),
-        Depends(require_turnstile),
+        Depends(require_turnstile("signup")),
     ],
 )
 def register_user(session: SessionDep, user_in: UserRegister) -> SignupResult:

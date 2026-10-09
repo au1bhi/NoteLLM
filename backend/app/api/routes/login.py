@@ -34,7 +34,7 @@ router = APIRouter(tags=["login"])
     "/login/access-token",
     dependencies=[
         Depends(rate_limit(limit=20, window=60)),
-        Depends(require_turnstile),
+        Depends(require_turnstile("login")),
     ],
 )
 def login_access_token(
@@ -73,7 +73,7 @@ def test_token(current_user: CurrentUser) -> Any:
     "/password-recovery/{email}",
     dependencies=[
         Depends(rate_limit(limit=5, window=60)),
-        Depends(require_turnstile),
+        Depends(require_turnstile("password_recovery")),
     ],
 )
 def recover_password(

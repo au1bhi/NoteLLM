@@ -93,7 +93,8 @@ function SignUp() {
   })
 
   const onSubmit = (data: FormData) => {
-    if (submitLock.current || signUpMutation.isPending) return
+    if (!turnstile.canSubmit || submitLock.current || signUpMutation.isPending)
+      return
     submitLock.current = true
 
     // exclude confirm_password from submission data
@@ -111,8 +112,8 @@ function SignUp() {
             setRegistered({ email: created.email })
           }
         },
-        onError: turnstile.reset,
         onSettled: () => {
+          turnstile.reset()
           submitLock.current = false
         },
       },
@@ -263,6 +264,7 @@ function SignUp() {
             />
 
             <Turnstile
+              action="signup"
               enabled={turnstile.enabled}
               siteKey={turnstile.siteKey}
               resetKey={turnstile.resetKey}
