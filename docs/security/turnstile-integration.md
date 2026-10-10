@@ -49,6 +49,8 @@ docker compose -f compose.yml -f compose.traefik.yml -f compose.lowmem.yml \
   -f /root/notellm-runtime.yml up -d --no-build --no-deps backend scheduler frontend
 ```
 
+The runtime overlay also sets the backend command to `bash scripts/start-service.sh fastapi run --workers 2 --no-proxy-headers`, reduced from four workers at the user's request. The migration gate and disabled uvicorn proxy-header rewriting are preserved. Verification counted two worker processes plus one multiprocessing resource tracker; container health and public readiness returned 200, the login page returned 200, and missing-token login remained HTTP 400. Backend container memory fell from approximately 641 MiB to 431 MiB (one observed sample, not a peak-load benchmark). The previous overlay is backed up at `/root/notellm-runtime.before-workers-20261010.yml`. This was a runtime-only adjustment; application code, frontend artifacts, and the previously validated 421-test revision were unchanged.
+
 The previous frontend and nginx config are backed up under `/root/notellm-pre-turnstile-20261010/`. Old hashed frontend assets were retained for open tabs. The real widget secret was retrieved through the approved external Wrangler executable, validated with a dummy-token Siteverify probe, and sent through SSH stdin directly into the existing ignored `.env` (mode 0600). It was not printed, passed as an argument, committed, or stored in a temporary file. Both keys, `TURNSTILE_REQUIRED=true`, and the exact production hostname allowlist are active. The widget's existing parent domain `au1bhi.com` and clearance configuration were preserved; Cloudflare's parent-domain rule covers `notellm.au1bhi.com`.
 
 ## Verification
