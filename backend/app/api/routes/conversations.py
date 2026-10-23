@@ -167,6 +167,7 @@ async def stream_message(
                         {
                             "chunk_id": str(citation.chunk_id),
                             "quote": citation.quote,
+                            "chunk_content": citation.chunk_content,
                             "source_display_name": citation.source_display_name,
                             "page_number": citation.page_number,
                         }

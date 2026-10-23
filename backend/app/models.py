@@ -701,6 +701,10 @@ class CitationPublic(SQLModel):
     quote: str
     source_display_name: str
     page_number: int | None
+    chunk_content: str | None = Field(
+        default=None,
+        description="Current complete cited chunk, not the complete file or a permanent archive. The persisted quote remains the original 500-character snapshot.",
+    )
 
 
 class ConversationMessagePublic(SQLModel):

@@ -36,6 +36,7 @@ def _citation_public(
         ordinal=citation.ordinal,
         quote=citation.quote,
         source_display_name=source.display_name,
+        chunk_content=chunk.content,
         page_number=chunk.page_number,
     )
 
@@ -64,7 +65,10 @@ def conversation_detail(
         {
             chunk.id: chunk
             for chunk in session.exec(
-                select(Chunk).where(col(Chunk.id).in_(chunk_ids))
+                select(Chunk)
+                .join(Source, col(Chunk.source_id) == col(Source.id))
+                .where(col(Chunk.id).in_(chunk_ids))
+                .where(Source.notebook_id == conversation.notebook_id)
             ).all()
         }
         if chunk_ids

@@ -99,6 +99,18 @@ export const CitationPublicSchema = {
                 }
             ],
             title: 'Page Number'
+        },
+        chunk_content: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Chunk Content',
+            description: 'Current complete cited chunk, not the complete file or a permanent archive. The persisted quote remains the original 500-character snapshot.'
         }
     },
     type: 'object',

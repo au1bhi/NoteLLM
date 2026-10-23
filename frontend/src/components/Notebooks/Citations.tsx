@@ -11,11 +11,21 @@ interface CitationsProps {
 export function Citations({ citations }: CitationsProps) {
   const [listOpen, setListOpen] = useState(false)
   const [openOrdinals, setOpenOrdinals] = useState<Set<number>>(new Set())
+  const [fullOrdinals, setFullOrdinals] = useState<Set<number>>(new Set())
 
   if (citations.length === 0) return null
 
   const toggleQuote = (ordinal: number) => {
     setOpenOrdinals((prev) => {
+      const next = new Set(prev)
+      if (next.has(ordinal)) next.delete(ordinal)
+      else next.add(ordinal)
+      return next
+    })
+  }
+
+  const toggleFullChunk = (ordinal: number) => {
+    setFullOrdinals((prev) => {
       const next = new Set(prev)
       if (next.has(ordinal)) next.delete(ordinal)
       else next.add(ordinal)
@@ -75,9 +85,35 @@ export function Citations({ citations }: CitationsProps) {
                   />
                 </button>
                 {isOpen ? (
-                  <p className="mt-1 line-clamp-4 rounded-lg border bg-muted/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
-                    “{citation.quote}”
-                  </p>
+                  <div className="mt-1 space-y-2">
+                    <p className="whitespace-pre-wrap rounded-lg border bg-muted/40 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+                      “{citation.quote}”
+                    </p>
+                    {citation.chunk_content ? (
+                      <div className="space-y-2">
+                        <button
+                          type="button"
+                          className="text-xs font-medium text-primary hover:underline"
+                          aria-expanded={fullOrdinals.has(citation.ordinal)}
+                          onClick={() => toggleFullChunk(citation.ordinal)}
+                        >
+                          {fullOrdinals.has(citation.ordinal)
+                            ? "收起完整引用片段"
+                            : "查看完整引用片段"}
+                        </button>
+                        {fullOrdinals.has(citation.ordinal) ? (
+                          <>
+                            <p className="text-xs text-muted-foreground">
+                              当前资料块，非完整文件或永久归档；资料更改或删除后可能变化。
+                            </p>
+                            <div className="max-h-80 overflow-y-auto whitespace-pre-wrap rounded-lg border bg-muted/40 px-3 py-2 text-xs leading-relaxed text-foreground">
+                              {citation.chunk_content}
+                            </div>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null}
               </li>
             )

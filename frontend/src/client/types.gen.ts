@@ -19,6 +19,10 @@ export type CitationPublic = {
     quote: string;
     source_display_name: string;
     page_number: (number | null);
+    /**
+     * Current complete cited chunk, not the complete file or a permanent archive. The persisted quote remains the original 500-character snapshot.
+     */
+    chunk_content?: (string | null);
 };
 
 export type ConversationCreate = {
