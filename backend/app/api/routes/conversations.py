@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import threading
 import uuid
 from collections.abc import AsyncIterable
@@ -25,6 +26,7 @@ from app.services.conversations import conversation_detail, persist_answer
 from app.services.embeddings import EmbeddingError
 from app.services.usage import QuotaError
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/conversations", tags=["conversations"])
 
 
@@ -145,8 +147,19 @@ async def stream_message(
                 on_delta=lambda text: bridge("delta", text),
             )
         except (ChatError, EmbeddingError, QuotaError, RuntimeError) as error:
-            bridge("error", _safe_error_text(error))
+            msg = _safe_error_text(error)
+            logger.warning(
+                "stream_message failed conversation_id=%s mode=%s error=%s",
+                conversation_id,
+                message_in.mode,
+                msg,
+            )
+            bridge("error", msg)
         except Exception as error:
+            logger.exception(
+                "stream_message unexpected error conversation_id=%s",
+                conversation_id,
+            )
             bridge("error", f"意外错误：{type(error).__name__}")
         else:
             bridge("final", answer)

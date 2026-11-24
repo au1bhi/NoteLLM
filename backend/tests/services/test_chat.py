@@ -24,9 +24,7 @@ def test_server_chat_provider_uses_explicit_trusted_proxy(
             request=httpx.Request("POST", url),
         )
 
-    monkeypatch.setattr(
-        "app.services.chat.provider_request", fake_trusted_request
-    )
+    monkeypatch.setattr("app.services.chat.provider_request", fake_trusted_request)
     provider = OpenAICompatibleChatProvider(
         ProviderConfig(
             base_url="https://models.example/v1",
@@ -163,13 +161,13 @@ def test_blocking_payload_validation_ladder(monkeypatch: pytest.MonkeyPatch) -> 
         return _inner
 
     cases: list[tuple[object, str]] = [
-        {"choices": []},                      # empty choices
-        {"choices": ["nope"]},                # non-dict choice
-        {"choices": [{"message": "text"}]},   # non-dict message
-        {"choices": [{"message": {}}]},       # no content at all
+        {"choices": []},  # empty choices
+        {"choices": ["nope"]},  # non-dict choice
+        {"choices": [{"message": "text"}]},  # non-dict message
+        {"choices": [{"message": {}}]},  # no content at all
         {"choices": [{"message": {"content": 42}}]},
     ]
-    for payload, in [(c,) for c in cases]:
+    for (payload,) in [(c,) for c in cases]:
         monkeypatch.setattr("app.services.chat.provider_request", raiser(payload))
         with pytest.raises(ChatError, match="对话模型"):
             provider.complete_json(prompt="生成计划")
@@ -255,7 +253,9 @@ def test_provider_error_message_redacts_bare_non_sk_key() -> None:
     key closes the regex redactor's blind spot (red-team round-2 P3)."""
     bare_key = "ci-fake-chat-key-0123456789abcdef"
     provider = OpenAICompatibleChatProvider(
-        ProviderConfig(base_url="https://models.example/v1", api_key=bare_key, model="m")
+        ProviderConfig(
+            base_url="https://models.example/v1", api_key=bare_key, model="m"
+        )
     )
     msg = provider._provider_error_message(
         _response(
@@ -300,3 +300,153 @@ def test_blocking_usage_floored_at_prompt_cost(monkeypatch: pytest.MonkeyPatch) 
     )
     provider.answer(prompt=prompt)
     assert provider.total_tokens_used >= estimate_tokens(prompt)
+
+
+def test_blocking_reasoning_exhaustion_retries_with_thinking_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    provider = OpenAICompatibleChatProvider(
+        ProviderConfig(base_url="https://models.example/v1", api_key="k", model="m")
+    )
+    bodies: list[dict[str, object]] = []
+
+    def fake_request(_method: str, _url: str, **kwargs: Any) -> httpx.Response:
+        bodies.append(dict(kwargs["json"]))
+        if len(bodies) == 1:
+            return _response(
+                200,
+                {
+                    "choices": [
+                        {
+                            "finish_reason": "length",
+                            "message": {
+                                "content": "",
+                                "reasoning_content": "long internal reasoning",
+                            },
+                        }
+                    ],
+                    "usage": {"total_tokens": 2000},
+                },
+            )
+        return _response(
+            200,
+            {
+                "choices": [
+                    {
+                        "finish_reason": "stop",
+                        "message": {"content": '{"answer":"ok","citations":[]}'},
+                    }
+                ],
+                "usage": {"total_tokens": 500},
+            },
+        )
+
+    monkeypatch.setattr("app.services.chat.provider_request", fake_request)
+    answer = provider.answer(prompt="summarize")
+    assert answer.content == "ok"
+    assert len(bodies) == 2
+    assert bodies[1].get("thinking") == {"type": "disabled"}
+    assert provider.total_tokens_used == 2500
+
+
+@pytest.mark.parametrize("model_name", ["deepseek-v4-flash", "deepseek-flash"])
+def test_blocking_disables_thinking_for_hybrid_deepseek_models(
+    monkeypatch: pytest.MonkeyPatch,
+    model_name: str,
+) -> None:
+    bodies: list[dict[str, object]] = []
+
+    def fake_request(_method: str, _url: str, **kwargs: Any) -> httpx.Response:
+        bodies.append(dict(kwargs["json"]))
+        return _response(
+            200,
+            {"choices": [{"message": {"content": '{"answer":"ok","citations":[]}'}}]},
+        )
+
+    monkeypatch.setattr("app.services.chat.provider_request", fake_request)
+    monkeypatch.setattr("app.services.chat.settings.LLM_THINKING_ENABLED", False)
+    provider = OpenAICompatibleChatProvider(
+        ProviderConfig(
+            base_url="https://api.deepseek.com/v1",
+            api_key="k",
+            model=model_name,
+        )
+    )
+    assert provider.answer(prompt="hi").content == "ok"
+    assert len(bodies) == 1
+    assert bodies[0].get("thinking") == {"type": "disabled"}
+
+
+def test_blocking_keeps_thinking_when_enabled_or_reasoner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bodies: list[dict[str, object]] = []
+
+    def fake_request(_method: str, _url: str, **kwargs: Any) -> httpx.Response:
+        bodies.append(dict(kwargs["json"]))
+        return _response(
+            200,
+            {"choices": [{"message": {"content": '{"answer":"ok","citations":[]}'}}]},
+        )
+
+    monkeypatch.setattr("app.services.chat.provider_request", fake_request)
+
+    monkeypatch.setattr("app.services.chat.settings.LLM_THINKING_ENABLED", False)
+    reasoner = OpenAICompatibleChatProvider(
+        ProviderConfig(
+            base_url="https://api.deepseek.com/v1",
+            api_key="k",
+            model="deepseek-reasoner",
+        )
+    )
+    reasoner.answer(prompt="hi")
+
+    monkeypatch.setattr("app.services.chat.settings.LLM_THINKING_ENABLED", True)
+    flash = OpenAICompatibleChatProvider(
+        ProviderConfig(
+            base_url="https://api.deepseek.com/v1",
+            api_key="k",
+            model="deepseek-v4-flash",
+        )
+    )
+    flash.answer(prompt="hi")
+
+    assert len(bodies) == 2
+    assert "thinking" not in bodies[0]
+    assert "thinking" not in bodies[1]
+
+
+def test_blocking_strips_upfront_thinking_on_gateway_400(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    bodies: list[dict[str, object]] = []
+
+    def fake_request(_method: str, _url: str, **kwargs: Any) -> httpx.Response:
+        bodies.append(dict(kwargs["json"]))
+        if len(bodies) == 1:
+            return _response(
+                400,
+                '{"error": {"message": "Unrecognized request argument supplied: thinking"}}',
+            )
+        return _response(
+            200,
+            {
+                "choices": [
+                    {"message": {"content": '{"answer":"fallback-ok","citations":[]}'}}
+                ]
+            },
+        )
+
+    monkeypatch.setattr("app.services.chat.provider_request", fake_request)
+    monkeypatch.setattr("app.services.chat.settings.LLM_THINKING_ENABLED", False)
+    provider = OpenAICompatibleChatProvider(
+        ProviderConfig(
+            base_url="https://models.example/v1",
+            api_key="k",
+            model="deepseek-v4-flash",
+        )
+    )
+    assert provider.answer(prompt="hi").content == "fallback-ok"
+    assert len(bodies) == 2
+    assert bodies[0].get("thinking") == {"type": "disabled"}
+    assert "thinking" not in bodies[1]

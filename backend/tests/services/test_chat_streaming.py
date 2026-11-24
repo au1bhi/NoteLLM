@@ -86,10 +86,9 @@ class TestJsonAnswerValueStream:
     def test_escapes_decoded_across_feeds(self) -> None:
         envelope = r'{"answer": "line\nbreak \"quoted\" ok", "citations": []}'
         for size in range(1, 6):
-            assert (
-                self._collect(envelope, size)
-                == 'line\nbreak "quoted" ok'
-            ), f"chunk size {size}"
+            assert self._collect(envelope, size) == 'line\nbreak "quoted" ok', (
+                f"chunk size {size}"
+            )
 
     def test_unicode_escape_split_across_feeds(self) -> None:
         # 你 = 你, split at every possible point inside the escape.
@@ -115,7 +114,7 @@ class TestJsonAnswerValueStream:
 
 
 def sse(content: str) -> str:
-    return f'data: {json.dumps({"choices": [{"delta": {"content": content}}]})}'
+    return f"data: {json.dumps({'choices': [{'delta': {'content': content}}]})}"
 
 
 class StubResponse:
@@ -163,7 +162,7 @@ class TestChatStreamingLoop:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         envelope = '{"answer": "你好世界", "citations": []}'
-        pieces = ['{"ans', 'wer": "你', '好世', '界", ', '"cit', 'ations": []}']
+        pieces = ['{"ans', 'wer": "你', "好世", '界", ', '"cit', 'ations": []}']
         lines = [sse(piece) for piece in pieces]
 
         def responder(_calls: list[dict[str, object]]) -> StubResponse:
@@ -229,7 +228,10 @@ class TestChatStreamingLoop:
     ) -> None:
         attempts: list[dict[str, object]] = []
         responders = [
-            StubResponse(status_code=400, body='{"error": {"message": "response_format unsupported"}}'),
+            StubResponse(
+                status_code=400,
+                body='{"error": {"message": "response_format unsupported"}}',
+            ),
             StubResponse(lines=[sse('{"answer": "ok", "citations": []}')]),
         ]
         current = {"index": -1}
@@ -260,7 +262,10 @@ class TestChatStreamingLoop:
         """A provider under-reporting usage must not zero out the bill - the
         recorded usage is at least the prompt's own token cost (red-team
         finding: provider lies about usage to free-ride)."""
-        prompt = "\u8bf7\u5e2e\u6211\u603b\u7ed3\u8fd9\u6bb5\u7b14\u8bb0\u5185\u5bb9\u5e76\u7ed9\u51fa\u8981\u70b9" * 10
+        prompt = (
+            "\u8bf7\u5e2e\u6211\u603b\u7ed3\u8fd9\u6bb5\u7b14\u8bb0\u5185\u5bb9\u5e76\u7ed9\u51fa\u8981\u70b9"
+            * 10
+        )
         lines = [
             sse('{"answer": "hi", '),
             'data: {"choices": [], "usage": {"total_tokens": 1}}',
@@ -277,7 +282,6 @@ class TestChatStreamingLoop:
         floor = chat_module.estimate_tokens(prompt)
         assert provider.total_tokens_used >= floor
 
-
     def test_provider_error_status_raises_chat_error(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -292,3 +296,140 @@ class TestChatStreamingLoop:
         provider = OpenAICompatibleChatProvider(_config())
         with pytest.raises(chat_module.ChatError, match="rate limited"):
             provider.answer(prompt="q", on_delta=(lambda _t: None))
+
+    def test_reasoning_exhaustion_retries_with_thinking_disabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        attempts: list[dict[str, object]] = []
+        reasoning_only = [
+            f"data: {json.dumps({'choices': [{'delta': {'reasoning_content': 'step1'}}]})}",
+            f"data: {json.dumps({'choices': [{'delta': {}, 'finish_reason': 'length'}], 'usage': {'total_tokens': 2000}})}",
+            "data: [DONE]",
+        ]
+        success_lines = [
+            sse('{"answer": "重试成功", "citations": []}'),
+            'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"total_tokens": 400}}',
+            "data: [DONE]",
+        ]
+        responders = [
+            StubResponse(lines=reasoning_only),
+            StubResponse(lines=success_lines),
+        ]
+
+        def responder(calls: list[dict[str, object]]) -> StubResponse:
+            attempts.append(calls[-1])
+            return responders[len(attempts) - 1]
+
+        self._patch_stream(monkeypatch, responder)
+
+        provider = OpenAICompatibleChatProvider(_config())
+        deltas: list[str] = []
+        answer = provider.answer(prompt="q", on_delta=deltas.append)
+
+        assert answer.content == "重试成功"
+        assert deltas == ["重试成功"]
+        assert len(attempts) == 2
+        assert attempts[1].get("thinking") == {"type": "disabled"}
+        assert provider.total_tokens_used == 2400
+
+    def test_reasoning_exhaustion_raises_clear_error_when_thinking_retry_rejected(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        reasoning_only = [
+            f"data: {json.dumps({'choices': [{'delta': {'reasoning_content': 'step1'}}]})}",
+            f"data: {json.dumps({'choices': [{'delta': {}, 'finish_reason': 'length'}]})}",
+            "data: [DONE]",
+        ]
+        responders = [
+            StubResponse(lines=reasoning_only),
+            StubResponse(
+                status_code=400, body='{"error": {"message": "unknown field thinking"}}'
+            ),
+        ]
+        idx = {"n": -1}
+
+        def responder(_calls: list[dict[str, object]]) -> StubResponse:
+            idx["n"] += 1
+            return responders[idx["n"]]
+
+        self._patch_stream(monkeypatch, responder)
+
+        provider = OpenAICompatibleChatProvider(_config())
+        with pytest.raises(chat_module.ChatError, match="思考阶段耗尽了输出长度上限"):
+            provider.answer(prompt="q", on_delta=lambda _t: None)
+
+    @pytest.mark.parametrize("model_name", ["deepseek-v4-flash", "deepseek-flash"])
+    def test_streaming_disables_thinking_for_hybrid_deepseek_models(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        model_name: str,
+    ) -> None:
+        attempts: list[dict[str, object]] = []
+        success_lines = [
+            sse('{"answer": "直出答案", "citations": []}'),
+            'data: {"choices": [{"delta": {}, "finish_reason": "stop"}], "usage": {"total_tokens": 120}}',
+            "data: [DONE]",
+        ]
+
+        def responder(calls: list[dict[str, object]]) -> StubResponse:
+            attempts.append(calls[-1])
+            return StubResponse(lines=success_lines)
+
+        self._patch_stream(monkeypatch, responder)
+        monkeypatch.setattr("app.services.chat.settings.LLM_THINKING_ENABLED", False)
+
+        cfg = ProviderConfig(
+            base_url="https://api.deepseek.com/v1",
+            api_key="sk-test",
+            model=model_name,
+            server_proxy_url="",
+        )
+        provider = OpenAICompatibleChatProvider(cfg)
+        deltas: list[str] = []
+        answer = provider.answer(prompt="q", on_delta=deltas.append)
+
+        assert answer.content == "直出答案"
+        assert deltas == ["直出答案"]
+        assert len(attempts) == 1
+        assert attempts[0].get("thinking") == {"type": "disabled"}
+
+    def test_streaming_strips_upfront_thinking_on_gateway_400(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        attempts: list[dict[str, object]] = []
+        responders = [
+            StubResponse(
+                status_code=400,
+                body='{"error": {"message": "Unrecognized request argument supplied: thinking"}}',
+            ),
+            StubResponse(
+                lines=[
+                    sse('{"answer": "兼容返回", "citations": []}'),
+                    'data: {"choices": [{"delta": {}, "finish_reason": "stop"}]}',
+                    "data: [DONE]",
+                ]
+            ),
+        ]
+
+        def responder(calls: list[dict[str, object]]) -> StubResponse:
+            attempts.append(calls[-1])
+            return responders[len(attempts) - 1]
+
+        self._patch_stream(monkeypatch, responder)
+        monkeypatch.setattr("app.services.chat.settings.LLM_THINKING_ENABLED", False)
+
+        cfg = ProviderConfig(
+            base_url="https://api.example.com/v1",
+            api_key="sk-test",
+            model="deepseek-v4-flash",
+            server_proxy_url="",
+        )
+        provider = OpenAICompatibleChatProvider(cfg)
+        deltas: list[str] = []
+        answer = provider.answer(prompt="q", on_delta=deltas.append)
+
+        assert answer.content == "兼容返回"
+        assert deltas == ["兼容返回"]
+        assert len(attempts) == 2
+        assert attempts[0].get("thinking") == {"type": "disabled"}
+        assert "thinking" not in attempts[1]

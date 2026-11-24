@@ -80,6 +80,10 @@ class Settings(BaseSettings):
     LLM_BASE_URL: HttpUrl | None = None
     LLM_API_KEY: str | None = None
     LLM_MODEL: str | None = None
+    # Disable chain-of-thought ("thinking") mode on hybrid DeepSeek models by
+    # default so interactive RAG answers stream immediately instead of spending
+    # thousands of reasoning tokens before the first visible character.
+    LLM_THINKING_ENABLED: bool = False
     EMBEDDING_BASE_URL: HttpUrl | None = None
     EMBEDDING_API_KEY: str | None = None
     EMBEDDING_MODEL: str | None = None

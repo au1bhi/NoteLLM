@@ -54,7 +54,7 @@ def _safe_error_text_from_value(value: object, secrets: Sequence[str] = ()) -> s
 # keeps the real cost of one request inside the reserved quota margin, so a
 # burst of concurrent questions cannot overspend the monthly allowance by far
 # more than the reservation.
-MAX_OUTPUT_TOKENS = 2000
+MAX_OUTPUT_TOKENS = 4096
 
 # Bounds concurrent outbound provider calls per process. The chat/embedding
 # calls run on the shared anyio worker threadpool (default 40 workers); without
@@ -83,6 +83,32 @@ def _is_format_rejection(message: str) -> bool:
     """
     lowered = message.lower()
     return "response_format" in lowered or '"format"' in lowered
+
+
+def _is_thinking_rejection(message: str) -> bool:
+    """True when a 400 body blames the ``thinking`` option."""
+    return "thinking" in message.lower()
+
+
+def _should_disable_thinking(config: ProviderConfig) -> bool:
+    """True when requests should include ``thinking: {"type": "disabled"}`` upfront.
+
+    Hybrid DeepSeek models (e.g. ``deepseek-v4-flash``, ``deepseek-flash``)
+    enable reasoning by default and can spend 30–60s in ``reasoning_content``
+    before emitting answer JSON. Dedicated ``reasoner`` / ``-r1`` models
+    cannot disable thinking and are left untouched.
+    """
+    if settings.LLM_THINKING_ENABLED:
+        return False
+    model_lower = config.model.strip().lower()
+    base_lower = config.base_url.strip().lower()
+    if (
+        "reasoner" in model_lower
+        or model_lower.endswith("-r1")
+        or "-r1-" in model_lower
+    ):
+        return False
+    return "deepseek" in model_lower or "api.deepseek.com" in base_lower
 
 
 def _is_cjk(char: str) -> bool:
@@ -182,6 +208,8 @@ class OpenAICompatibleChatProvider:
             "temperature": 0,
             "max_tokens": MAX_OUTPUT_TOKENS,
         }
+        if _should_disable_thinking(self.config):
+            body["thinking"] = {"type": "disabled"}
         if streaming:
             body["stream"] = True
             # Non-OpenAI gateways ignore unknown options; OpenAI needs it to
@@ -213,7 +241,7 @@ class OpenAICompatibleChatProvider:
         prompt: str,
         on_delta: Callable[[str], None],
         raw_parts: list[str],
-    ) -> None:
+    ) -> tuple[str | None, bool]:
         """Run one streaming attempt; raises _ProviderStatus on HTTP errors.
 
         Appends the full think-filtered payload text to ``raw_parts`` so the
@@ -226,6 +254,8 @@ class OpenAICompatibleChatProvider:
         suppressor = ThinkSuppressor()
         value_stream = JsonAnswerValueStream()
         usage_tokens: int | None = None
+        finish_reason: str | None = None
+        saw_reasoning = False
         with self._open_stream(
             endpoint=endpoint, headers=headers, body=body
         ) as response:
@@ -257,14 +287,20 @@ class OpenAICompatibleChatProvider:
                 if not isinstance(choices, list) or not choices:
                     continue
                 first_choice = choices[0]
-                delta_obj = (
-                    first_choice.get("delta", {})
-                    if isinstance(first_choice, dict)
-                    else {}
-                )
-                piece = (
-                    delta_obj.get("content") if isinstance(delta_obj, dict) else None
-                )
+                if isinstance(first_choice, dict):
+                    fr = first_choice.get("finish_reason")
+                    if isinstance(fr, str) and fr:
+                        finish_reason = fr
+                    delta_obj = first_choice.get("delta", {})
+                else:
+                    delta_obj = {}
+                if isinstance(delta_obj, dict):
+                    reasoning_piece = delta_obj.get("reasoning_content")
+                    if isinstance(reasoning_piece, str) and reasoning_piece:
+                        saw_reasoning = True
+                    piece = delta_obj.get("content")
+                else:
+                    piece = None
                 if not isinstance(piece, str) or not piece:
                     continue
                 filtered = suppressor.feed(piece)
@@ -290,6 +326,7 @@ class OpenAICompatibleChatProvider:
             actual = prompt_cost + estimate_tokens("".join(raw_parts))
         with self._tokens_lock:
             self.total_tokens_used += actual
+        return finish_reason, saw_reasoning
 
     def _chat(
         self,
@@ -340,27 +377,61 @@ class OpenAICompatibleChatProvider:
         on_delta: Callable[[str], None],
     ) -> str:
         request_body = self._request_body(messages=messages, streaming=True)
-        fallback_body = {
-            key: val for key, val in request_body.items() if key != "response_format"
-        }
         raw_parts: list[str] = []
+        finish_reason: str | None = None
+        saw_reasoning = False
         try:
             with _PROVIDER_SEMAPHORE:
                 body = request_body
                 format_fallback_tried = False
+                thinking_stripped = False
+                exhaustion_retry_tried = False
                 while True:
                     try:
-                        self._attempt_stream(
+                        finish_reason, saw_reasoning = self._attempt_stream(
                             endpoint=endpoint,
                             body=body,
                             prompt=prompt,
                             on_delta=on_delta,
                             raw_parts=raw_parts,
                         )
+                        if (
+                            not "".join(raw_parts).strip()
+                            and finish_reason == "length"
+                            and saw_reasoning
+                            and "thinking" not in body
+                            and not thinking_stripped
+                            and not exhaustion_retry_tried
+                        ):
+                            # Reasoning models can spend the whole output cap in
+                            # reasoning_content; zero deltas reached the client,
+                            # so retry once with thinking disabled.
+                            exhaustion_retry_tried = True
+                            raw_parts.clear()
+                            body = {**body, "thinking": {"type": "disabled"}}
+                            continue
                         break
                     except _ProviderStatus as status_error:
                         if (
                             status_error.status_code == 400
+                            and not exhaustion_retry_tried
+                            and "thinking" in body
+                            and not thinking_stripped
+                            and _is_thinking_rejection(status_error.message)
+                        ):
+                            # Strip upfront thinking option if an OpenAI-compatible
+                            # gateway rejects it; a 400 precedes any body bytes so
+                            # zero deltas were emitted.
+                            thinking_stripped = True
+                            body = {
+                                key: val
+                                for key, val in body.items()
+                                if key != "thinking"
+                            }
+                            continue
+                        if (
+                            status_error.status_code == 400
+                            and "response_format" in body
                             and not format_fallback_tried
                             and _is_format_rejection(status_error.message)
                         ):
@@ -369,8 +440,17 @@ class OpenAICompatibleChatProvider:
                             # precedes any body bytes, so no deltas were sent
                             # under the failed attempt.
                             format_fallback_tried = True
-                            body = fallback_body
+                            body = {
+                                key: val
+                                for key, val in body.items()
+                                if key != "response_format"
+                            }
                             continue
+                        if exhaustion_retry_tried and status_error.status_code == 400:
+                            raise ChatError(
+                                "对话模型在思考阶段耗尽了输出长度上限，未能生成正文，"
+                                "请精简问题或切换非思考模型重试"
+                            ) from None
                         raise ChatError(
                             f"模型服务商返回错误"
                             f" ({status_error.status_code})：{status_error.message}"
@@ -384,7 +464,52 @@ class OpenAICompatibleChatProvider:
                 f"对话模型通信失败：{type(error).__name__} "
                 f"{_safe_error_text(error, [self.config.api_key])}"
             ) from error
+        if (
+            not "".join(raw_parts).strip()
+            and finish_reason == "length"
+            and saw_reasoning
+        ):
+            raise ChatError(
+                "对话模型在思考阶段耗尽了输出长度上限，未能生成正文，"
+                "请精简问题或切换非思考模型重试"
+            )
         return "".join(raw_parts)
+
+    def _record_blocking_usage(
+        self, payload: dict[str, object], *, prompt: str, content: str
+    ) -> None:
+        usage = payload.get("usage")
+        tokens: object = None
+        if isinstance(usage, dict):
+            tokens = usage.get("total_tokens")
+        prompt_cost = estimate_tokens(prompt)
+        if isinstance(tokens, (int, float)):
+            # Floor reported usage at the prompt cost to prevent a provider
+            # from under-reporting and zeroing out the bill via settle_usage.
+            actual = max(int(tokens), prompt_cost)
+        else:
+            actual = prompt_cost + estimate_tokens(content)
+        with self._tokens_lock:
+            self.total_tokens_used += actual
+
+    @staticmethod
+    def _parse_blocking_choice(
+        payload: dict[str, object],
+    ) -> tuple[object, object, object]:
+        choices = payload.get("choices")
+        if not isinstance(choices, list) or not choices:
+            raise ChatError("对话模型未返回有效响应 choices")
+        first_choice = choices[0]
+        if not isinstance(first_choice, dict):
+            raise ChatError("对话模型未返回有效 choices 结构体")
+        message_obj = first_choice.get("message")
+        if not isinstance(message_obj, dict):
+            raise ChatError("对话模型未返回有效 message")
+        return (
+            first_choice.get("finish_reason"),
+            message_obj.get("content"),
+            message_obj.get("reasoning_content"),
+        )
 
     def _chat_blocking(
         self,
@@ -407,20 +532,44 @@ class OpenAICompatibleChatProvider:
             )
 
         try:
+            active_body = request_body
+            thinking_rejected = False
+            format_fallback_tried = False
             with _PROVIDER_SEMAPHORE:
-                response = send(request_body)
-                if response.status_code == 400 and _is_format_rejection(
-                    self._provider_error_message(response)
-                ):
-                    # Some OpenAI-compatible gateways reject response_format;
-                    # retry once without it.
-                    response = send(
-                        {
+                while True:
+                    response = send(active_body)
+                    if response.status_code != 400:
+                        break
+                    error_message = self._provider_error_message(response)
+                    if (
+                        "thinking" in active_body
+                        and not thinking_rejected
+                        and _is_thinking_rejection(error_message)
+                    ):
+                        # Strip upfront thinking option if an OpenAI-compatible
+                        # gateway rejects the non-standard field.
+                        thinking_rejected = True
+                        active_body = {
                             key: val
-                            for key, val in request_body.items()
+                            for key, val in active_body.items()
+                            if key != "thinking"
+                        }
+                        continue
+                    if (
+                        "response_format" in active_body
+                        and not format_fallback_tried
+                        and _is_format_rejection(error_message)
+                    ):
+                        # Some OpenAI-compatible gateways reject response_format;
+                        # retry once without it.
+                        format_fallback_tried = True
+                        active_body = {
+                            key: val
+                            for key, val in active_body.items()
                             if key != "response_format"
                         }
-                    )
+                        continue
+                    break
 
             if response.status_code != 200:
                 raise ChatError(
@@ -429,37 +578,55 @@ class OpenAICompatibleChatProvider:
                 )
 
             payload = response.json()
-            choices = payload.get("choices")
-            if not isinstance(choices, list) or not choices:
-                raise ChatError("对话模型未返回有效响应 choices")
-            first_choice = choices[0]
-            if not isinstance(first_choice, dict):
-                raise ChatError("对话模型未返回有效 choices 结构体")
-            message_obj = first_choice.get("message")
-            if not isinstance(message_obj, dict):
-                raise ChatError("对话模型未返回有效 message")
-            content = message_obj.get("content")
+            finish_reason, content, reasoning = self._parse_blocking_choice(payload)
+            if (
+                (not isinstance(content, str) or not content.strip())
+                and finish_reason == "length"
+                and isinstance(reasoning, str)
+                and reasoning.strip()
+            ):
+                self._record_blocking_usage(payload, prompt=prompt, content="")
+                if "thinking" in active_body or thinking_rejected:
+                    raise ChatError(
+                        "对话模型在思考阶段耗尽了输出长度上限，未能生成正文，"
+                        "请精简问题或切换非思考模型重试"
+                    )
+                with _PROVIDER_SEMAPHORE:
+                    retry_resp = send({**active_body, "thinking": {"type": "disabled"}})
+                if retry_resp.status_code != 200:
+                    raise ChatError(
+                        "对话模型在思考阶段耗尽了输出长度上限，未能生成正文，"
+                        "请精简问题或切换非思考模型重试"
+                    )
+                retry_payload = retry_resp.json()
+                retry_fr, retry_content, retry_reasoning = self._parse_blocking_choice(
+                    retry_payload
+                )
+                if isinstance(retry_content, str) and retry_content.strip():
+                    self._record_blocking_usage(
+                        retry_payload, prompt=prompt, content=retry_content
+                    )
+                    return retry_content
+                self._record_blocking_usage(retry_payload, prompt=prompt, content="")
+                if (
+                    retry_fr != "length"
+                    and retry_content is None
+                    and isinstance(retry_reasoning, str)
+                    and retry_reasoning.strip()
+                ):
+                    return retry_reasoning
+                raise ChatError(
+                    "对话模型在思考阶段耗尽了输出长度上限，未能生成正文，"
+                    "请精简问题或切换非思考模型重试"
+                )
+
             if not isinstance(content, str):
-                reasoning = message_obj.get("reasoning_content")
                 if isinstance(reasoning, str) and reasoning.strip():
                     content = reasoning
                 else:
                     raise ChatError("对话模型未返回有效文本内容")
 
-            usage = payload.get("usage")
-            tokens: object = None
-            if isinstance(usage, dict):
-                tokens = usage.get("total_tokens")
-            prompt_cost = estimate_tokens(prompt)
-            if isinstance(tokens, (int, float)):
-                # Floor reported usage at the prompt cost to prevent a provider
-                # from under-reporting and zeroing out the bill via settle_usage.
-                actual = max(int(tokens), prompt_cost)
-                with self._tokens_lock:
-                    self.total_tokens_used += actual
-            else:
-                with self._tokens_lock:
-                    self.total_tokens_used += prompt_cost + estimate_tokens(content)
+            self._record_blocking_usage(payload, prompt=prompt, content=content)
         except ChatError:
             raise
         except (httpx.HTTPError, KeyError, TypeError, ValueError, IndexError) as error:
